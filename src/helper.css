@@ -1,0 +1,24 @@
+.cls-helper-div {
+    width: 255px;
+    background: rgba(1, 255, 200, 0.1);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.cls-helper-div label,
+.cls-helper-div input,
+.cls-helper-div button,
+.cls-helper-div select {
+    line-height: 1;
+    margin: 4px;
+}
+
+
+.cls-helper-div input[type=range] {
+    vertical-align: middle;
+}
