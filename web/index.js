@@ -73,12 +73,12 @@ function main() {
 
         //skybox
         tinyearth.skyboxProgram.setCubeMap([
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_X, src: "assets/data/starsky/px.png" },
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_Y, src: "assets/data/starsky/py.png" },
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_Z, src: "assets/data/starsky/pz.png" },
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_X, src: "assets/data/starsky/nx.png" },
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, src: "assets/data/starsky/ny.png" },
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, src: "assets/data/starsky/nz.png" }
+            { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_X, src: "assets/starsky/px.png" },
+            { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_Y, src: "assets/starsky/py.png" },
+            { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_Z, src: "assets/starsky/pz.png" },
+            { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_X, src: "assets/starsky/nx.png" },
+            { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, src: "assets/starsky/ny.png" },
+            { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, src: "assets/starsky/nz.png" }
         ]);
 
         // tinyearth.skyboxProgram.setCubeMap([

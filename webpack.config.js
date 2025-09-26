@@ -9,6 +9,14 @@ const __dirname = path.dirname(__filename);
 const webpackPlugins = [
     new HtmlWebpackPlugin({
         template: './web/index.html'
+    }),
+    new CopyWebpackPlugin({
+        patterns: [
+            {
+                from: 'assets',
+                to: 'assets'
+            }
+        ]
     })
 ];
 
