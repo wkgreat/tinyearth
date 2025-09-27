@@ -321,6 +321,7 @@ export class Spheriod {
  * @param {Ray} ray
  * @param {Spheriod} spheriod
  * @param {boolean} [all=false] Ray cross spheriod at two points. If ray all is False, only return first points; if true, retrun both.
+ * [explaination](/docs/source/geometry.md#raycrossspheriod)
  * {@link https://github.com/wkgreat/tinyearth/blob/main/docs/source/geometry.md#raycrossspheriod}
 */
 export function rayCrossSpheriod(ray, spheriod, all = false) {
