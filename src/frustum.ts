@@ -1,29 +1,29 @@
 import { glMatrix, mat4, vec3, vec4 } from 'gl-matrix';
 import Camera from './camera.js';
-import Projection from './projection.js';
 import { vec4_t3 } from './glmatrix_utils.js';
+import Projection from './projection.js';
 glMatrix.setMatrixArrayType(Array);
+
+interface FrustumDistanceOfPointInfo {
+    left: number | null
+    right: number | null
+    bottom: number | null
+    top: number | null
+    near: number | null
+    far: number | null
+}
 
 export default class Frustum {
 
-    /** @type {vec4|null}*/
-    left = null;
-    /** @type {vec4|null}*/
-    right = null;
-    /** @type {vec4|null}*/
-    bottom = null;
-    /** @type {vec4|null}*/
-    top = null;
-    /** @type {vec4|null}*/
-    near = null;
-    /** @type {vec4|null}*/
-    far = null;
-    /** @type {vec3|null}*/
-    viewpoint = null;
-    /** @type {vec3|null}*/
-    targetpoint = null;
-    /** @type {vec3|null}*/
-    centerpoint = null;
+    left: vec4 | null = null;
+    right: vec4 | null = null;
+    bottom: vec4 | null = null;
+    top: vec4 | null = null;
+    near: vec4 | null = null;
+    far: vec4 | null = null;
+    viewpoint: vec3 | null = null;
+    targetpoint: vec3 | null = null;
+    centerpoint: vec3 | null = null;
 
     /**
      * @param {vec4|null} left
@@ -33,7 +33,7 @@ export default class Frustum {
      * @param {vec4|null} near
      * @param {vec4|null} far      
     */
-    constructor(left, right, bottom, top, near, far) {
+    constructor(left: vec4 | null, right: vec4 | null, bottom: vec4 | null, top: vec4 | null, near: vec4 | null, far: vec4 | null) {
         this.left = left;
         this.right = right;
         this.bottom = bottom;
@@ -42,35 +42,31 @@ export default class Frustum {
         this.far = far;
     }
 
-    getViewpoint() {
+    getViewpoint(): vec3 | null {
         return this.viewpoint;
     }
 
-    setViewpoint(p) {
+    setViewpoint(p: vec3 | null) {
         this.viewpoint = p;
     }
 
-    getTargetpoint() {
+    getTargetpoint(): vec3 | null {
         return this.targetpoint;
     }
 
-    setTargetpoint(p) {
+    setTargetpoint(p: vec3 | null) {
         this.targetpoint = p;
     }
 
-    getCenterpoint() {
+    getCenterpoint(): vec3 | null {
         return this.centerpoint;
     }
 
-    setCenterpoint(p) {
+    setCenterpoint(p: vec3 | null) {
         this.centerpoint = p;
     }
 
-    /**
-     * @param {vec4} p
-     * @returns {object} 
-    */
-    getDistanceOfPoint(p) {
+    getDistanceOfPoint(p: vec4): FrustumDistanceOfPointInfo {
         return {
             left: this.left && vec4.dot(p, this.left),
             right: this.right && vec4.dot(p, this.right),
@@ -82,8 +78,12 @@ export default class Frustum {
     }
 }
 
-function row(m, i) {
-    return vec4.fromValues(m[i * 4], m[i * 4 + 1], m[i * 4 + 2], m[i * 4 + 3]);
+function row(m: mat4, i: number) {
+    return vec4.fromValues(
+        m[i * 4] as number,
+        m[i * 4 + 1] as number,
+        m[i * 4 + 2] as number,
+        m[i * 4 + 3] as number);
 }
 
 // /**
@@ -154,13 +154,9 @@ function row(m, i) {
 // };
 
 
-/**
- * @param {Projection} projection 
- * @param {Camera} camera 
-*/
-export function buildFrustum(projection, camera) {
+export function buildFrustum(projection: Projection, camera: Camera) {
     const m = mat4.multiply(mat4.create(), projection.perspective(), camera.getMatrix().viewMtx);
-    const im = mat4.invert(mat4.create(), m);
+    const im = mat4.invert(mat4.create(), m) as mat4;
     const tm = mat4.transpose(mat4.create(), m);
 
     // FAST EXTRACTION

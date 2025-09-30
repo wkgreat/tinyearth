@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "output/src",
+    "module": "esnext",
+    "target": "esnext",
+    "moduleResolution": "node",
+    "types": [
+      "jest",
+      "node"
+    ],
+    "typeRoots": [
+      "./node_modules/@types",
+      "./types"
+    ],
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": false,
+    "declarationDir": "output/types",
+    // "declarationDir": "dist/types",
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": [
+    "src",
+    "types"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts", //TODO 先暂时忽略test
+    "**/test.ts" //TODO 先暂时忽略test
+  ]
+}

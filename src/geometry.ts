@@ -1,61 +1,53 @@
 import { glMatrix, vec3, vec4 } from "gl-matrix";
 import { vec3_add, vec3_cross, vec3_scale, vec3_sub } from "./glmatrix_utils.js";
-import { EPSG_4978 } from "./proj.js";
+import { EPSG_4978, type projcode_t } from "./proj.js";
 glMatrix.setMatrixArrayType(Array);
 
 /**
- * @class Point in 3D space.
+ * Point in 3D space.
 */
 export class Point3D {
-    /** @type {vec3} */
-    position = vec3.fromValues(0, 0, 0);
-    /** @type {import("./proj.js").projcode} */
-    projcode = EPSG_4978;
+
+    position: vec3 = vec3.fromValues(0, 0, 0);
+
+    projcode: projcode_t = EPSG_4978;
 
     constructor() {}
 
-    static fromVec3(v) {
+    static fromVec3(v: vec3): Point3D {
         const p = new Point3D();
         p.position = v;
         return p;
     }
 
-    static fromXYZ(x, y, z) {
+    static fromXYZ(x: number, y: number, z: number): Point3D {
         const p = new Point3D();
         p.position = vec3.fromValues(x, y, z);
         return p;
     }
 
-    setX(x) { this.position[0] = x; }
-    setY(y) { this.position[1] = y; }
-    setZ(z) { this.position[2] = z; }
-    getX() { return this.position[0] };
-    getY() { return this.position[1] };
-    getZ() { return this.position[2] };
+    setX(x: number) { this.position[0] = x; }
+    setY(y: number) { this.position[1] = y; }
+    setZ(z: number) { this.position[2] = z; }
+    getX(): number { return this.position[0] };
+    getY(): number { return this.position[1] };
+    getZ(): number { return this.position[2] };
 
-    /**@param {import("./proj.js").projcode} code */
-    setProjcode(code) { this.projcode = code; }
+    setProjcode(code: projcode_t) { this.projcode = code; }
 
-    /**@returns {import("./proj.js").projcode} */
-    getProjcode() { return this.projcode; }
+    getProjcode(): projcode_t { return this.projcode; }
 
 }
 
 export class Triangle {
 
-    /** @type {vec3}*/
-    p0 = vec3.fromValues(0, 0, 0);
-    /** @type {vec3}*/
-    p1 = vec3.fromValues(1, 0, 0);
-    /** @type {vec3}*/
-    p2 = vec3.fromValues([0, 1, 0]);
+    p0: vec3 = vec3.fromValues(0, 0, 0);
 
-    /**
-     * @param {vec3} p0
-     * @param {vec3} p1
-     * @param {vec3} p2 
-    */
-    constructor(p0, p1, p2) {
+    p1: vec3 = vec3.fromValues(1, 0, 0);
+
+    p2: vec3 = vec3.fromValues(0, 1, 0);
+
+    constructor(p0: vec3, p1: vec3, p2: vec3) {
         this.p0 = p0;
         this.p1 = p1;
         this.p2 = p2;
@@ -63,23 +55,17 @@ export class Triangle {
 }
 
 export class Ray {
-    origin = vec3.fromValues(0, 0, 0);
-    direct = vec3.fromValues(1, 1, 1);
 
-    /**
-     * @param {vec3} origin 
-     * @param {vec3} direct 
-    */
-    constructor(origin, direct) {
+    origin: vec3 = vec3.fromValues(0, 0, 0);
+
+    direct: vec3 = vec3.fromValues(1, 1, 1);
+
+    constructor(origin: vec3, direct: vec3) {
         this.origin = origin;
         this.direct = vec3.normalize(vec3.create(), direct);
     }
 
-    /**
-     * @param {math.Matrix} p
-     * @returns {boolean} 
-    */
-    pointOnRay(p) {
+    pointOnRay(p: vec3): boolean {
         const d = vec3.subtract(vec3.create(), p, this.origin);
         if (Math.abs(vec3.length(d)) < 1E-6) {
             return true;
@@ -94,19 +80,15 @@ export class Ray {
         return false;
     }
 
-    /**
-     * @param {Ray} other_ray
-     * @returns {boolean} 
-    */
-    collineation(other_ray) {
+    collineation(other_ray: Ray): boolean {
 
         const d0 = vec3.normalize(vec3.create(), this.direct);
         const d1 = vec3.normalize(vec3.create(), other_ray.direct);
         const a = vec3.length(vec3_cross(d0, d1));
-        const b = vec3_sub(this.origin, other_ray.origin);
+        const b: vec3 = vec3_sub(this.origin, other_ray.origin);
 
         if (Math.abs(a) < 1E-6) {
-            if (Math.abs(b) < 1E-6) {
+            if (Math.abs(b.length) < 1E-6) {
                 return true;
             }
             const c = vec3.length(vec3.cross(vec3.create(), vec3.normalize(vec3.create(), b), d0))
@@ -119,19 +101,14 @@ export class Ray {
 };
 
 export class Plane {
-    /**@type {vec4} */
-    params = vec4.fromValues(0, 0, 0, 0);
-    constructor(params) {
+
+    params: vec4 = vec4.fromValues(0, 0, 0, 0);
+
+    constructor(params: vec4) {
         this.params = params;
     }
 
-    /**
-     * @param {vec3} p0
-     * @param {vec3} p1
-     * @param {vec3} p2
-     * @returns {Plane|null} 
-    */
-    static fromThreePoints(p0, p1, p2) {
+    static fromThreePoints(p0: vec3, p1: vec3, p2: vec3): Plane | null {
 
         const v1 = vec3_sub(p1, p0);
         const v2 = vec3_sub(p2, p0);
@@ -149,21 +126,16 @@ export class Plane {
     }
 }
 
-/**
- * @param {vec4} p
- * @param {Plane} plane  
-*/
-export function pointOutSidePlane(p, plane) {
+export function pointOutSidePlane(p: vec4, plane: Plane): boolean {
     return vec4.dot(p, plane.params) < 0;
 }
 
+interface RayCrossTriangleResult {
+    cross: boolean,
+    uvt: [number, number, number]
+}
 
-/**
- * @param {Ray} ray
- * @param {Triangle} triangle
- * @returns {{cross:boolean,uvt:Array}} cross boolean, uvt u weight of p1, v weight of p2, t weight of ray
-*/
-export function rayCrossTriangle(ray, triangle) {
+export function rayCrossTriangle(ray: Ray, triangle: Triangle): RayCrossTriangleResult {
 
     const epsilon = 1E-6;
     const e1 = vec3.subtract(vec3.create(), triangle.p1, triangle.p0);
@@ -201,12 +173,12 @@ export function rayCrossTriangle(ray, triangle) {
 
 }
 
-/**
- * @param {Plane} plane0
- * @param {Plane} plane1
- * @return {{cross: boolean, ray: Ray|null}}
-*/
-export function planeCrossPlane(plane0, plane1) {
+interface PlaceCrossPlaneResult {
+    cross: boolean,
+    ray: Ray | null
+}
+
+export function planeCrossPlane(plane0: Plane, plane1: Plane): PlaceCrossPlaneResult {
 
     let n0 = vec3.fromValues(plane0.params[0], plane0.params[1], plane0.params[2])
     n0 = vec3.normalize(vec3.create(), n0);
@@ -225,8 +197,10 @@ export function planeCrossPlane(plane0, plane1) {
     let x = 0;
     let y = 0;
     let z = 0;
-    const [A1, B1, C1, D1] = plane0.params;
-    const [A2, B2, C2, D2] = plane1.params;
+
+    const [A1, B1, C1, D1] = plane0.params as [number, number, number, number];
+    const [A2, B2, C2, D2] = plane1.params as [number, number, number, number];
+
     let detX = B1 * C2 - B2 * C1;
     let detY = A1 * C2 - A2 * C1;
     let detZ = A1 * B2 - A2 * B1;
@@ -255,23 +229,22 @@ export function planeCrossPlane(plane0, plane1) {
 
 export class Sphere {
 
-    /**@type {vec3}*/
-    center = vec3.fromValues(0, 0, 0);
-    /**@type {number}*/
-    radius = 1;
+    center: vec3 = vec3.fromValues(0, 0, 0);
 
-    constructor(center, radius) {
+    radius: number = 1;
+
+    constructor(center: vec3, radius: number) {
         this.center = center;
         this.radius = radius;
     }
 }
 
 /**
- * @param {Ray} ray
- * @param {Sphere} sphere  
- * @param {boolean} [all=false] return all points, or positive closest point
+ * @param ray
+ * @param sphere  
+ * @param all return all points, or positive closest point
 */
-export function rayCrossSphere(ray, sphere, all = false) {
+export function rayCrossSphere(ray: Ray, sphere: Sphere, all: boolean = false): Point3D[] | null {
 
     const oc = vec3_sub(ray.origin, sphere.center);
     const b = vec3.dot(ray.direct, oc);
@@ -308,23 +281,21 @@ export function rayCrossSphere(ray, sphere, all = false) {
 
 export class Spheriod {
 
-    /**@type {vec3} */
-    params = vec3.fromValues(1, 1, 1);
+    params: vec3 = vec3.fromValues(1, 1, 1);
 
-    constructor(a, b, c) {
+    constructor(a: number, b: number, c: number) {
         this.params = vec3.fromValues(a, b, c);
     }
 
 }
 
 /**
- * @param {Ray} ray
- * @param {Spheriod} spheriod
- * @param {boolean} [all=false] Ray cross spheriod at two points. If ray all is False, only return first points; if true, retrun both.
- * [explaination](/docs/source/geometry.md#raycrossspheriod)
+ * @param ray
+ * @param spheriod
+ * @param all Ray cross spheriod at two points. If ray all is False, only return first points; if true, retrun both.
  * {@link https://github.com/wkgreat/tinyearth/blob/main/docs/source/geometry.md#raycrossspheriod}
 */
-export function rayCrossSpheriod(ray, spheriod, all = false) {
+export function rayCrossSpheriod(ray: Ray, spheriod: Spheriod, all: boolean = false): Point3D[] | null {
 
 
     const dx = ray.direct[0];

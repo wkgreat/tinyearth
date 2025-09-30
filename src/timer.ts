@@ -1,28 +1,28 @@
+import type EventBus from "./event.js";
 import { createHelperDiv } from "./helper.js";
 
 export const EVENT_TIMER_TICK = "timer:tick";
 
 export default class Timer {
 
-    currentTime = null;
+    currentTime: number;
     multipler = 1;
     running = false;
     onTimeChange = null;
-    lastFrameTime = 0;
-    currentFrameTime = 0;
+    lastFrameTime: number = 0;
+    currentFrameTime: number = 0;
 
-    /**@type {EventBus|null}*/
-    eventBus = null;
+    eventBus: EventBus | null = null;
 
-    constructor(millseconds) {
+    constructor(millseconds: number = Date.now()) {
         this.currentTime = millseconds;
     }
 
-    setEventBus(eventBus) {
+    setEventBus(eventBus: EventBus) {
         this.eventBus = eventBus;
     }
 
-    tick(frameTime) {
+    tick(frameTime: number) {
         if (this.running) {
             this.#setCurrentFrameTime(frameTime);
             let dt = Math.trunc((frameTime - this.getLastFrameTime()));
@@ -36,22 +36,22 @@ export default class Timer {
         }
     }
 
-    #addTime(millseconds) {
+    #addTime(millseconds: number) {
         this.currentTime += millseconds * this.multipler;
     }
-    #subTime(millseconds) {
+    #subTime(millseconds: number) {
         this.currentTime -= millseconds * this.multipler;
     }
-    getTime() {
+    getTime(): number {
         return this.currentTime;
     }
-    getDate() {
+    getDate(): Date {
         return new Date(this.currentTime);
     }
-    setMultipler(m) {
+    setMultipler(m: number) {
         this.multipler = m;
     }
-    getMultipler() {
+    getMultipler(): number {
         return this.multipler;
     }
     start() {
@@ -63,42 +63,38 @@ export default class Timer {
     reset() {
         this.currentTime = Date.now();
     }
-    #setLastFrameTime(t) {
+    #setLastFrameTime(t: number) {
         this.lastFrameTime = t;
     }
-    #setCurrentFrameTime(t) {
+    #setCurrentFrameTime(t: number) {
         this.currentFrameTime = t;
     }
-    getLastFrameTime() {
+    getLastFrameTime(): number {
         return this.lastFrameTime;
     }
-    getCurrentFrameTime() {
+    getCurrentFrameTime(): number {
         return this.currentFrameTime;
     }
 
 }
 
-/**
- * @param {Date} date
-*/
-function formatDateToDatetimeLocal(date) {
-    const pad = n => String(n).padStart(2, '0');
+function numberPad(n: number): string {
+    return String(n).padStart(2, '0');
+}
+
+function formatDateToDatetimeLocal(date: Date): string {
 
     const year = date.getFullYear();
-    const month = pad(date.getMonth() + 1); // 月份从 0 开始
-    const day = pad(date.getDate());
-    const hours = pad(date.getHours());
-    const minutes = pad(date.getMinutes());
-    const seconds = pad(date.getSeconds())
+    const month = numberPad(date.getMonth() + 1); // 月份从 0 开始
+    const day = numberPad(date.getDate());
+    const hours = numberPad(date.getHours());
+    const minutes = numberPad(date.getMinutes());
+    const seconds = numberPad(date.getSeconds())
 
     return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
 }
 
-/**
- * @param {Timer} timer
- * @param {HTMLDivElement} root  
-*/
-export function addTimeHelper(timer, root) {
+export function addTimeHelper(timer: Timer, root: HTMLDivElement) {
 
     const id = "timer-helper-div";
     const multiplierLabelId = `multiplier-${crypto.randomUUID()}`;
@@ -121,14 +117,17 @@ export function addTimeHelper(timer, root) {
     root.appendChild(container);
 
     const multiplierLabel = document.getElementById(multiplierLabelId);
-    multiplierLabel.innerHTML = `x${timer.getMultipler()}`;
+    if (multiplierLabel) {
+        multiplierLabel.innerHTML = `x${timer.getMultipler()}`;
+    }
 
-    const multiplerInput = document.getElementById("timer-multipler-input");
-    const startButton = document.getElementById("timer-start-button");
-    const resetButton = document.getElementById("timer-reset-button");
-    const timeInput = document.getElementById("timer-time-input");
 
-    if (timer.eventBus) {
+    const multiplerInput = document.getElementById("timer-multipler-input") as HTMLInputElement;
+    const startButton = document.getElementById("timer-start-button") as HTMLButtonElement;
+    const resetButton = document.getElementById("timer-reset-button") as HTMLButtonElement;
+    const timeInput = document.getElementById("timer-time-input") as HTMLInputElement;
+
+    if (timer.eventBus && timeInput) {
         timer.eventBus.addEventListener(EVENT_TIMER_TICK, {
             callback: (_timer) => {
                 timeInput.value = formatDateToDatetimeLocal(_timer.getDate())
@@ -137,10 +136,13 @@ export function addTimeHelper(timer, root) {
     }
 
 
-    multiplerInput.value = timer.getMultipler();
+    multiplerInput.value = timer.getMultipler().toString();
     multiplerInput.addEventListener('input', () => {
-        timer.setMultipler(multiplerInput.value);
-        multiplierLabel.innerHTML = `x${multiplerInput.value}`;
+        timer.setMultipler(Number(multiplerInput.value));
+        if (multiplierLabel) {
+            multiplierLabel.innerHTML = `x${multiplerInput.value}`;
+        }
+
     });
 
     if (timer.running) {
@@ -165,7 +167,7 @@ export function addTimeHelper(timer, root) {
     });
 
     timeInput.addEventListener('input', (event) => {
-        const value = event.target.value;
+        const value = (event as any).target.value; // todo resolve any type
         const fullValue = value.length === 16 ? value + ":00" : value;
         timer.currentTime = new Date(fullValue).getTime();
     });

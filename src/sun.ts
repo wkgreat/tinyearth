@@ -1,24 +1,30 @@
-function toRadians(deg) {
+function toRadians(deg: number): number {
     return deg * Math.PI / 180;
 }
 
-function toDegrees(rad) {
+function toDegrees(rad: number): number {
     return rad * 180 / Math.PI;
 }
 
-function julianDate(date) {
+function julianDate(date: Date): number {
     const time = date.getTime();
     return (time / 86400000.0) + 2440587.5;
 }
 
-function getGMST(jd) {
+function getGMST(jd: number): number {
     const d = jd - 2451545.0;
     let gmst = 280.46061837 + 360.98564736629 * d;
     gmst = ((gmst % 360) + 360) % 360;
     return toRadians(gmst);
 }
 
-function getSunECI(jd) {
+export interface xyzObject {
+    x: number,
+    y: number,
+    z: number
+}
+
+function getSunECI(jd: number): xyzObject {
     const n = jd - 2451545.0;
     const L = (280.460 + 0.9856474 * n) % 360;
     const g = toRadians((357.528 + 0.9856003 * n) % 360);
@@ -35,7 +41,7 @@ function getSunECI(jd) {
     return { x, y, z };
 }
 
-function eciToEcef(eci, gmst) {
+function eciToEcef(eci: xyzObject, gmst: number): xyzObject {
     const cosGMST = Math.cos(gmst);
     const sinGMST = Math.sin(gmst);
 
@@ -47,7 +53,7 @@ function eciToEcef(eci, gmst) {
 }
 
 // 主函数：获取太阳ECEF坐标
-export function getSunPositionECEF(date = new Date()) {
+export function getSunPositionECEF(date: Date = new Date()): xyzObject {
     const jd = julianDate(date);
     const gmst = getGMST(jd);
     const sunEci = getSunECI(jd);
@@ -57,11 +63,11 @@ export function getSunPositionECEF(date = new Date()) {
 
 export class Sun {
 
-    position = null;
+    position: xyzObject = { x: 0, y: 0, z: 0 };
 
     constructor() {}
 
-    refreshSunPosition(date) {
+    refreshSunPosition(date: Date) {
         this.position = getSunPositionECEF(date);
     }
 

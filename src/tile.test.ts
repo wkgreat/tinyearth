@@ -1,12 +1,12 @@
 import { describe, expect } from '@jest/globals';
 import { vec3, vec4, glMatrix } from 'gl-matrix';
 import proj4 from 'proj4';
-import Camera from './camera';
-import { buildFrustum } from './frustum';
-import { Tile } from './maptiler';
-import { EPSG_3857, EPSG_4326, EPSG_4978 } from './proj';
-import Projection from './projection';
-import { TileNode, TileTree } from './tilerender';
+import Camera from './camera.js';
+import { buildFrustum } from './frustum.js';
+import { Tile } from './maptiler.js';
+import { EPSG_3857, EPSG_4326, EPSG_4978 } from './proj.js';
+import Projection from './projection.js';
+import { TileNode, TileTree } from './tilerender.js';
 glMatrix.setMatrixArrayType(Array);
 
 describe("tile", () => {

@@ -1,59 +1,53 @@
 import { glMatrix, mat4, vec3, vec4 } from "gl-matrix";
 import proj4 from "proj4";
-import { vec4_t3 } from "./glmatrix_utils.js";
+import { vec3_array, vec4_t3 } from "./glmatrix_utils.js";
 import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
 import Scene from "./scene.js";
+import { LEFTBUTTON, WHEELBUTTON, type MouseEventHandler, type NumArr2, type NumArr3, type WheelEventHandler } from "./defines.js";
 glMatrix.setMatrixArrayType(Array);
 
-/**
- * @class Camera
- * @property {vec4} from 相机位置点
- * @property {vec4} to 相机目标点
- * @property {vec4} up 相机up向量
- * @property {mat4} viewMtx 视矩阵
- * @property {mat4} invViewMtx 视矩阵的逆
-*/
+export type CameraEventCallback = (camera: Camera, info: any) => void;
+
 class Camera {
 
-    #from = vec4.fromValues(1, 1, 1, 1);
-    #to = vec4.fromValues(0, 0, 0, 1);
-    #up = vec4.fromValues(0, 1, 0, 0);
-    #viewMtx = mat4.create();
-    #invViewMtx = mat4.create();
-    #changeFunc = [];
+    #from: vec4 = vec4.fromValues(1, 1, 1, 1);
+    #to: vec4 = vec4.fromValues(0, 0, 0, 1);
+    #up: vec4 = vec4.fromValues(0, 1, 0, 0);
+    #viewMtx: mat4 = mat4.create();
+    #invViewMtx: mat4 = mat4.create();
+    #changeFunc: CameraEventCallback[] = [];
 
-    /**@type {Scene}*/
-    scene = null;
+    scene: Scene;
 
-    constructor(scene, from, to, up) {
+    constructor(scene: Scene, from: vec4, to: vec4, up: vec4) {
         this.scene = scene;
         this.setFrom(from);
         this.setTo(to);
         this.setUp(up);
     }
 
-    setFrom(vin) {
+    setFrom(vin: vec3 | vec4) {
         this.setVector4(this.#from, vin);
     }
-    setTo(vin) {
+    setTo(vin: vec3 | vec4) {
         this.setVector4(this.#to, vin);
     }
-    setUp(vin) {
+    setUp(vin: vec3 | vec4) {
         this.setVector4(this.#up, vin);
     }
 
-    setVector4(vout, vin) {
+    setVector4(vout: vec4, vin: vec3 | vec4) {
         const len = vin.length;
         if (len < 3) {
             console.log("len < 3");
         } else if (len == 3) {
             vec4.set(vout, vin[0], vin[1], vin[2], 1);
         } else {
-            vec4.set(vout, vin[0], vin[1], vin[2], vin[3]);
+            vec4.set(vout, vin[0], vin[1], vin[2], vin[3] as number);
         }
     }
 
-    _vec3(v) {
+    _vec3(v: vec3 | vec4) {
         return vec3.set(vec3.create(), v[0], v[1], v[2]);
     }
 
@@ -71,13 +65,12 @@ class Camera {
     }
 
     /**
-     * @description 相机绕目标点(to)旋转
-     * @param {number} dx x方向上旋转（绕y轴旋转）的角度
-     * @param {number} dy y方向上旋转（绕x轴旋转）的角度
-     * @returns {void}
-     * @todo 根据比例尺移动，round时避免重复请求
+     * 相机绕目标点(to)旋转
+     * @param dx x方向上旋转（绕y轴旋转）的角度
+     * @param dy y方向上旋转（绕x轴旋转）的角度
+     * TODO 根据比例尺移动，round时避免重复请求
     */
-    round(dx, dy) {
+    round(dx: number, dy: number) {
 
         const [rx, ry] = this.getResolution();
         const lx = -dx * rx;
@@ -106,15 +99,14 @@ class Camera {
 
     /**
      * @description 缩放（相机前进或后退）
-     * @param {number} f 缩放系数 
-     * @todo 考虑相机极低，瓦片变成back的情况
+     * @param f 缩放系数 
     */
-    zoom(f) {
+    zoom(f: number) {
 
         //TODO 考虑地球为椭球体
         const d = vec4.create();
-        const fromLonLatAlt = proj4(EPSG_4978, EPSG_4326, Array.from(this.#from.slice(0, 3)));
-        const toLonLatAlt = [fromLonLatAlt[0], fromLonLatAlt[1], 1];
+        const fromLonLatAlt: NumArr3 = proj4(EPSG_4978, EPSG_4326, [this.#from[0], this.#from[1], this.#from[2]]);
+        const toLonLatAlt: NumArr3 = [fromLonLatAlt[0], fromLonLatAlt[1], 1];
         const to = proj4(EPSG_4326, EPSG_4978, toLonLatAlt);
         const toVec4 = vec4.fromValues(to[0], to[1], to[2], 1);
         vec4.sub(d, toVec4, this.#from);
@@ -130,11 +122,11 @@ class Camera {
 
     /**
      * @description 相机平移
-     * @param {number} dx x轴方向平移量
-     * @param {number} dy y轴方向平移量
-     * @todo 根据比例尺移动，move时避免重复请求
+     * @param dx x轴方向平移量
+     * @param dy y轴方向平移量
+     * TODO 根据比例尺移动，move时避免重复请求
     */
-    move(dx, dy) {
+    move(dx: number, dy: number) {
         const viewFrom4 = vec4.transformMat4(vec4.create(), this.#from, this.#viewMtx);
         const viewTo4 = vec4.transformMat4(vec4.create(), this.#to, this.#viewMtx);
 
@@ -153,7 +145,7 @@ class Camera {
 
     }
 
-    addOnchangeEeventListener(f) {
+    addOnchangeEeventListener(f: CameraEventCallback) {
         this.#changeFunc.push(f);
     }
 
@@ -170,7 +162,7 @@ class Camera {
     }
 
     getHeightToSurface() {
-        const from = proj4(EPSG_4978, EPSG_4326, vec4_t3(this.#from));
+        const from = proj4(EPSG_4978, EPSG_4326, vec3_array(vec4_t3(this.#from)));
         return from[2];
     }
 
@@ -179,9 +171,9 @@ class Camera {
     }
 
     /**  
-     * @todo 暂时不考虑视角倾斜
+     * TODO 暂时不考虑视角倾斜
     */
-    getResolution() {
+    getResolution(): NumArr2 {
         const projection = this.scene.getProjection();
         const viewWidth = this.scene.getViewWidth();
         const viewHeight = this.scene.getViewHeight();
@@ -210,34 +202,26 @@ class Camera {
 
 };
 
-const LEFTBUTTON = 0;
-const WHEELBUTTON = 1;
-const RIGHTBUTTON = 2;
-
 export class CameraMouseControl {
 
-    camera = null;
-    canvas = null;
-    leftButtonDown = false;
-    wheelButtonDown = false;
-    lastMouseX = 0;
-    lastMouseY = 0;
-    handleMouseDownFunc = null;
-    handleMouseMoveFunc = null;
-    handleMouseUpFunc = null;
-    handleMouseLeaveFunc = null;
-    handleMouseWheelFunc = null;
+    camera: Camera;
+    canvas: HTMLCanvasElement;
+    leftButtonDown: boolean = false;
+    wheelButtonDown: boolean = false;
+    lastMouseX: number = 0;
+    lastMouseY: number = 0;
+    handleMouseDownFunc: MouseEventHandler | null = null;
+    handleMouseMoveFunc: MouseEventHandler | null = null;
+    handleMouseUpFunc: MouseEventHandler | null = null;
+    handleMouseLeaveFunc: MouseEventHandler | null = null;
+    handleMouseWheelFunc: WheelEventHandler | null = null;
 
-    /**
-     * @param {Camera} camera
-     * @param {HTMLElement} canvas  
-    */
-    constructor(camera, canvas) {
+    constructor(camera: Camera, canvas: HTMLCanvasElement) {
         this.camera = camera;
         this.canvas = canvas;
     }
 
-    handleMouseDown() {
+    handleMouseDown(): MouseEventHandler {
         const that = this;
         return (e) => {
             if (e.button == LEFTBUTTON) {
@@ -251,7 +235,7 @@ export class CameraMouseControl {
         }
     }
 
-    handleMouseMove() {
+    handleMouseMove(): MouseEventHandler {
         const that = this;
         return (e) => {
             if (this.leftButtonDown) {
@@ -269,7 +253,7 @@ export class CameraMouseControl {
         }
     }
 
-    handleMouseUp() {
+    handleMouseUp(): MouseEventHandler {
         const that = this;
         return (e) => {
             if (e.button == LEFTBUTTON) {
@@ -281,7 +265,7 @@ export class CameraMouseControl {
         }
     }
 
-    handleMouseLeave() {
+    handleMouseLeave(): MouseEventHandler {
         const that = this;
         return (e) => {
             that.leftButtonDown = false;
@@ -289,11 +273,11 @@ export class CameraMouseControl {
         }
     }
 
-    handleMouseWheel() {
+    handleMouseWheel(): WheelEventHandler {
         const that = this;
         return (e) => {
             e.preventDefault();
-            this.camera.zoom(e.wheelDeltaY / 120 * (1 / 10));
+            this.camera.zoom(e.deltaY / 120 * (1 / 10));
         }
     }
 
@@ -310,11 +294,12 @@ export class CameraMouseControl {
         this.canvas.addEventListener('wheel', this.handleMouseWheelFunc);
     }
     disable() {
-        this.canvas.removeEventListener('mousedown', this.handleMouseDownFunc);
-        this.canvas.removeEventListener('mousemove', this.handleMouseMoveFunc)
-        this.canvas.removeEventListener('mouseup', this.handleMouseUpFunc);
-        this.canvas.removeEventListener('mouseleave', this.handleMouseLeaveFunc);
-        this.canvas.removeEventListener('wheel', this.handleMouseWheelFunc);
+        //TODO resolve any type
+        this.canvas.removeEventListener('mousedown', this.handleMouseDownFunc as any);
+        this.canvas.removeEventListener('mousemove', this.handleMouseMoveFunc as any)
+        this.canvas.removeEventListener('mouseup', this.handleMouseUpFunc as any);
+        this.canvas.removeEventListener('mouseleave', this.handleMouseLeaveFunc as any);
+        this.canvas.removeEventListener('wheel', this.handleMouseWheelFunc as any);
         this.handleMouseDownFunc = null;
         this.handleMouseMoveFunc = null;
         this.handleMouseUpFunc = null;

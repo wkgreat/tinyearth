@@ -3,42 +3,45 @@ import proj4 from "proj4";
 import Frustum from "./frustum.js";
 import { Plane, planeCrossPlane, pointOutSidePlane, rayCrossTriangle, Triangle } from "./geometry.js";
 import { vec3_add, vec3_normalize, vec3_scale, vec3_sub, vec3_t4 } from "./glmatrix_utils.js";
-import { EPSG_3857, EPSG_4326, EPSG_4978 } from "./proj.js";
+import { EPSG_3857, EPSG_4326, EPSG_4978, type projcode_t } from "./proj.js";
 import { loadTileImage } from "./tileutils.js";
+import type { TileProvider } from "./tilerender.js";
+import type { Extent, Interval, NumArr3 } from "./defines.js";
 glMatrix.setMatrixArrayType(Array);
 
-const XLIMIT = [-20037508.3427892, 20037508.3427892];
-const YLIMIT = [-20037508.3427892, 20037508.3427892];
+const XLIMIT: Interval = [-20037508.3427892, 20037508.3427892];
+const YLIMIT: Interval = [-20037508.3427892, 20037508.3427892];
 
 /**
- * @class Tile
- * @property {number} x
- * @property {number} y
- * @property {number} z
- * @property {Image} image
- * @property {TileProvider} provider
+ * Tile
 */
 export class Tile {
 
-    x = 0;
-    y = 0;
-    z = 0;
-    urltem = "";
-    url = "";
-    image = null;
-    provider = null;
-    /**@type {boolean}*/
-    ready = false;
-    /**@type {TileMesh|null}*/
-    mesh = null;
+    x: number = 0;
 
-    extentCache = []; //TODO 缓存extent
+    y: number = 0;
 
-    normals = null;
+    z: number = 0;
 
-    corners = null;
+    urltem: string = "";
 
-    constructor(x, y, z, url) {
+    url: string = "";
+
+    image: HTMLImageElement | null = null;
+
+    provider: TileProvider | null = null;
+
+    ready: boolean = false;
+
+    mesh: Float32Array | null = null;
+
+    extentCache = [];
+
+    normals: [vec3, vec3, vec3, vec3] | null = null;
+
+    corners: [vec3, vec3, vec3, vec3] | null = null;
+
+    constructor(x: number, y: number, z: number, url: string) {
         this.x = x;
         this.y = y;
         this.z = z;
@@ -46,26 +49,26 @@ export class Tile {
         this.url = url.replace("{z}", `${z}`).replace("{x}", `${x}`).replace("{y}", `${y}`);
     }
 
-    supTileAtLevel(level) {
+    supTileAtLevel(level: number): Tile {
         if (level > this.z) {
             console.error("supTile error");
         }
 
-        let curTile = this;
+        let curTile: Tile = this;
         while (curTile.z > level) {
             curTile = curTile.supTile();
         }
         return curTile;
     }
 
-    supTile() {
+    supTile(): Tile {
         const newZ = this.z - 1;
         const newX = this.x >> 1;
         const newY = this.y >> 1;
         return new Tile(newX, newY, newZ, this.urltem);
     }
 
-    subTiles() {
+    subTiles(): [Tile, Tile, Tile, Tile] {
         return [
             new Tile(this.x * 2, this.y * 2, this.z + 1, this.urltem),
             new Tile(this.x * 2 + 1, this.y * 2, this.z + 1, this.urltem),
@@ -74,12 +77,7 @@ export class Tile {
         ];
     }
 
-    /**
-     * @param {vec4} p
-     * @param {vec4} plane
-     * @returns {boolean}  
-    */
-    pointInFrustumPlane(p, plane) {
+    pointInFrustumPlane(p: vec4, plane: vec4): boolean {
         if (!plane) {
             return true;
         }
@@ -87,22 +85,18 @@ export class Tile {
         return Math.abs(v) > 0;
     }
 
-    /**
-     * @param {math.Matrix} p
-     * @param {Frustum} frustum
-     * @returns {boolean}  
-    */
-    pointInFrustum(p, frustum) {
+    pointInFrustum(p: vec4, frustum: Frustum): boolean {
 
-        return this.pointInFrustumPlane(p, frustum.left) &&
-            this.pointInFrustumPlane(p, frustum.right) &&
-            this.pointInFrustumPlane(p, frustum.bottom) &&
-            this.pointInFrustumPlane(p, frustum.top) &&
-            this.pointInFrustumPlane(p, frustum.near) &&
-            this.pointInFrustumPlane(p, frustum.far);
+        // TODO check frustum plane is null
+        return this.pointInFrustumPlane(p, frustum.left!) &&
+            this.pointInFrustumPlane(p, frustum.right!) &&
+            this.pointInFrustumPlane(p, frustum.bottom!) &&
+            this.pointInFrustumPlane(p, frustum.top!) &&
+            this.pointInFrustumPlane(p, frustum.near!) &&
+            this.pointInFrustumPlane(p, frustum.far!);
     }
 
-    getNormals() {
+    getNormals(): [vec3, vec3, vec3, vec3] {
         if (!this.normals) {
             // console.log("CALC");
             const ext = this.extent();
@@ -110,33 +104,34 @@ export class Tile {
             let p1 = [ext[0], ext[3]];
             let p2 = [ext[2], ext[1]];
             let p3 = [ext[2], ext[3]];
-            p0 = proj4(EPSG_3857, EPSG_4326, p0);
-            p1 = proj4(EPSG_3857, EPSG_4326, p1);
-            p2 = proj4(EPSG_3857, EPSG_4326, p2);
-            p3 = proj4(EPSG_3857, EPSG_4326, p3);
+            p0 = proj4(EPSG_3857, EPSG_4326, p0) as number[];
+            p1 = proj4(EPSG_3857, EPSG_4326, p1) as number[];
+            p2 = proj4(EPSG_3857, EPSG_4326, p2) as number[];
+            p3 = proj4(EPSG_3857, EPSG_4326, p3) as number[];
 
-            p0 = proj4(EPSG_4326, EPSG_4978, [...p0, 0]);
-            p1 = proj4(EPSG_4326, EPSG_4978, [...p1, 0]);
-            p2 = proj4(EPSG_4326, EPSG_4978, [...p2, 0]);
-            p3 = proj4(EPSG_4326, EPSG_4978, [...p3, 0]);
+            p0 = proj4(EPSG_4326, EPSG_4978, [...p0, 0]) as number[];
+            p1 = proj4(EPSG_4326, EPSG_4978, [...p1, 0]) as number[];
+            p2 = proj4(EPSG_4326, EPSG_4978, [...p2, 0]) as number[];
+            p3 = proj4(EPSG_4326, EPSG_4978, [...p3, 0]) as number[];
 
-            p0 = vec3.fromValues(p0[0], p0[1], p0[2]);
-            p1 = vec3.fromValues(p1[0], p1[1], p1[2]);
-            p2 = vec3.fromValues(p2[0], p2[1], p2[2]);
-            p3 = vec3.fromValues(p3[0], p3[1], p3[2]);
+            // TODO resolve undefined type
+            const v0 = vec3.fromValues(p0[0]!, p0[1]!, p0[2]!);
+            const v1 = vec3.fromValues(p1[0]!, p1[1]!, p1[2]!);
+            const v2 = vec3.fromValues(p2[0]!, p2[1]!, p2[2]!);
+            const v3 = vec3.fromValues(p3[0]!, p3[1]!, p3[2]!);
 
-            this.normals = [p0, p1, p2, p3];
+            this.normals = [v0, v1, v2, v3];
         } else {
             // console.log("SKIP");
         }
         return this.normals;
     }
 
-    /**
-     * @param {Frustum} frustum
-     * @returns {boolean}
-    */
-    tileIsBack(frustum) {
+    tileIsBack(frustum: Frustum | null): boolean {
+
+        if (frustum === null) {
+            return true;
+        }
 
         if (frustum.getViewpoint() == null) {
             return true;
@@ -145,8 +140,8 @@ export class Tile {
         const [p0, p1, p2, p3] = this.getNormals();
 
         if (this.z <= 5) {
-            const viewpoint = frustum.getViewpoint();
-            const targetpoint = frustum.getTargetpoint();
+            const viewpoint = frustum.getViewpoint() as vec3;
+            const targetpoint = frustum.getTargetpoint() as vec3;
             const view = vec3_normalize(vec3_sub(targetpoint, viewpoint));
             const np0 = vec3_normalize(p0);
             const np1 = vec3_normalize(p1);
@@ -160,8 +155,8 @@ export class Tile {
 
             return d0 >= 0 && d1 >= 0 && d2 >= 0 && d3 >= 0;
         } else {
-            const viewpoint = frustum.getViewpoint();
-            const targetpoint = frustum.getTargetpoint();
+            const viewpoint = frustum.getViewpoint() as vec3;
+            const targetpoint = frustum.getTargetpoint() as vec3;
             const backview = vec3_normalize(vec3_sub(viewpoint, targetpoint));
             const backviewpoint = vec3_add(viewpoint, vec3_scale(backview, 1E5));
             const sp0 = vec3_normalize(p0);
@@ -191,7 +186,7 @@ export class Tile {
 
     }
 
-    intersectwithFrustumECEF(frustum) {
+    intersectwithFrustumECEF(frustum: Frustum): boolean {
 
         const ext = this.extent();
         let p0 = [ext[0], ext[1]];
@@ -208,17 +203,17 @@ export class Tile {
         p2 = proj4(EPSG_4326, EPSG_4978, [...p2, 0]);
         p3 = proj4(EPSG_4326, EPSG_4978, [...p3, 0]);
 
-        const vp0 = vec4.fromValues(p0[0], p0[1], p0[2], 1);
-        const vp1 = vec4.fromValues(p1[0], p1[1], p1[2], 1);
-        const vp2 = vec4.fromValues(p2[0], p2[1], p2[2], 1);
-        const vp3 = vec4.fromValues(p3[0], p3[1], p3[2], 1);
+        const vp0 = vec4.fromValues(p0[0]!, p0[1]!, p0[2]!, 1);
+        const vp1 = vec4.fromValues(p1[0]!, p1[1]!, p1[2]!, 1);
+        const vp2 = vec4.fromValues(p2[0]!, p2[1]!, p2[2]!, 1);
+        const vp3 = vec4.fromValues(p3[0]!, p3[1]!, p3[2]!, 1);
 
         return this.pointInFrustum(vp0, frustum) || this.pointInFrustum(vp1, frustum)
             || this.pointInFrustum(vp2, frustum) || this.pointInFrustum(vp3, frustum);
 
     }
 
-    getTileCorner() {
+    getTileCorner(): [vec3, vec3, vec3, vec3] | null {
 
         if (!this.corners) {
             const ext = this.extent();
@@ -231,26 +226,32 @@ export class Tile {
             p2 = proj4(EPSG_3857, EPSG_4326, p2);
             p3 = proj4(EPSG_3857, EPSG_4326, p3);
 
-            p0 = proj4(EPSG_4326, EPSG_4978, [...p0, 0]);
-            p1 = proj4(EPSG_4326, EPSG_4978, [...p1, 0]);
-            p2 = proj4(EPSG_4326, EPSG_4978, [...p2, 0]);
-            p3 = proj4(EPSG_4326, EPSG_4978, [...p3, 0]);
+            const v0 = proj4(EPSG_4326, EPSG_4978, [...p0, 0]) as [number, number, number];
+            const v1 = proj4(EPSG_4326, EPSG_4978, [...p1, 0]) as [number, number, number];
+            const v2 = proj4(EPSG_4326, EPSG_4978, [...p2, 0]) as [number, number, number];
+            const v3 = proj4(EPSG_4326, EPSG_4978, [...p3, 0]) as [number, number, number];
 
-            this.corners = [vec3.fromValues(...p0), vec3.fromValues(...p1), vec3.fromValues(...p2), vec3.fromValues(...p3)]
+            this.corners = [vec3.fromValues(...v0), vec3.fromValues(...v1), vec3.fromValues(...v2), vec3.fromValues(...v3)]
         }
         return this.corners;;
 
     }
 
-    /**@param {Frustum} frustum */
-    intersectFrustum(frustum) {
+    intersectFrustum(frustum: Frustum | null): boolean {
+        if (frustum === null) {
+            return true;
+        }
         const points = this.getTileCorner();
-        const leftPlane = new Plane(frustum.left);
-        const rightPlane = new Plane(frustum.right);
-        const bottomPlane = new Plane(frustum.bottom);
-        const topPlane = new Plane(frustum.top);
-        const nearPlane = new Plane(frustum.near);
-        const farPlane = new Plane(frustum.far);
+        if (points === null) {
+            return false;
+        }
+        //TODO check frustum plane is null
+        const leftPlane = new Plane(frustum.left!);
+        const rightPlane = new Plane(frustum.right!);
+        const bottomPlane = new Plane(frustum.bottom!);
+        const topPlane = new Plane(frustum.top!);
+        const nearPlane = new Plane(frustum.near!);
+        const farPlane = new Plane(frustum.far!);
 
         const planeList = [leftPlane, rightPlane, bottomPlane, topPlane, nearPlane, farPlane];
 
@@ -314,7 +315,7 @@ export class Tile {
     }
 
     /* 注意GOOGLE切片原点视左上角，不是左下角*/
-    extent() {
+    extent(): Extent {
         const dx = (XLIMIT[1] - XLIMIT[0]) / Math.pow(2, this.z);
         const dy = (YLIMIT[1] - YLIMIT[0]) / Math.pow(2, this.z);
         const xmin = XLIMIT[0] + dx * this.x;
@@ -324,11 +325,12 @@ export class Tile {
         return [xmin, ymin, xmax, ymax];
     }
 
-    async fetchTile() {
+    async fetchTile(): Promise<HTMLImageElement | null> {
         const image = await loadTileImage(this.url, this.x, this.y, this.z);
         this.image = image;
         this.ready = true;
         return this.image;
+
     }
 
     center() {
@@ -343,13 +345,12 @@ export class Tile {
     }
 }
 
-//
 export class TileMesher {
 
-    static toMesh(tile, level, targetProj) {
-        const vertices = [];
-        const posExt = tile.extent();
-        const texExt = [0, 0, 1, 1];
+    static toMesh(tile: Tile, level: number, targetProj: projcode_t) {
+        const vertices: number[] = [];
+        const posExt: Extent = tile.extent();
+        const texExt: Extent = [0, 0, 1, 1];
         this.toMeshRec(posExt, texExt, 0, level, targetProj, vertices);
         return {
             vertices: new Float32Array(vertices),
@@ -357,17 +358,17 @@ export class TileMesher {
         };
     }
 
-    static normalize(x, y, z) {
+    static normalize(x: number, y: number, z: number): NumArr3 {
         let p = vec3.fromValues(x, y, z);
         vec3.normalize(p, p);
         return [p[0], p[1], p[2]];
     }
 
-    static toMeshRec(posExt, texExt, curlevel, level, targetProj, vertices) {
+    static toMeshRec(posExt: Extent, texExt: Extent, curlevel: number, level: number, targetProj: projcode_t, vertices: number[]) {
 
         if (curlevel == level) {
-            let p = proj4(EPSG_3857, targetProj, [posExt[0], posExt[1], 0]);
-            let n = this.normalize(p[0], p[1], p[2]);
+            let p: NumArr3 = proj4(EPSG_3857, targetProj, [posExt[0], posExt[1], 0]);
+            let n: NumArr3 = this.normalize(p[0], p[1], p[2]);
             vertices.push(p[0], p[1], p[2], texExt[0], texExt[1], n[0], n[1], n[2]);
             p = proj4(EPSG_3857, targetProj, [posExt[2], posExt[3], 0]);
             n = this.normalize(p[0], p[1], p[2]);
@@ -388,8 +389,8 @@ export class TileMesher {
 
 
         } else if (curlevel < level) {
-            const newPosExt = [];
-            const newTexExt = [];
+            const newPosExt: Extent = [0, 0, 0, 0];
+            const newTexExt: Extent = [0, 0, 0, 0];
 
             newPosExt[0] = posExt[0];
             newPosExt[1] = posExt[1];

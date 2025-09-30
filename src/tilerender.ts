@@ -8,43 +8,44 @@ import tileVertSource from "./tile.vert";
 import Frustum, { buildFrustum } from "./frustum.js";
 import TinyEarth from "./tinyearth.js";
 import { createHelperDiv } from "./helper.js";
+import type { xyzObject } from "./sun.js";
+import type { NumArr3 } from "./defines.js";
+
+interface GlobeTileProgramBufferInfo {
+    vertices?: WebGLBuffer,
+    texture?: WebGLTexture
+}
 
 export class GlobeTileProgram {
 
+    gl: WebGLRenderingContext | null = null;
 
-    /**@type {WebGLRenderingContext|null}*/
-    gl = null;
+    tinyearth: TinyEarth;
 
-    /**@type {TinyEarth|null}*/
-    tinyearth = null;
+    program: WebGLProgram | null = null;
 
-    /**@type {WebGLProgram|null}*/
-    program = null;
+    buffers: GlobeTileProgramBufferInfo = {};
 
-    buffers = {};
+    numElements: number = 0;
 
-    numElements = 0;
+    tileProviders: TileProvider[] = [];
 
-    /**@type {TileProvider[]}*/
-    tileProviders = [];
-
-    constructor(tinyearth) {
+    constructor(tinyearth: TinyEarth) {
         this.tinyearth = tinyearth;
         this.gl = this.tinyearth.gl;
         this.program = this.createTileProgram();
         this.createBuffer();
     }
 
-    /**
-     * @param {TileProvider} tileProvider 
-    */
-    addTileProvider(tileProvider) {
-
+    addTileProvider(tileProvider: TileProvider) {
         this.tileProviders.push(tileProvider);
-
     }
 
-    createTileProgram() {
+    createTileProgram(): WebGLProgram | null {
+
+        if (this.gl === null) {
+            return null;
+        }
         /* 创建程序 */
         const program = this.gl.createProgram();
 
@@ -52,6 +53,10 @@ export class GlobeTileProgram {
 
         /* 程序加载着色器 */
         const vertShader = this.gl.createShader(this.gl.VERTEX_SHADER);
+        if (vertShader === null) {
+            console.error("vertShader is null");
+            return null;
+        }
         this.gl.shaderSource(vertShader, tileVertSource);
         this.gl.compileShader(vertShader);
         this.gl.attachShader(program, vertShader);
@@ -63,6 +68,10 @@ export class GlobeTileProgram {
         }
 
         const fragShader = this.gl.createShader(this.gl.FRAGMENT_SHADER);
+        if (fragShader === null) {
+            console.error("fragShader is null");
+            return null;
+        }
         this.gl.shaderSource(fragShader, tileFragSource);
         this.gl.compileShader(fragShader);
         this.gl.attachShader(program, fragShader);
@@ -91,84 +100,104 @@ export class GlobeTileProgram {
     }
 
     createBuffer() {
-        this.buffers["vertices"] = this.gl.createBuffer();
-        this.buffers["texture"] = this.gl.createTexture();
+        if (this.gl) {
+            this.buffers.vertices = this.gl.createBuffer();
+            this.buffers.texture = this.gl.createTexture();
+        }
     }
 
-    setUniform3f(name, v0, v1, v2) {
-        this.gl.useProgram(this.program);
-        this.gl.uniform3f(this.gl.getUniformLocation(this.program, name), v0, v1, v2);
-    }
-    setUniform4f(name, v0, v1, v2, v3) {
-        this.gl.useProgram(this.program);
-        this.gl.uniform4f(this.gl.getUniformLocation(this.program, name), v0, v1, v2, v3);
-    }
-    setUniform1f(name, v) {
-        this.gl.useProgram(this.program);
-        this.gl.uniform1f(this.gl.getUniformLocation(this.program, name), v);
-    }
+    setUniform3f(name: string, v0: number, v1: number, v2: number) {
+        if (this.gl && this.program) {
+            this.gl.useProgram(this.program);
+            this.gl.uniform3f(this.gl.getUniformLocation(this.program, name), v0, v1, v2);
+        }
 
-    /**
-     * @param {Camera} camera 
-    */
-    setMaterial(sunPos, camera) {
-        const from = camera.getFrom();
-        this.gl.useProgram(this.program);
-        this.setUniform3f("light.position", sunPos.x, sunPos.y, sunPos.z);
-        this.setUniform4f("light.color", 1.0, 1.0, 1.0, 1.0);
-        this.setUniform3f("camera.position", from[0], from[1], from[2]);
-        this.setUniform4f("material.ambient", 0.1, 0.1, 0.1, 1.0);
-        this.setUniform4f("material.diffuse", 1.0, 1.0, 1.0, 1.0);
-        this.setUniform4f("material.specular", 1.0, 1.0, 1.0, 1.0);
-        this.setUniform4f("material.emission", 0.0, 0.0, 0.0, 1.0);
-        this.setUniform1f("material.shininess", 1000);
+    }
+    setUniform4f(name: string, v0: number, v1: number, v2: number, v3: number) {
+        if (this.gl && this.program) {
+            this.gl.useProgram(this.program);
+            this.gl.uniform4f(this.gl.getUniformLocation(this.program, name), v0, v1, v2, v3);
+        }
+    }
+    setUniform1f(name: string, v: number) {
+        if (this.gl && this.program) {
+            this.gl.useProgram(this.program);
+            this.gl.uniform1f(this.gl.getUniformLocation(this.program, name), v);
+        }
     }
 
-    setVerticeData(verticeData) {
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers["vertices"]);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, verticeData, this.gl.STATIC_DRAW);
-        this.numElements = verticeData.length;
+    setMaterial(sunPos: xyzObject, camera: Camera) {
+        if (this.gl && this.program) {
+            const from = camera.getFrom();
+            this.gl.useProgram(this.program);
+            this.setUniform3f("light.position", sunPos.x, sunPos.y, sunPos.z);
+            this.setUniform4f("light.color", 1.0, 1.0, 1.0, 1.0);
+            this.setUniform3f("camera.position", from[0], from[1], from[2]);
+            this.setUniform4f("material.ambient", 0.1, 0.1, 0.1, 1.0);
+            this.setUniform4f("material.diffuse", 1.0, 1.0, 1.0, 1.0);
+            this.setUniform4f("material.specular", 1.0, 1.0, 1.0, 1.0);
+            this.setUniform4f("material.emission", 0.0, 0.0, 0.0, 1.0);
+            this.setUniform1f("material.shininess", 1000);
+        }
     }
 
-    createVertexBufferAndSetData(verticeData) {
-        const buffer = this.gl.createBuffer();
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, verticeData, this.gl.STATIC_DRAW);
-        this.numElements = verticeData.length;
-        return buffer;
+    setVerticeData(verticeData: Float32Array) {
+        if (this.gl && this.buffers.vertices) {
+            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.vertices);
+            this.gl.bufferData(this.gl.ARRAY_BUFFER, verticeData, this.gl.STATIC_DRAW);
+            this.numElements = verticeData.length;
+        }
     }
 
-    createTextureAndSetData(textureData) {
-        const texture = this.gl.createTexture();
-        this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-        //设置纹理参数
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
-        //纹理数据
-        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, textureData);
-
-        return texture;
+    createVertexBufferAndSetData(verticeData: Float32Array): WebGLBuffer | null {
+        if (this.gl) {
+            const buffer = this.gl.createBuffer();
+            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+            this.gl.bufferData(this.gl.ARRAY_BUFFER, verticeData, this.gl.STATIC_DRAW);
+            this.numElements = verticeData.length;
+            return buffer;
+        } else {
+            return null;
+        }
     }
 
-    setData(verticeData, textureData) {
+    createTextureAndSetData(textureData: HTMLImageElement): WebGLTexture | null {
+        if (this.gl) {
+            const texture = this.gl.createTexture();
+            this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+            //设置纹理参数
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+            this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
+            //纹理数据
+            this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, textureData);
 
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers["vertices"]);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, verticeData, this.gl.STATIC_DRAW);
-        this.numElements = verticeData.length;
+            return texture;
+        } else {
+            return null;
+        }
 
-        this.gl.bindTexture(this.gl.TEXTURE_2D, this.buffers["texture"]);
-        //设置纹理参数
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
-        //纹理数据
-        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, textureData);
+    }
 
+    setData(verticeData: Float32Array, textureData: HTMLImageElement) {
+
+        if (this.gl && this.buffers.vertices && this.buffers.texture) {
+            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers["vertices"]);
+            this.gl.bufferData(this.gl.ARRAY_BUFFER, verticeData, this.gl.STATIC_DRAW);
+            this.numElements = verticeData.length;
+
+            this.gl.bindTexture(this.gl.TEXTURE_2D, this.buffers["texture"]);
+            //设置纹理参数
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+            this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
+            //纹理数据
+            this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, textureData);
+        }
     }
 
     /**
@@ -177,22 +206,22 @@ export class GlobeTileProgram {
      * @param {Camera} camera
      * @param {mat4} projMtx       
     */
-    drawTileNode(node, modelMtx, camera, projMtx, opacity = 1.0, isNight = false) {
+    drawTileNode(node: TileNode, modelMtx: mat4, camera: Camera, projMtx: mat4, opacity: number = 1.0, isNight: boolean = false) {
 
-        if (node.tile.ready) {
+        if (this.gl && this.program && node.tile && node.tile.ready) {
             this.gl.useProgram(this.program);
 
             if (node.vertexBuffer) {
                 this.gl.bindBuffer(this.gl.ARRAY_BUFFER, node.vertexBuffer);
-                this.numElements = node.tile.mesh.length;
+                this.numElements = node.tile.mesh!.length;
             } else {
-                node.vertexBuffer = this.createVertexBufferAndSetData(node.tile.mesh);
+                node.vertexBuffer = this.createVertexBufferAndSetData(node.tile.mesh!);
             }
 
             if (node.texture) {
                 this.gl.bindTexture(this.gl.TEXTURE_2D, node.texture);
             } else {
-                node.texture = this.createTextureAndSetData(node.tile.image);
+                node.texture = this.createTextureAndSetData(node.tile.image!);
             }
 
             this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_position"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, 0); // 设置属性指针
@@ -209,57 +238,62 @@ export class GlobeTileProgram {
             this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_projMtx"), false, projMtx);
 
             this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
-            this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight);
+            this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
 
             this.gl.drawArrays(this.gl.TRIANGLES, 0, this.numElements / 8);
         }
     }
 
-    render(modelMtx, viewMtx, projMtx) {
-        this.gl.useProgram(this.program);
-        const that = this;
-        for (let provider of this.tileProviders) {
-            provider.frustum = this.tinyearth.scene.getFrustum();
-            provider.tiletree.fetchOrCreateTileNodesToLevel(provider.curlevel, provider.frustum, !provider.isStop(), async (node) => {
-                if (node && node.tile && node.tile.ready) {
-                    that.drawTileNode(node, modelMtx, viewMtx, projMtx, provider.getOpacity(), provider.getIsNight());
-                }
-            });
+    render(modelMtx: mat4, camera: Camera, projMtx: mat4) {
+        if (this.gl && this.program) {
+            this.gl.useProgram(this.program);
+            const that = this;
+            for (let provider of this.tileProviders) {
+                provider.frustum = this.tinyearth.scene!.getFrustum();
+                provider.tiletree.fetchOrCreateTileNodesToLevel(provider.curlevel, provider.frustum, !provider.isStop(), async (node) => {
+                    if (node && node.tile && node.tile.ready) {
+                        that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.getIsNight());
+                    }
+                });
+            }
         }
+
     }
 
-    setFrustum(frustum) {
+    setFrustum(frustum: Frustum) {
         for (let provider of this.tileProviders) {
             provider.setFrustum(frustum);
         }
     }
 }
 
+interface TileNodeKey {
+    x: number
+    y: number
+    z: number
+}
+
 export class TileNode {
 
-    /** @type {{z:number,x:number,y:number}}*/
-    key = { z: 0, x: 0, y: 0 };
-    /* @type {Tile} */
-    tile = null;
+    key: TileNodeKey = { z: 0, x: 0, y: 0 };
 
-    /**@type {WebGLBuffer|null} 瓦片顶点WebGL缓冲*/
-    vertexBuffer = null; //
+    tile: Tile | null = null;
 
-    /** @type {WebGLTexture|null} 瓦片图片WebGL纹理*/
-    texture = null;
+    vertexBuffer: WebGLBuffer | null = null; //
 
-    /**@type {TileNode[]} */
-    children = [];
+    texture: WebGLTexture | null = null;
+
+    children: TileNode[] = [];
 
     /**@param {Tile} tile */
-    static createTileNode(tile) {
+    static createTileNode(tile: Tile): TileNode {
         const node = new TileNode();
-        node.key = [tile.z, tile.x, this.y];
+        node.key = { x: tile.x, y: tile.y, z: tile.z };
         node.tile = tile;
         node.children = [];
         return node;
     }
-    static createEmptyTileNode(z, x, y) {
+    static createEmptyTileNode(z: number, x: number, y: number): TileNode {
         const node = new TileNode();
         node.key = { z, x, y };
         node.tile = null;
@@ -269,30 +303,24 @@ export class TileNode {
 
 }
 
+type TileNodeCallback = (node: TileNode) => void;
 
 export class TileTree {
 
-    /**@type {TileNode} */
-    root = TileNode.createEmptyTileNode(0, 0, 0);
-    url = "";
-    #startRecLevel = 2;
+    root: TileNode = TileNode.createEmptyTileNode(0, 0, 0);
+    url: string = "";
+    #startRecLevel: number = 2;
+    frustum: Frustum | null = null;
 
-    constructor(url) {
+    constructor(url: string) {
         this.url = url;
     }
 
-    /**
-     * @param {Tile} tile 
-    */
-    addTile(tile) {
+    addTile(tile: Tile) {
         this.#addTileRec(this.root, tile);
     }
 
-    /**
-     * @param {TileNode} curNode
-     * @param {Tile} tile  
-    */
-    #addTileRec(curNode, tile) {
+    #addTileRec(curNode: TileNode, tile: Tile) {
         if (tile.z === curNode.key.z) {
             if (tile.x === curNode.key.x && tile.y === curNode.key.y) {
                 curNode.tile = tile;
@@ -336,27 +364,18 @@ export class TileTree {
         }
     }
 
-    /**
-     * @param {number} z
-     * @param {(tile:Tile)=>void} callback  
-     * @TODO 根据视锥体剪枝
-    */
-    forEachTileNodesOfLevel(z, callback) {
+    //TODO 根据视锥体剪枝
+    forEachTileNodesOfLevel(z: number, callback: TileNodeCallback) {
         this.#forEachTileNodesOfLevel(this.root, z, callback);
     }
 
-    /**
-     * @param {TileNode} curNode 
-     * @param {number} z
-     * @param {(tile:Tile)=>void} callback  
-    */
-    #forEachTileNodesOfLevel(curNode, z, callback) {
+    #forEachTileNodesOfLevel(curNode: TileNode, z: number, callback: TileNodeCallback) {
         if (z === curNode.key.z) {
             callback(curNode);
         } else if (curNode.key.z < z) {
             for (let node of curNode.children) {
                 let tile = null;
-                if (node.z >= 6) {
+                if (node.key.z >= 6) {
                     tile = node.tile;
                     if (!tile) {
                         tile = new Tile(node.key.x, node.key.y, node.key.z, "");
@@ -373,18 +392,11 @@ export class TileTree {
     }
 
 
-    /**
-     * @param {(node:TileNode)=>void} callback  
-    */
-    forEachNode(callback) {
+    forEachNode(callback: TileNodeCallback) {
         this.#forEachNode(this.root, callback);
     }
 
-    /**
-     * @param {TileNode} curNode
-     * @param {(node:TileNode)=>void} callback  
-    */
-    #forEachNode(curNode, callback) {
+    #forEachNode(curNode: TileNode, callback: TileNodeCallback) {
         if (curNode) {
             callback(curNode);
         }
@@ -393,26 +405,13 @@ export class TileTree {
         }
     }
 
-    /**
-     * @param {number} x
-     * @param {number} y
-     * @param {number} z
-     * @returns {TileNode|null}   
-    */
-    getTileNode(z, x, y) {
+    getTileNode(z: number, x: number, y: number): TileNode | null {
 
         return this.#getTileNodeRec(this.root, z, x, y);
 
     }
 
-    /**
-     * @param {TileNode|null} curnode
-     * @param {number} x
-     * @param {number} y
-     * @param {number} z 
-     * @returns {TileNode|null}    
-    */
-    #getTileNodeRec(curnode, z, x, y) {
+    #getTileNodeRec(curnode: TileNode | null, z: number, x: number, y: number): TileNode | null {
         if (curnode == null) {
             return null;
         } else if (curnode.key.z > z) {
@@ -433,19 +432,19 @@ export class TileTree {
                 if (!children) {
                     return null;
                 }
-                let c0 = this.#getTileNodeRec(children[0], z, x, y);
+                let c0 = this.#getTileNodeRec(children[0]!, z, x, y);
                 if (c0 !== null) {
                     return c0;
                 }
-                let c1 = this.#getTileNodeRec(children[1], z, x, y);
+                let c1 = this.#getTileNodeRec(children[1]!, z, x, y);
                 if (c1 !== null) {
                     return c1;
                 }
-                let c2 = this.#getTileNodeRec(children[2], z, x, y);
+                let c2 = this.#getTileNodeRec(children[2]!, z, x, y);
                 if (c2 !== null) {
                     return c2;
                 }
-                let c3 = this.#getTileNodeRec(children[3], z, x, y);
+                let c3 = this.#getTileNodeRec(children[3]!, z, x, y);
                 if (c3 !== null) {
                     return c3;
                 }
@@ -454,7 +453,7 @@ export class TileTree {
         }
     }
 
-    fetchOrCreateTileNodesToLevel(z, frustum, create, callback) {
+    fetchOrCreateTileNodesToLevel(z: number, frustum: Frustum, create: boolean, callback: TileNodeCallback) {
 
         if (z <= this.#startRecLevel) {
             const nrows = Math.pow(2, z);
@@ -473,7 +472,9 @@ export class TileTree {
                         tile.toMesh();
                         node.tile = tile;
                     }
-                    callback(node);
+                    if (node) {
+                        callback(node);
+                    }
                 }
             }
         } else {
@@ -484,10 +485,7 @@ export class TileTree {
 
     }
 
-    /**
-     * @param {Frustum} frustum 
-    */
-    #fetchOrCreateTileNodesToLevelRec(curNode, z, frustum, create, callback) {
+    #fetchOrCreateTileNodesToLevelRec(curNode: TileNode | null, z: number, frustum: Frustum, create: boolean, callback: TileNodeCallback) {
 
         if (curNode === null) {
             return;
@@ -529,74 +527,62 @@ export class TileTree {
 
 }
 
+type TileProviderCallback = (camera: Camera | null, info?: any) => void;
+
 
 export class TileProvider {
 
-    /**@type {TinyEarth|null}*/
-    tinyearth = null;
+    tinyearth: TinyEarth;
 
-    url = "";
+    url: string = "";
 
-    camera = null;
+    camera: Camera | null = null;
 
-    curlevel = 0;
+    curlevel: number = 0;
 
-    /** @type {TileTree} */
-    tiletree = null;
+    tiletree: TileTree;
 
-    #stop = false;
+    #stop: boolean = false;
 
-    /**
-     * @type {{left:vec4,right:vec4,bottom:vec4,top:vec4,near:vec4,far:vec4}|null}
-    */
-    frustum = null;
+    frustum: Frustum | null = null;
 
-    callback = null;
+    callback: TileProviderCallback | null = null;
 
-    /**@type {number}*/
-    opacity = 1.0;
+    opacity: number = 1.0;
 
-    minLevel = 2;
+    minLevel: number = 2;
 
-    maxLevel = 20;
+    maxLevel: number = 20;
 
-    #isNight = false;
+    #isNight: boolean = false;
 
-    /**
-     * @param {string} url
-     * @param {TinyEarth} tinyearth 
-    */
-    constructor(url, tinyearth) {
+    constructor(url: string, tinyearth: TinyEarth) {
         this.tinyearth = tinyearth;
         this.url = url;
         this.tiletree = new TileTree(this.url);
-        this.camera = tinyearth.scene.getCamera();
+        this.camera = tinyearth.scene!.getCamera()
         this.callback = this.provideCallbackGen();
         this.callback(this.camera);
         this.camera.addOnchangeEeventListener(this.callback);
     }
 
-    setMinLevel(level) {
+    setMinLevel(level: number) {
         this.minLevel = level;
     }
 
-    setMaxLevel(level) {
+    setMaxLevel(level: number) {
         this.maxLevel = level;
     }
 
-    setIsNight(b) {
+    setIsNight(b: boolean) {
         this.#isNight = b;
     }
 
-    setIsNight(b) {
-        this.#isNight = b;
-    }
-
-    getIsNight() {
+    getIsNight(): boolean {
         return this.#isNight;
     }
 
-    changeTileSource(url, minLevel, maxLevel) {
+    changeTileSource(url: string, minLevel: number, maxLevel: number) {
         this.url = url;
         this.minLevel = minLevel;
         this.maxLevel = maxLevel;
@@ -605,11 +591,11 @@ export class TileProvider {
             this.tiletree.forEachNode(node => {
                 node.tile = null;
                 if (node.texture) {
-                    that.tinyearth.gl.deleteTexture(node.texture);
+                    that.tinyearth.gl!.deleteTexture(node.texture);
                     node.texture = null;
                 }
                 if (node.vertexBuffer) {
-                    that.tinyearth.gl.deleteBuffer(node.vertexBuffer);
+                    that.tinyearth.gl!.deleteBuffer(node.vertexBuffer);
                     node.vertexBuffer = null;
                 }
             });
@@ -617,18 +603,15 @@ export class TileProvider {
         this.tiletree = new TileTree(this.url);
     }
 
-    /**
-     * @param {Frustum} frustum 
-    */
-    setFrustum(frustum) {
+    setFrustum(frustum: Frustum) {
         this.frustum = frustum;
     }
 
-    setOpacity(opacity) {
+    setOpacity(opacity: number) {
         this.opacity = opacity;
     }
 
-    getOpacity() {
+    getOpacity(): number {
         return this.opacity;
     }
 
@@ -640,17 +623,14 @@ export class TileProvider {
         this.#stop = false;
     }
 
-    isStop() {
+    isStop(): boolean {
         return this.#stop;
     }
 
-
-    /**
-     * @param {Camera} camera 
-    */
-    tileLevel(camera) {
+    tileLevel(camera: Camera) {
         const tileSize = 256;
-        let pos = proj4(EPSG_4978, EPSG_4326, Array.from(camera.getFrom().slice(0, 3)));
+        const from = camera.getFrom()
+        let pos: NumArr3 = proj4(EPSG_4978, EPSG_4326, [from[0], from[1], from[2]]);
         let height = pos[2];
         const initialResolution = 2 * Math.PI * EARTH_RADIUS / tileSize;
         const groundResolution = height * 2 / tileSize;
@@ -663,14 +643,24 @@ export class TileProvider {
 
         let that = this;
 
-        /**
-         * @param {Camera} camera 
-        */
-        function provideCallback(camera, info) {
+        const cb: TileProviderCallback = (camera, info) => {
+
+            if (camera === null) {
+                return;
+            }
 
             const level = that.tileLevel(camera);
 
-            that.frustum = buildFrustum(that.tinyearth.scene.getProjection(), camera);
+            const projection = that.tinyearth.scene?.getProjection();
+
+            if (projection && camera) {
+                that.frustum = buildFrustum(projection, camera);
+            }
+
+            if (that.frustum === null) {
+                console.log("frustum is null");
+                return;
+            }
 
             if (!that.isStop()) {
                 if (info === undefined || (info["type"] === 'zoom' && that.curlevel !== level) || info["type"] === 'move' || info["type"] === 'round') {
@@ -683,17 +673,12 @@ export class TileProvider {
             }
         }
 
-        return provideCallback;
+        return cb;
     }
 
 }
 
-/**
- * @param {HTMLDivElement} root  
- * @param {string} title 
- * @param {TileProvider} tileProvider 
-*/
-export function addTileProviderHelper(root, title, tileProvider) {
+export function addTileProviderHelper(root: HTMLDivElement, title: string, tileProvider: TileProvider) {
     const uuid = crypto.randomUUID();
     const innerHTML = `
     <div>
@@ -706,12 +691,12 @@ export function addTileProviderHelper(root, title, tileProvider) {
     const container = createHelperDiv(`tile-provider-helper-${crypto.randomUUID()}`, innerHTML);
     root.appendChild(container);
 
-    const checkbox = document.getElementById(uuid);
+    const checkbox = document.getElementById(uuid) as HTMLInputElement;
 
     if (checkbox) {
         checkbox.checked = !tileProvider.isStop();
         checkbox.addEventListener("change", (event) => {
-            if (event.target.checked) {
+            if ((event as any).target.checked) { // TODO resolve any type
                 tileProvider.start();
             } else {
                 tileProvider.stop();
@@ -731,8 +716,14 @@ export function addTileProviderHelper(root, title, tileProvider) {
  * @property {number} maxLevel
 */
 
-/** @type {{string:TileInfo}}*/
-const tileResources = {
+interface TileSourceInfo {
+    name: string
+    url: string
+    minLevel: number
+    maxLevel: number
+}
+
+const tileResources: { [key: string]: TileSourceInfo } = {
     "GOOGLE_IMAGERY": {
         name: "谷歌影像",
         url: "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
@@ -779,12 +770,7 @@ function createTileOptions() {
     return options;
 }
 
-/**
- * @param {HTMLDivElement} root  
- * @param {string} title 
- * @param {TileProvider} tileProvider 
-*/
-export function addTileSelectHelper(root, title, tileProvider) {
+export function addTileSelectHelper(root: HTMLDivElement, title: string, tileProvider: TileProvider) {
 
     const divId = `tile-select-helper-${crypto.randomUUID()}`;
 
@@ -803,12 +789,14 @@ export function addTileSelectHelper(root, title, tileProvider) {
 
     root.appendChild(div);
 
-    const tileSelect = document.getElementById("tile-select");
+    const tileSelect = document.getElementById("tile-select") as HTMLInputElement;
 
     tileSelect.addEventListener('change', event => {
-        const tileName = event.target.value;
+        const tileName = (event as any).target.value; // TODO resovle any type
         const tileinfo = tileResources[tileName];
-        tileProvider.changeTileSource(tileinfo.url, tileinfo.minLevel, tileinfo.maxLevel);
+        if (tileinfo) {
+            tileProvider.changeTileSource(tileinfo.url, tileinfo.minLevel, tileinfo.maxLevel);
+        }
     });
 }
 

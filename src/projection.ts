@@ -1,16 +1,17 @@
 import { glMatrix, mat4 } from "gl-matrix";
+import type Scene from "./scene.js";
 glMatrix.setMatrixArrayType(Array);
 
 class Projection {
 
-    fovy = Math.PI / 3;
-    aspect = 1;
-    near = 0.1;
-    far = 1E10;
-    projMtx = mat4.create();
-    scene = null;
+    fovy: number = Math.PI / 3;
+    aspect: number = 1;
+    near: number = 0.1;
+    far: number = 1E10;
+    projMtx: mat4 = mat4.create();
+    scene: Scene;
 
-    constructor(scene, fovy, aspect, near, far) {
+    constructor(scene: Scene, fovy: number, aspect: number, near: number, far: number) {
         this.scene = scene;
         this.fovy = fovy;
         this.aspect = aspect;
@@ -18,34 +19,34 @@ class Projection {
         this.far = far;
     }
 
-    setAspect(aspect) {
+    setAspect(aspect: number) {
         this.aspect = aspect;
     }
 
-    perspective() {
+    perspective(): mat4 {
         return mat4.perspective(this.projMtx, this.fovy, this.aspect, this.near, this.far);
     }
 
-    getFovy() {
+    getFovy(): number {
         return this.fovy;
     }
 
-    getFovx() {
+    getFovx(): number {
         const half_fovy = this.fovy / 2;
         const t = Math.tan(half_fovy)
         const half_fovx = Math.atan(t * this.aspect)
         return 2 * half_fovx;
     }
 
-    getNear() {
+    getNear(): number {
         return this.near;
     }
 
-    getFar() {
+    getFar(): number {
         return this.far;
     }
 
-    getAspect() {
+    getAspect(): number {
         return this.aspect;
     }
 

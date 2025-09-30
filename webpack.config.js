@@ -26,7 +26,7 @@ export default [{
     entry: './web/index.js',
     output: {
         filename: '[name].js',
-        path: path.resolve(__dirname, 'dist')
+        path: path.resolve(__dirname, 'web/dist')
     },
     resolve: {
         extensions: ['.js', '.json'],
@@ -60,7 +60,7 @@ export default [{
     // development server options
     devServer: {
         static: {
-            directory: path.join(__dirname, 'dist'),
+            directory: path.join(__dirname, 'web/dist'),
         },
         compress: true,
         port: 9000

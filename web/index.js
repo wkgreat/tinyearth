@@ -1,15 +1,15 @@
-import './tinyearth.css';
+import '../output/src/tinyearth.css';
+import './tinyearth.css'
 
 import proj4 from "proj4";
-import { addDebugHelper } from "../src/helper.js";
-import { addMenu } from "../src/menu.js";
-import { EPSG_4326, EPSG_4978 } from "../src/proj.js";
-import Scene from "../src/scene.js";
-import { addTileProviderHelper, addTileSelectHelper, TileProvider } from "../src/tilerender.js";
-import Timer, { addTimeHelper } from "../src/timer.js";
-import { MousePositionTool } from "../src/tools.js";
-
-import TinyEarth from '../src/tinyearth.js';
+import { addDebugHelper } from "../output/src/helper.js";
+import { addMenu } from "../output/src/menu.js";
+import { EPSG_4326, EPSG_4978 } from "../output/src/proj.js";
+import Scene from "../output/src/scene.js";
+import { addTileProviderHelper, addTileSelectHelper, TileProvider } from "../output/src/tilerender.js";
+import Timer, { addTimeHelper } from "../output/src/timer.js";
+import { MousePositionTool } from "../output/src/tools.js";
+import TinyEarth from '../output/src/tinyearth.js';
 
 function main() {
 

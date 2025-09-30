@@ -1,7 +1,6 @@
-import "./helper.css"
 import TinyEarth from "./tinyearth.js";
 
-export function createHelperDiv(id, innerHtml = "") {
+export function createHelperDiv(id: string, innerHtml: string = ""): HTMLDivElement {
     const container = document.createElement('div');
     container.id = id;
     container.className = "cls-helper-div";
@@ -10,11 +9,7 @@ export function createHelperDiv(id, innerHtml = "") {
     return container;
 }
 
-/**
- * @param {HTMLDivElement} root
- * @param {TinyEarth} tinyearth  
-*/
-export function addDebugHelper(root, tinyearth) {
+export function addDebugHelper(root: HTMLDivElement, tinyearth: TinyEarth) {
 
     const drawCheckboxId = `$tinyearth-draw-checkbox-${crypto.randomUUID()}`;
 
@@ -29,11 +24,11 @@ export function addDebugHelper(root, tinyearth) {
     const div = createHelperDiv("tinyearth-debug-helper", innerHTML);
     root.appendChild(div);
 
-    const checkbox = document.getElementById(drawCheckboxId);
+    const checkbox = document.getElementById(drawCheckboxId) as HTMLInputElement;
 
     checkbox.checked = !tinyearth.isStartDraw();
     checkbox.addEventListener("change", (event) => {
-        if (event.target.checked) {
+        if ((event as any).target.checked) { // TODO resolve any type
             tinyearth.stopDraw();
         } else {
             tinyearth.startDraw();

@@ -1,12 +1,12 @@
 import { describe, expect, test } from '@jest/globals';
 import { vec3, vec4 } from 'gl-matrix';
 import proj4 from 'proj4';
-import Camera from './camera';
-import { buildFrustum } from './frustum';
-import { Plane, planeCrossPlane, Ray, rayCrossTriangle, Triangle } from './geometry';
-import { mat4_inv, mat4_mul, vec3_add, vec3_normalize, vec3_scale, vec3_sub, vec3_t4, vec3_t4_affine, vec4_t3 } from './glmatrix_utils';
-import { EPSG_4326, EPSG_4978 } from './proj';
-import Projection from './projection';
+import Camera from './camera.js';
+import { buildFrustum } from './frustum.js';
+import { Plane, planeCrossPlane, Ray, rayCrossTriangle, Triangle } from './geometry.js';
+import { mat4_inv, mat4_mul, vec3_add, vec3_normalize, vec3_scale, vec3_sub, vec3_t4, vec3_t4_affine, vec4_t3 } from './glmatrix_utils.js';
+import { EPSG_4326, EPSG_4978 } from './proj.js';
+import Projection from './projection.js';
 
 describe("geometry", () => {
 
