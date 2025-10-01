@@ -1,21 +1,21 @@
-import '../output/src/tinyearth.css';
+import '../src/tinyearth.css';
 import './tinyearth.css'
 
 import proj4 from "proj4";
-import { addDebugHelper } from "../output/src/helper.js";
-import { addMenu } from "../output/src/menu.js";
-import { EPSG_4326, EPSG_4978 } from "../output/src/proj.js";
-import Scene from "../output/src/scene.js";
-import { addTileProviderHelper, addTileSelectHelper, TileProvider } from "../output/src/tilerender.js";
-import Timer, { addTimeHelper } from "../output/src/timer.js";
-import { MousePositionTool } from "../output/src/tools.js";
-import TinyEarth from '../output/src/tinyearth.js';
+import { addDebugHelper } from "../src/helper.js";
+import { addMenu } from "../src/menu.js";
+import { EPSG_4326, EPSG_4978 } from "../src/proj.js";
+import Scene from "../src/scene.js";
+import { addTileProviderHelper, addTileSelectHelper, TileProvider } from "../src/tilerender.js";
+import Timer, { addTimeHelper } from "../src/timer.js";
+import { MousePositionTool } from "../src/tools.js";
+import TinyEarth from '../src/tinyearth.js';
 
 function main() {
 
     let tinyearth = null;
 
-    const canvas = document.getElementById("tinyearth-canvas");
+    const canvas = document.getElementById("tinyearth-canvas") as HTMLCanvasElement;
     if (canvas !== null) {
 
         tinyearth = new TinyEarth(canvas);
@@ -41,7 +41,7 @@ function main() {
             }
         });
 
-        scene.addCameraControl(tinyearth.canvas);
+        scene.addCameraControl(tinyearth.canvas!);
 
         tinyearth.addScene(scene);
 
@@ -57,8 +57,8 @@ function main() {
         tileProvider0.setMinLevel(2);
         tileProvider0.setMaxLevel(20);
         tileProvider0.setIsNight(false);
-        addTileProviderHelper(document.getElementById("helper"), "影像瓦片底图", tileProvider0);
-        addTileSelectHelper(document.getElementById("helper"), "影像瓦片底图", tileProvider0);
+        addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "影像瓦片底图", tileProvider0);
+        addTileSelectHelper(document.getElementById("helper") as HTMLDivElement, "影像瓦片底图", tileProvider0);
         tinyearth.addTileProvider(tileProvider0);
 
         //夜间底图
@@ -67,18 +67,18 @@ function main() {
         tileProvider1.setMinLevel(2);
         tileProvider1.setMaxLevel(6);
         tileProvider1.setIsNight(true);
-        addTileProviderHelper(document.getElementById("helper"), "夜晚灯光瓦片底图", tileProvider1);
+        addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "夜晚灯光瓦片底图", tileProvider1);
 
         tinyearth.addTileProvider(tileProvider1);
 
         //skybox
-        tinyearth.skyboxProgram.setCubeMap([
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_X, src: "assets/starsky/px.png" },
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_Y, src: "assets/starsky/py.png" },
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_Z, src: "assets/starsky/pz.png" },
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_X, src: "assets/starsky/nx.png" },
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, src: "assets/starsky/ny.png" },
-            { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, src: "assets/starsky/nz.png" }
+        tinyearth.skyboxProgram!.setCubeMap([
+            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_POSITIVE_X, src: "assets/starsky/px.png" },
+            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_POSITIVE_Y, src: "assets/starsky/py.png" },
+            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_POSITIVE_Z, src: "assets/starsky/pz.png" },
+            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_NEGATIVE_X, src: "assets/starsky/nx.png" },
+            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_NEGATIVE_Y, src: "assets/starsky/ny.png" },
+            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_NEGATIVE_Z, src: "assets/starsky/nz.png" }
         ]);
 
         // tinyearth.skyboxProgram.setCubeMap([
@@ -96,10 +96,10 @@ function main() {
         timer.setEventBus(tinyearth.eventBus);
         timer.setMultipler(10000);
         timer.start();
-        addTimeHelper(timer, document.getElementById("helper"));
+        addTimeHelper(timer, document.getElementById("helper") as HTMLDivElement);
         tinyearth.addTimer(timer);
 
-        addDebugHelper(document.getElementById("helper"), tinyearth);
+        addDebugHelper(document.getElementById("helper") as HTMLDivElement, tinyearth);
 
         const mousePosTool = new MousePositionTool(tinyearth);
         mousePosTool.enable();

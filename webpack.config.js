@@ -23,36 +23,47 @@ const webpackPlugins = [
 export default [{
     mode: 'development',
     context: __dirname,
-    entry: './web/index.js',
+    entry: './web/index.ts',
     output: {
         filename: '[name].js',
         path: path.resolve(__dirname, 'web/dist')
     },
     resolve: {
-        extensions: ['.js', '.json'],
+        extensions: ['.ts', '.js', '.json'],
+        extensionAlias: {
+            '.js': ['.ts', '.js']
+        },
     },
     devtool: 'eval',
     module: {
-        rules: [{
-            test: /\.js$/,
-            loader: 'babel-loader',
-            exclude: /node_modules/,
-        }, , {
-            test: /\.css$/,
-            exclude: /node_modules/,
-            use: ['style-loader', 'css-loader']
-        }, {
-            test: /\.(png|gif|jpg|jpeg|svg|xml)$/,
-            exclude: /node_modules/,
-            use: ['url-loader']
-        }, {
-            test: /\.(glsl|vs|fs|vert|frag)$/,
-            exclude: /node_modules/,
-            use: ['raw-loader']
-        }, {
-            test: /\.geojson$/,
-            type: 'json'
-        }
+        rules: [
+            {
+                test: /\.tsx?$/,
+                loader: 'ts-loader',
+                exclude: /node_modules/,
+                options: {
+                    configFile: 'tsconfig.web.json'
+                },
+            }, {
+                test: /\.js$/,
+                loader: 'babel-loader',
+                exclude: /node_modules/,
+            }, {
+                test: /\.css$/,
+                exclude: /node_modules/,
+                use: ['style-loader', 'css-loader']
+            }, {
+                test: /\.(png|gif|jpg|jpeg|svg|xml)$/,
+                exclude: /node_modules/,
+                use: ['url-loader']
+            }, {
+                test: /\.(glsl|vs|fs|vert|frag)$/,
+                exclude: /node_modules/,
+                use: ['raw-loader']
+            }, {
+                test: /\.geojson$/,
+                type: 'json'
+            }
         ]
     },
     plugins: webpackPlugins,

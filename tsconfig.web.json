@@ -1,0 +1,44 @@
+{
+    "compilerOptions": {
+        "rootDir": "./",
+        "outDir": "output/web/src",
+        "module": "esnext",
+        "target": "esnext",
+        "moduleResolution": "node",
+        "types": [
+            "jest",
+            "node"
+        ],
+        "typeRoots": [
+            "./node_modules/@types",
+            "./types"
+        ],
+        "sourceMap": true,
+        "declaration": true,
+        "declarationMap": true,
+        "emitDeclarationOnly": false,
+        "declarationDir": "output/web/types",
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "strict": true,
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
+        "noUncheckedSideEffectImports": true,
+        "moduleDetection": "force",
+        "skipLibCheck": true,
+        "allowSyntheticDefaultImports": true,
+        "esModuleInterop": true
+    },
+    "include": [
+        "src/**/*",
+        "types",
+        "web/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "output",
+        "test",
+        "docs"
+    ]
+}
