@@ -1,12 +1,13 @@
 import { describe, expect } from '@jest/globals';
 import { vec3, vec4, glMatrix } from 'gl-matrix';
 import proj4 from 'proj4';
-import Camera from './camera.js';
-import { buildFrustum } from './frustum.js';
-import { Tile } from './maptiler.js';
-import { EPSG_3857, EPSG_4326, EPSG_4978 } from './proj.js';
-import Projection from './projection.js';
-import { TileNode, TileTree } from './tilerender.js';
+import Camera from '../src/camera';
+import { buildFrustum } from '../src/frustum';
+import { Tile } from '../src/maptiler';
+import { EPSG_3857, EPSG_4326, EPSG_4978 } from '../src/proj';
+import Projection from '../src/projection';
+import { TileNode, TileTree } from '../src/tilerender';
+import Scene from '../src/scene';
 glMatrix.setMatrixArrayType(Array);
 
 describe("tile", () => {
@@ -35,16 +36,37 @@ describe("tile", () => {
 
         const width = 1000;
         const height = 500;
-        const p4326 = [118.767335, 32.050471, 0];
-        const p4978 = proj4(EPSG_4326, EPSG_4978, p4326);
-        const vp = vec4.fromValues(...p4978, 1);
 
-        const projection = new Projection(Math.PI / 3, width / height, 1, 1E10);
-        // const cameraFrom = proj4(EPSG_4326, EPSG_4978, [118.767335, 32.050471, 10000]);
         const cameraFrom = [-2659251.75, 4792728.5, 3401463.25];
         const cameraTo = [0, 0, 0];
         const cameraUp = [0, 0, 1];
-        const camera = new Camera(null, cameraFrom, cameraTo, cameraUp);
+
+        const scene = new Scene({
+            camera: {
+                from: cameraFrom,
+                to: cameraTo,
+                up: cameraUp
+            },
+            projection: {
+                fovy: Math.PI / 3,
+                near: 1,
+                far: 1E8
+            },
+            viewport: {
+                width: width,
+                height: height
+            }
+        });
+
+
+        const p4326 = [118.767335, 32.050471, 0];
+        const p4978 = proj4(EPSG_4326, EPSG_4978, p4326);
+        const vp = vec4.fromValues(p4978[0], p4978[1], p4978[2], 1);
+
+
+        const projection = new Projection(scene, Math.PI / 3, width / height, 1, 1E10);
+        // const cameraFrom = proj4(EPSG_4326, EPSG_4978, [118.767335, 32.050471, 10000]);
+        const camera = new Camera(scene, cameraFrom, cameraTo, cameraUp);
         const projMtx = projection.perspective();
         const viewMtx = camera.getMatrix().viewMtx;
         const frustum = buildFrustum(projection, camera);
@@ -64,17 +86,33 @@ describe("tile", () => {
 
         const width = 1000;
         const height = 500;
-
-        const projection = new Projection(Math.PI / 3, width / height, 1, 1E10);
         const cameraFrom = [-2659251.75, 4792728.5, 3401463.25];
         const cameraTo = [0, 0, 0];
         const cameraUp = [0, 0, 1];
-        const camera = new Camera(null, cameraFrom, cameraTo, cameraUp);
+
+        const scene = new Scene({
+            camera: {
+                from: cameraFrom,
+                to: cameraTo,
+                up: cameraUp
+            },
+            projection: {
+                fovy: Math.PI / 3,
+                near: 1,
+                far: 1E8
+            },
+            viewport: {
+                width: width,
+                height: height
+            }
+        });
+
+        const projection = new Projection(scene, Math.PI / 3, width / height, 1, 1E10);
+        const camera = new Camera(scene, cameraFrom, cameraTo, cameraUp);
         const projMtx = projection.perspective();
         const viewMtx = camera.getMatrix().viewMtx;
 
         const frustum = buildFrustum(projection, camera);
-
 
         const url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         const z = 15;
@@ -98,7 +136,7 @@ describe("TileTree", () => {
 
     test("tile_tree_add", () => {
 
-        const tree = new TileTree();
+        const tree = new TileTree("");
 
         const tile = new Tile(0, 0, 1, "");
 
@@ -106,7 +144,11 @@ describe("TileTree", () => {
 
         expect(tree.root.children.length === 4).toBeTruthy();
 
-        const node = tree.getTileNode(1, 0, 0);
+        let node = tree.getTileNode(1, 0, 0);
+
+        expect(node).not.toBeNull();
+
+        node = node as TileNode
 
         expect(node).toBeInstanceOf(TileNode);
         expect(node.key.z === 1).toBeTruthy();
@@ -117,13 +159,13 @@ describe("TileTree", () => {
         let tn = 0;
         let hn = 0;
         let mn = 0;
-        tree.forEachTilesOfLevel(1, (tile) => {
+        tree.forEachTileNodesOfLevel(1, (node) => {
             tn += 1;
-            if (tile) {
+            if (node && node.tile) {
                 hn += 1;
-                expect(tile.z === 1).toBeTruthy();
-                expect(tile.x === 0).toBeTruthy();
-                expect(tile.y === 0).toBeTruthy();
+                expect(node.key.z === 1).toBeTruthy();
+                expect(node.key.x === 0).toBeTruthy();
+                expect(node.key.y === 0).toBeTruthy();
             } else {
                 mn += 1;
             }

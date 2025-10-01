@@ -1,12 +1,24 @@
 export default {
+
+    preset: "ts-jest",
+
+    testEnvironment: 'node',
+
+    roots: ['<rootDir>/test'],
+
     transform: {
-        '^.+\\.js$': 'babel-jest',
+        '^.+\\.(ts|tsx)$': ['ts-jest', { useESM: true }],
         '\\.(glsl|vert|frag|txt|json)$': "<rootDir>/jest-raw-transformer.js"
     },
+
     moduleNameMapper: {
-        '\\.module\\.css$': 'identity-obj-proxy',     // 支持 CSS Modules
-        '\\.(css|less|scss|sass)$': 'identity-obj-proxy'
+        '^(\\.{1,2}/.+|\\.\\./.+)\\.js$': '$1'
     },
-    moduleFileExtensions: ['js', 'json', 'glsl', 'vert', 'frag', 'txt'],
-    testEnvironment: 'jsdom'
+
+    moduleFileExtensions: ['ts', 'js', 'json', 'glsl', 'vert', 'frag', 'txt'],
+
+    moduleDirectories: [
+        'node_modules'
+    ],
+
 };

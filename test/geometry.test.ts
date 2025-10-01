@@ -1,12 +1,13 @@
 import { describe, expect, test } from '@jest/globals';
-import { vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import proj4 from 'proj4';
-import Camera from './camera.js';
-import { buildFrustum } from './frustum.js';
-import { Plane, planeCrossPlane, Ray, rayCrossTriangle, Triangle } from './geometry.js';
-import { mat4_inv, mat4_mul, vec3_add, vec3_normalize, vec3_scale, vec3_sub, vec3_t4, vec3_t4_affine, vec4_t3 } from './glmatrix_utils.js';
-import { EPSG_4326, EPSG_4978 } from './proj.js';
-import Projection from './projection.js';
+import Camera from '../src/camera';
+import { buildFrustum } from '../src/frustum';
+import { Plane, planeCrossPlane, Ray, rayCrossTriangle, Triangle } from '../src/geometry';
+import { mat4_inv, mat4_mul, vec3_add, vec3_normalize, vec3_scale, vec3_sub, vec3_t4, vec3_t4_affine, vec4_t3 } from '../src/glmatrix_utils';
+import { EPSG_4326, EPSG_4978 } from '../src/proj';
+import Projection from '../src/projection';
+import Scene from '../src/scene';
 
 describe("geometry", () => {
 
@@ -75,7 +76,9 @@ describe("plane", () => {
 
         let plane = Plane.fromThreePoints(p0, p1, p2);
 
+        expect(plane).not.toBeNull();
 
+        plane = plane as Plane;
 
         expect(vec4.dot(vec3_t4(p0), plane.params)).toBeCloseTo(0, 1E-6);
         expect(vec4.dot(vec3_t4(p1), plane.params)).toBeCloseTo(0, 1E-6);
@@ -88,6 +91,10 @@ describe("plane", () => {
 
         plane = Plane.fromThreePoints(p0, p1, p2);
 
+        expect(plane).not.toBeNull();
+
+        plane = plane as Plane;
+
         expect(vec4.dot(vec3_t4(p0), plane.params)).toBeCloseTo(0, 1E-6);
         expect(vec4.dot(vec3_t4(p1), plane.params)).toBeCloseTo(0, 1E-6);
         expect(vec4.dot(vec3_t4(p2), plane.params)).toBeCloseTo(0, 1E-6);
@@ -97,6 +104,10 @@ describe("plane", () => {
         p2 = vec3.fromValues(1, 1, -1);
 
         plane = Plane.fromThreePoints(p0, p1, p2);
+
+        expect(plane).not.toBeNull();
+
+        plane = plane as Plane;
 
         expect(vec4.dot(vec3_t4(p0), plane.params)).toBeCloseTo(0, 1E-6);
         expect(vec4.dot(vec3_t4(p1), plane.params)).toBeCloseTo(0, 1E-6);
@@ -116,7 +127,12 @@ describe("plane_cross_plane", () => {
         const p1 = vec3.fromValues(-1, -1, -1);
         const p2 = vec3.fromValues(-1, 1, -1);
 
-        const plane0 = Plane.fromThreePoints(p0, p1, p2);
+        let plane0 = Plane.fromThreePoints(p0, p1, p2);
+
+
+        expect(plane0).not.toBeNull();
+
+        plane0 = plane0 as Plane;
 
         expect(vec4.dot(vec3_t4(p0), plane0.params)).toBeCloseTo(0, 1E-6);
         expect(vec4.dot(vec3_t4(p1), plane0.params)).toBeCloseTo(0, 1E-6);
@@ -126,7 +142,11 @@ describe("plane_cross_plane", () => {
         const p4 = vec3.fromValues(-1, 1, -1);
         const p5 = vec3.fromValues(1, 1, -1);
 
-        const plane1 = Plane.fromThreePoints(p3, p4, p5);
+        let plane1 = Plane.fromThreePoints(p3, p4, p5);
+
+        expect(plane1).not.toBeNull();
+
+        plane1 = plane1 as Plane;
 
 
         expect(vec4.dot(vec3_t4(p3), plane1.params)).toBeCloseTo(0, 1E-6);
@@ -135,11 +155,11 @@ describe("plane_cross_plane", () => {
 
         const ray = planeCrossPlane(plane0, plane1);
 
-        expect(vec4.dot(vec3_t4(ray.ray.origin), plane0.params)).toBeCloseTo(0, 1E-6);
-        expect(vec4.dot(vec3_t4(ray.ray.origin), plane1.params)).toBeCloseTo(0, 1E-6);
+        expect(vec4.dot(vec3_t4(ray.ray!.origin), plane0.params)).toBeCloseTo(0, 1E-6);
+        expect(vec4.dot(vec3_t4(ray.ray!.origin), plane1.params)).toBeCloseTo(0, 1E-6);
 
         const other_ray = new Ray(vec3.fromValues(-1, 1, -1), vec3_sub(vec3.fromValues(-1, 1, 1), vec3.fromValues(-1, 1, -1)));
-        expect(ray.ray.collineation(other_ray)).toBeTruthy();
+        expect(ray.ray!.collineation(other_ray)).toBeTruthy();
 
     });
 
@@ -147,33 +167,44 @@ describe("plane_cross_plane", () => {
 
 describe("frustum_ray", () => {
 
-    function transform(p, m) {
-        let q = math_v3tv4(p);
-        q = math.multiply(m, q);
-        q = math.divide(q, q.get([3]));
-        return math_v4tv3(q);
-    }
-
     test("frutum_ray_corrent_1", () => {
         const width = 500;
         const height = 500;
 
-        const projection = new Projection(Math.PI / 3, width / height, 1, 10000);
         const cameraFrom = proj4(EPSG_4326, EPSG_4978, [117, 32, 1E7]);
         const cameraTo = [0, 0, 0];
         const cameraUp = [0, 0, 1];
-        const camera = new Camera(null, cameraFrom, cameraTo, cameraUp);
+
+        const scene = new Scene({
+            camera: {
+                from: cameraFrom,
+                to: cameraTo,
+                up: cameraUp
+            },
+            projection: {
+                fovy: Math.PI / 3,
+                near: 1,
+                far: 1E8
+            },
+            viewport: {
+                width: width,
+                height: height
+            }
+        });
+
+        const projection = new Projection(scene, Math.PI / 3, width / height, 1, 10000);
+        const camera = new Camera(scene, cameraFrom, cameraTo, cameraUp);
         const projMtx = projection.perspective();
         const viewMtx = camera.getMatrix().viewMtx;
         const M = mat4_mul(projMtx, viewMtx)
-        const IM = mat4_inv(M);
+        const IM = mat4_inv(M) as mat4;
         const frustum = buildFrustum(projection, camera);
-        const view = vec3.fromValues(...cameraFrom);
+        const view = vec3.fromValues(cameraFrom[0], cameraFrom[1], cameraFrom[2]);
 
-        const ray0 = planeCrossPlane(new Plane(frustum.left), new Plane(frustum.bottom));
-        const ray1 = planeCrossPlane(new Plane(frustum.right), new Plane(frustum.bottom));
-        const ray2 = planeCrossPlane(new Plane(frustum.right), new Plane(frustum.top));
-        const ray3 = planeCrossPlane(new Plane(frustum.left), new Plane(frustum.top));
+        const ray0 = planeCrossPlane(new Plane(frustum.left!), new Plane(frustum.bottom!));
+        const ray1 = planeCrossPlane(new Plane(frustum.right!), new Plane(frustum.bottom!));
+        const ray2 = planeCrossPlane(new Plane(frustum.right!), new Plane(frustum.top!));
+        const ray3 = planeCrossPlane(new Plane(frustum.left!), new Plane(frustum.top!));
 
         const x0 = vec4_t3(vec3_t4_affine(vec3.fromValues(-1, -1, -1), IM));
         const x1 = vec4_t3(vec3_t4_affine(vec3.fromValues(1, -1, -1), IM));
@@ -182,46 +213,64 @@ describe("frustum_ray", () => {
         const x5 = vec4_t3(vec3_t4_affine(vec3.fromValues(-1, -1, 1), IM));
 
 
-        expect(ray0.ray.pointOnRay(x0)).toBeTruthy();
-        expect(ray0.ray.pointOnRay(x5)).toBeTruthy();
+        expect(ray0.ray!.pointOnRay(x0)).toBeTruthy();
+        expect(ray0.ray!.pointOnRay(x5)).toBeTruthy();
 
-        expect(ray0.ray.pointOnRay(view)).toBeTruthy();
-        expect(ray1.ray.pointOnRay(view)).toBeTruthy();
-        expect(ray2.ray.pointOnRay(view)).toBeTruthy();
-        expect(ray3.ray.pointOnRay(view)).toBeTruthy();
+        expect(ray0.ray!.pointOnRay(view)).toBeTruthy();
+        expect(ray1.ray!.pointOnRay(view)).toBeTruthy();
+        expect(ray2.ray!.pointOnRay(view)).toBeTruthy();
+        expect(ray3.ray!.pointOnRay(view)).toBeTruthy();
 
         const other_ray0 = new Ray(view, vec3_normalize(vec3_sub(view, x0)));
         const other_ray1 = new Ray(view, vec3_normalize(vec3_sub(view, x1)));
         const other_ray2 = new Ray(view, vec3_normalize(vec3_sub(view, x2)));
         const other_ray3 = new Ray(view, vec3_normalize(vec3_sub(view, x3)));
 
-        expect(ray0.ray.collineation(other_ray0)).toBeTruthy();
-        expect(ray1.ray.collineation(other_ray1)).toBeTruthy();
-        expect(ray2.ray.collineation(other_ray2)).toBeTruthy();
-        expect(ray3.ray.collineation(other_ray3)).toBeTruthy();
+        expect(ray0.ray!.collineation(other_ray0)).toBeTruthy();
+        expect(ray1.ray!.collineation(other_ray1)).toBeTruthy();
+        expect(ray2.ray!.collineation(other_ray2)).toBeTruthy();
+        expect(ray3.ray!.collineation(other_ray3)).toBeTruthy();
     })
 
     test("frustum_ray_correct_2", () => {
         const width = 1000;
         const height = 500;
 
-        const projection = new Projection(Math.PI / 3, width / height, 1, 10000);
         const cameraFrom = proj4(EPSG_4326, EPSG_4978, [117, 32, 1E7]);
         const cameraTo = [0, 0, 0];
         const cameraUp = [0, 0, 1];
-        const camera = new Camera(null, cameraFrom, cameraTo, cameraUp);
+
+        const scene = new Scene({
+            camera: {
+                from: cameraFrom,
+                to: cameraTo,
+                up: cameraUp
+            },
+            projection: {
+                fovy: Math.PI / 3,
+                near: 1,
+                far: 1E8
+            },
+            viewport: {
+                width: width,
+                height: height
+            }
+        });
+
+        const projection = new Projection(scene, Math.PI / 3, width / height, 1, 10000);
+        const camera = new Camera(scene, cameraFrom, cameraTo, cameraUp);
         const projMtx = projection.perspective();
         const viewMtx = camera.getMatrix().viewMtx;
         const M = mat4_mul(projMtx, viewMtx);
-        const IM = mat4_inv(M);
+        const IM = mat4_inv(M) as mat4;
         const frustum = buildFrustum(projection, camera);
 
-        const view = vec3.fromValues(...cameraFrom);
+        const view = vec3.fromValues(cameraFrom[0], cameraFrom[1], cameraFrom[2]);
 
-        const ray0 = planeCrossPlane(new Plane(frustum.left), new Plane(frustum.bottom));
-        const ray1 = planeCrossPlane(new Plane(frustum.right), new Plane(frustum.bottom));
-        const ray2 = planeCrossPlane(new Plane(frustum.right), new Plane(frustum.top));
-        const ray3 = planeCrossPlane(new Plane(frustum.left), new Plane(frustum.top));
+        const ray0 = planeCrossPlane(new Plane(frustum.left!), new Plane(frustum.bottom!));
+        const ray1 = planeCrossPlane(new Plane(frustum.right!), new Plane(frustum.bottom!));
+        const ray2 = planeCrossPlane(new Plane(frustum.right!), new Plane(frustum.top!));
+        const ray3 = planeCrossPlane(new Plane(frustum.left!), new Plane(frustum.top!));
 
         const x0 = vec4_t3(vec3_t4_affine(vec3.fromValues(-1, -1, -1), IM));
         const x1 = vec4_t3(vec3_t4_affine(vec3.fromValues(1, -1, -1), IM));
@@ -229,23 +278,23 @@ describe("frustum_ray", () => {
         const x3 = vec4_t3(vec3_t4_affine(vec3.fromValues(-1, 1, -1), IM));
         const x5 = vec4_t3(vec3_t4_affine(vec3.fromValues(-1, -1, 1), IM));
 
-        expect(ray0.ray.pointOnRay(x0)).toBeTruthy();
-        expect(ray0.ray.pointOnRay(x5)).toBeTruthy();
+        expect(ray0.ray!.pointOnRay(x0)).toBeTruthy();
+        expect(ray0.ray!.pointOnRay(x5)).toBeTruthy();
 
-        expect(ray0.ray.pointOnRay(view)).toBeTruthy();
-        expect(ray1.ray.pointOnRay(view)).toBeTruthy();
-        expect(ray2.ray.pointOnRay(view)).toBeTruthy();
-        expect(ray3.ray.pointOnRay(view)).toBeTruthy();
+        expect(ray0.ray!.pointOnRay(view)).toBeTruthy();
+        expect(ray1.ray!.pointOnRay(view)).toBeTruthy();
+        expect(ray2.ray!.pointOnRay(view)).toBeTruthy();
+        expect(ray3.ray!.pointOnRay(view)).toBeTruthy();
 
         const other_ray0 = new Ray(view, vec3_normalize(vec3_sub(view, x0)));
         const other_ray1 = new Ray(view, vec3_normalize(vec3_sub(view, x1)));
         const other_ray2 = new Ray(view, vec3_normalize(vec3_sub(view, x2)));
         const other_ray3 = new Ray(view, vec3_normalize(vec3_sub(view, x3)));
 
-        expect(ray0.ray.collineation(other_ray0)).toBeTruthy();
-        expect(ray1.ray.collineation(other_ray1)).toBeTruthy();
-        expect(ray2.ray.collineation(other_ray2)).toBeTruthy();
-        expect(ray3.ray.collineation(other_ray3)).toBeTruthy();
+        expect(ray0.ray!.collineation(other_ray0)).toBeTruthy();
+        expect(ray1.ray!.collineation(other_ray1)).toBeTruthy();
+        expect(ray2.ray!.collineation(other_ray2)).toBeTruthy();
+        expect(ray3.ray!.collineation(other_ray3)).toBeTruthy();
 
 
     })

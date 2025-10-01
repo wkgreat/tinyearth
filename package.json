@@ -8,7 +8,7 @@
         "webgl",
         "earth",
         "3d",
-        "visulization"
+        "visualization"
     ],
     "author": {
         "name": "wkgreat",
@@ -72,6 +72,6 @@
         "build:tinyearth": "yarn run build:types && rollup -c && npx copyfiles -u 1 output/types/* dist/",
         "build:demo": "yarn run build:types && webpack --config webpack.config.js",
         "start:demo": "yarn run build:types && webpack-dev-server --config webpack.config.js",
-        "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest src --runInBand --no-watchman"
+        "test": "jest --runInBand --no-watchman"
     }
 }

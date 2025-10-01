@@ -27,11 +27,15 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true
   },
   "include": [
     "src",
-    "types"
+    "types",
+    "test/frustum.test.ts",
+    "test/geometry.test.ts",
+    "test/tile.test.ts"
   ],
   "exclude": [
     "node_modules",
