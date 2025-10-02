@@ -11,6 +11,54 @@ import { createHelperDiv } from "./helper.js";
 import type { xyzObject } from "./sun.js";
 import type { NumArr3 } from "./defines.js";
 
+export interface TileSourceInfo {
+    name: string
+    url: string
+    minLevel: number
+    maxLevel: number
+    night?: boolean
+}
+
+export class TileResources {
+
+    static GOOGLE_IMAGERY: TileSourceInfo = {
+        name: "Google Imagery",
+        url: "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+        minLevel: 1,
+        maxLevel: 20
+    }
+    static ESRI_IMAGERY: TileSourceInfo = {
+        name: "ESRI Imagery",
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        minLevel: 1,
+        maxLevel: 20
+    }
+    static ESRI_TOPO: TileSourceInfo = {
+        name: "ESRI TOPO",
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+        minLevel: 1,
+        maxLevel: 20
+    }
+    static OSM: TileSourceInfo = {
+        name: "OSM",
+        url: "http://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        minLevel: 1,
+        maxLevel: 20
+    }
+    static CARDODB_LIGHT_ALL: TileSourceInfo = {
+        name: "CARDODB LIGHT ALL",
+        url: "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+        minLevel: 1,
+        maxLevel: 20
+    }
+    static CARDODB_DARK_ALL: TileSourceInfo = {
+        name: "CARDODB DARK ALL",
+        url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        minLevel: 1,
+        maxLevel: 20
+    }
+}
+
 interface GlobeTileProgramBufferInfo {
     vertices?: WebGLBuffer,
     texture?: WebGLTexture
@@ -708,64 +756,12 @@ export function addTileProviderHelper(root: HTMLDivElement, title: string, tileP
 
 }
 
-/**
- * @typedef TileInfo
- * @property {string} name
- * @property {string} url
- * @property {number} minLevel
- * @property {number} maxLevel
-*/
-
-interface TileSourceInfo {
-    name: string
-    url: string
-    minLevel: number
-    maxLevel: number
-}
-
-const tileResources: { [key: string]: TileSourceInfo } = {
-    "GOOGLE_IMAGERY": {
-        name: "谷歌影像",
-        url: "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-        minLevel: 1,
-        maxLevel: 20
-    },
-    "ESRI_IMAGERY": {
-        name: "ESRI影像",
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        minLevel: 1,
-        maxLevel: 20
-    },
-    "ESRI_TOPO": {
-        name: "ESRI TOPO",
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-        minLevel: 1,
-        maxLevel: 20
-    },
-    "OSM": {
-        name: "OSM",
-        url: "http://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        minLevel: 1,
-        maxLevel: 20
-    },
-    "CARDODB_LIGHT_ALL": {
-        name: "CARDODB_LIGHT_ALL",
-        url: "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        minLevel: 1,
-        maxLevel: 20
-    },
-    "CARDODB_DARK_ALL": {
-        name: "CARDODB_DARK_ALL",
-        url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        minLevel: 1,
-        maxLevel: 20
-    }
-};
-
 function createTileOptions() {
     let options = "";
-    for (const [k, v] of Object.entries(tileResources)) {
-        options = `${options}<option value="${k}">${v.name}</option>`
+
+    for (const key of Object.keys(TileResources)) {
+        const info = TileResources[key as keyof typeof TileResources] as TileSourceInfo;
+        options = `${options}<option value="${info.name}">${info.name}</option>`
     }
     return options;
 }
@@ -793,7 +789,7 @@ export function addTileSelectHelper(root: HTMLDivElement, title: string, tilePro
 
     tileSelect.addEventListener('change', event => {
         const tileName = (event as any).target.value; // TODO resovle any type
-        const tileinfo = tileResources[tileName];
+        const tileinfo = TileResources[tileName as keyof typeof TileResources] as TileSourceInfo;
         if (tileinfo) {
             tileProvider.changeTileSource(tileinfo.url, tileinfo.minLevel, tileinfo.maxLevel);
         }

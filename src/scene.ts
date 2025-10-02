@@ -3,7 +3,7 @@ import Camera, { CameraMouseControl } from "./camera.js";
 import Frustum, { buildFrustum } from "./frustum.js";
 import Projection from "./projection.js";
 
-interface SceneOptions {
+export interface SceneOptions {
 
     camera: {
         from: vec3,

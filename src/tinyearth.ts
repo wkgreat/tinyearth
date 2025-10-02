@@ -3,18 +3,42 @@ import { checkGLError } from "./debug.js";
 import EventBus from "./event.js";
 import { buildFrustum } from "./frustum.js";
 import { vec4_t3 } from "./glmatrix_utils.js";
-import Scene from "./scene.js";
+import Scene, { type SceneOptions } from "./scene.js";
 import { SkyBoxProgram } from "./skybox.js";
 import { getSunPositionECEF } from "./sun.js";
-import { GlobeTileProgram, TileProvider } from "./tilerender.js";
+import { GlobeTileProgram, TileProvider, type TileSourceInfo } from "./tilerender.js";
 import Timer, { EVENT_TIMER_TICK } from "./timer.js";
+import proj4 from "proj4";
+import { EPSG_4326, EPSG_4978 } from "./proj.js";
 glMatrix.setMatrixArrayType(Array);
+
+interface TinyEarthOptions {
+    canvas: HTMLCanvasElement | string;
+    scene?: Omit<SceneOptions, "viewport">
+}
+
+const cameraFrom = proj4(EPSG_4326, EPSG_4978, [118.778869, 32.043823, 1E7]);
+const cameraTo = [0, 0, 0];
+const cameraUp = [0, 0, 1];
+
+const defaultSceneOptions: Omit<SceneOptions, "viewport"> = {
+    camera: {
+        from: cameraFrom,
+        to: cameraTo,
+        up: cameraUp
+    },
+    projection: {
+        fovy: Math.PI / 3,
+        near: 1,
+        far: 1E8
+    },
+}
 
 export default class TinyEarth {
 
-    canvas: HTMLCanvasElement | null = null;
+    canvas: HTMLCanvasElement;
 
-    gl: WebGLRenderingContext | null = null;
+    gl: WebGLRenderingContext;
 
     scene: Scene | null = null;
 
@@ -32,25 +56,66 @@ export default class TinyEarth {
 
     #startDrawFrame: boolean = true;
 
-    constructor(canvas: HTMLCanvasElement) {
+    constructor(options: TinyEarthOptions) {
 
         this.eventBus = new EventBus();
         this.timer = new Timer(Date.now());
         this.timer.setEventBus(this.eventBus);
 
-        this.canvas = canvas;
-        this.gl = canvas.getContext("webgl", { alpha: true });
-        canvas.height = canvas.clientHeight;
-        canvas.width = canvas.clientWidth;
-        this.viewHeight = canvas.height;
-        this.viewWidth = canvas.width;
+        let _canvas: HTMLCanvasElement | null = null;
+        let _gl: WebGLRenderingContext | null = null;
+
+        if (options.canvas instanceof HTMLCanvasElement) {
+            _canvas = options.canvas;
+        } else if (typeof options.canvas === 'string') {
+            const elem = document.getElementById(options.canvas);
+            if (elem instanceof HTMLCanvasElement) {
+                _canvas = elem;
+            } else {
+                throw new Error("the input canvas is not HTMLCanvasElement!");
+            }
+        } else {
+            throw new Error("the input canvas is not HTMLCanvasElement!");
+        }
+
+        if (_canvas === null) {
+            throw new Error("canvas is null");
+        }
+
+        this.canvas = _canvas;
+
+        _gl = this.canvas.getContext("webgl", { alpha: true });
+
+        if (_gl === null) {
+            throw new Error("webgl context is null");
+        }
+
+        this.gl = _gl;
+
+        this.canvas.height = this.canvas.clientHeight;
+        this.canvas.width = this.canvas.clientWidth;
+        this.viewHeight = this.canvas.height;
+        this.viewWidth = this.canvas.width;
+
+
+        const _sceneOpts: Omit<SceneOptions, "viewport"> = options.scene ?? defaultSceneOptions;
+        const viewportOpts = {
+            viewport: {
+                width: this.viewWidth,
+                height: this.viewHeight
+            }
+        }
+        this.scene = new Scene({ ..._sceneOpts, ...viewportOpts });
+
+        this.scene.addCameraControl(this.canvas);
+
         const that = this;
         window.addEventListener('resize', () => {
             if (that.canvas !== null) {
                 that.canvas.height = that.canvas.clientHeight;
                 that.canvas.width = that.canvas.clientWidth;
-                that.viewHeight = canvas.height;
-                that.viewWidth = canvas.width;
+                that.viewHeight = that.canvas.height;
+                that.viewWidth = that.canvas.width;
                 if (that.gl !== null) {
                     that.gl.viewport(0, 0, that.viewWidth, that.viewHeight);
                 }
@@ -60,7 +125,9 @@ export default class TinyEarth {
                 }
             }
         });
+
         this.globeTilePorgram = new GlobeTileProgram(this);
+
         this.skyboxProgram = new SkyBoxProgram(this);
     }
 
@@ -79,20 +146,19 @@ export default class TinyEarth {
         }
     }
 
-    addScene(scene: Scene) {
-        this.scene = scene;
-    }
-
-    addTimer(timer: Timer) {
-        this.timer = timer;
-        this.timer.setEventBus(this.eventBus);
+    addTileSource(tileInfo: TileSourceInfo): TileProvider {
+        const tileProvider = new TileProvider(tileInfo.url, this);
+        tileProvider.setMinLevel(tileInfo.minLevel);
+        tileProvider.setMaxLevel(tileInfo.maxLevel);
+        tileProvider.setIsNight(!!tileInfo.night);
+        this.addTileProvider(tileProvider);
+        return tileProvider;
     }
 
     addTileProvider(provider: TileProvider) {
         if (this.globeTilePorgram !== null) {
             this.globeTilePorgram.addTileProvider(provider);
         }
-
     }
 
     startDraw() {
@@ -105,6 +171,16 @@ export default class TinyEarth {
 
     isStartDraw() {
         return this.#startDrawFrame;
+    }
+
+    setTimerMultipler(m: number = 1) {
+        this.timer.setMultipler(m);
+    }
+    startTimer() {
+        this.timer.start();
+    }
+    stopTimer() {
+        this.timer.stop();
     }
 
     draw() {

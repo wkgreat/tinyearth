@@ -1,15 +1,12 @@
 import '../src/tinyearth.css';
-import './tinyearth.css'
+import './styles.css';
 
-import proj4 from "proj4";
 import { addDebugHelper } from "../src/helper.js";
-import { addMenu } from "../src/menu.js";
-import { EPSG_4326, EPSG_4978 } from "../src/proj.js";
-import Scene from "../src/scene.js";
-import { addTileProviderHelper, addTileSelectHelper, TileProvider } from "../src/tilerender.js";
+import ContextMenuTool from "../src/tools/context_menu.js";
+import { addTileProviderHelper, addTileSelectHelper, TileResources } from "../src/tilerender.js";
 import Timer, { addTimeHelper } from "../src/timer.js";
-import { MousePositionTool } from "../src/tools.js";
 import TinyEarth from '../src/tinyearth.js';
+import { MousePositionTool } from "../src/tools/mouse_position.js";
 
 function main() {
 
@@ -18,58 +15,24 @@ function main() {
     const canvas = document.getElementById("tinyearth-canvas") as HTMLCanvasElement;
     if (canvas !== null) {
 
-        tinyearth = new TinyEarth(canvas);
-
-        const cameraFrom = proj4(EPSG_4326, EPSG_4978, [118.778869, 32.043823, 1E7]);
-        const cameraTo = [0, 0, 0];
-        const cameraUp = [0, 0, 1];
-
-        const scene = new Scene({
-            camera: {
-                from: cameraFrom,
-                to: cameraTo,
-                up: cameraUp
-            },
-            projection: {
-                fovy: Math.PI / 3,
-                near: 1,
-                far: 1E8
-            },
-            viewport: {
-                width: tinyearth.viewWidth,
-                height: tinyearth.viewHeight
-            }
+        tinyearth = new TinyEarth({
+            canvas: canvas
         });
 
-        scene.addCameraControl(tinyearth.canvas!);
+        // add tile source
+        const provider0 = tinyearth.addTileSource(TileResources.GOOGLE_IMAGERY);
+        addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "影像瓦片底图", provider0);
+        addTileSelectHelper(document.getElementById("helper") as HTMLDivElement, "影像瓦片底图", provider0);
 
-        tinyearth.addScene(scene);
-
-        // const url = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-        // const url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        // const url = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}";
-        // const url = "https://demo.ldproxy.net/earthatnight/map/tiles/WebMercatorQuad/{z}/{y}/{x}?f=jpeg";
-
-        //常规底图
-        let url = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}";
-        // let url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-        const tileProvider0 = new TileProvider(url, tinyearth);
-        tileProvider0.setMinLevel(2);
-        tileProvider0.setMaxLevel(20);
-        tileProvider0.setIsNight(false);
-        addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "影像瓦片底图", tileProvider0);
-        addTileSelectHelper(document.getElementById("helper") as HTMLDivElement, "影像瓦片底图", tileProvider0);
-        tinyearth.addTileProvider(tileProvider0);
-
-        //夜间底图
-        url = "https://demo.ldproxy.net/earthatnight/map/tiles/WebMercatorQuad/{z}/{y}/{x}?f=jpeg"
-        const tileProvider1 = new TileProvider(url, tinyearth);
-        tileProvider1.setMinLevel(2);
-        tileProvider1.setMaxLevel(6);
-        tileProvider1.setIsNight(true);
-        addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "夜晚灯光瓦片底图", tileProvider1);
-
-        tinyearth.addTileProvider(tileProvider1);
+        // add night tile source
+        const provider1 = tinyearth.addTileSource({
+            name: "earthatnight",
+            url: "https://demo.ldproxy.net/earthatnight/map/tiles/WebMercatorQuad/{z}/{y}/{x}?f=jpeg",
+            minLevel: 2,
+            maxLevel: 6,
+            night: true
+        });
+        addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "夜晚灯光瓦片底图", provider1);
 
         //skybox
         tinyearth.skyboxProgram!.setCubeMap([
@@ -81,30 +44,23 @@ function main() {
             { face: tinyearth.gl!.TEXTURE_CUBE_MAP_NEGATIVE_Z, src: "assets/starsky/nz.png" }
         ]);
 
-        // tinyearth.skyboxProgram.setCubeMap([
-        //     { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_X, src: "assets/data/box_zoom/pos-x.jpg" },
-        //     { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_X, src: "assets/data/box_zoom/neg-x.jpg" },
-        //     { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_Y, src: "assets/data/box_zoom/pos-y.jpg" },
-        //     { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, src: "assets/data/box_zoom/neg-y.jpg" },
-        //     { face: tinyearth.gl.TEXTURE_CUBE_MAP_POSITIVE_Z, src: "assets/data/box_zoom/pos-z.jpg" },
-        //     { face: tinyearth.gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, src: "assets/data/box_zoom/neg-z.jpg" },
-        // ]);
-
-
-        //timer
-        const timer = new Timer(Date.now());
-        timer.setEventBus(tinyearth.eventBus);
-        timer.setMultipler(10000);
-        timer.start();
-        addTimeHelper(timer, document.getElementById("helper") as HTMLDivElement);
-        tinyearth.addTimer(timer);
-
+        //timer set
+        tinyearth.startTimer();
+        tinyearth.setTimerMultipler(10000);
+        addTimeHelper(tinyearth.timer, document.getElementById("helper") as HTMLDivElement);
         addDebugHelper(document.getElementById("helper") as HTMLDivElement, tinyearth);
 
-        const mousePosTool = new MousePositionTool(tinyearth);
-        mousePosTool.enable();
+        //context menu
+        const contextMenu = new ContextMenuTool(tinyearth);
+        contextMenu.enable();
 
-        addMenu(tinyearth);
+        //mouse position tool
+        const mousePosTool = new MousePositionTool({
+            tinyearth,
+            contextMenu,
+            textElementId: "status-mouse-location-input"
+        });
+        mousePosTool.enable();
 
         tinyearth.draw();
     } else {
