@@ -2,6 +2,7 @@ precision highp float;
 
 uniform sampler2D u_image;
 uniform float u_opacity;
+uniform bool u_enableNight;
 uniform bool u_isNight;
 
 varying vec4 v_worldPos;
@@ -29,7 +30,7 @@ uniform Material material;
 uniform Light light;
 uniform Camera camera;
 
-vec4 shadeColorWithTexture(Material material, Light light, vec4 texcolor, vec4 ambient, vec3 normal, vec3 position, vec3 eye) {
+vec4 shadeColorWithSunLight(Material material, Light light, vec4 texcolor, vec4 ambient, vec3 normal, vec3 position, vec3 eye) {
 
     float diffuseAlpha = 1.0;
 
@@ -55,15 +56,20 @@ void main() {
 
     texcolor = texture2D(u_image, v_texcoord);
 
-    if(u_isNight) {
-        float alpha = 1.0;
-        vec3 vlgt = normalize(light.position - pos);
-        float night = pow(((-1.0 * dot(v_normal, vlgt)) + 1.0) / 2.0, alpha);
-        vec4 color = vec4(texcolor.rgb, night);
-        gl_FragColor = color;
+    if(u_enableNight) {
+        if(u_isNight) {
+            float alpha = 1.0;
+            vec3 vlgt = normalize(light.position - pos);
+            float k = 5.0;
+            float night = -dot(v_normal, vlgt);
+            night = 1.0 / (1.0 + exp(k * -night));
+            vec4 color = vec4(texcolor.rgb, night);
+            gl_FragColor = color;
+        } else {
+            gl_FragColor = shadeColorWithSunLight(material, light, texcolor, ambient, v_normal, pos, eye);
+        }
     } else {
-        gl_FragColor = shadeColorWithTexture(material, light, texcolor, ambient, v_normal, pos, eye);
+        gl_FragColor = texcolor;
     }
-
     
 }

@@ -1,5 +1,5 @@
 import type EventBus from "./event.js";
-import { createHelperDiv } from "./helper.js";
+import { createHelperDiv } from "./helpers/helper.js";
 
 export const EVENT_TIMER_TICK = "timer:tick";
 

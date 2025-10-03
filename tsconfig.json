@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "rootDir": "./src",
-    "outDir": "output/src",
+    "rootDir": "./",
+    "outDir": "./output",
     "module": "esnext",
     "target": "esnext",
     "moduleResolution": "node",
@@ -17,7 +17,7 @@
     "declaration": true,
     "declarationMap": true,
     "emitDeclarationOnly": false,
-    "declarationDir": "output/types",
+    "declarationDir": "./output/types",
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "strict": true,
@@ -35,6 +35,8 @@
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "web",
+    "test"
   ]
 }

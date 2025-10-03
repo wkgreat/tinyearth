@@ -5,6 +5,12 @@ import Scene from "./scene.js";
 import fragSource from "./skybox.frag";
 import vertSource from "./skybox.vert";
 import TinyEarth from "./tinyearth.js";
+import starsky_px from "./assets/starsky/px.png";
+import starsky_py from "./assets/starsky/py.png";
+import starsky_pz from "./assets/starsky/pz.png";
+import starsky_nx from "./assets/starsky/nx.png";
+import starsky_ny from "./assets/starsky/ny.png";
+import starsky_nz from "./assets/starsky/nz.png";
 glMatrix.setMatrixArrayType(Array);
 
 export interface CubeMapInfo {
@@ -15,6 +21,26 @@ export interface CubeMapInfo {
 export interface SkyboxUniformInfo {
     u_invProjViewMtx: mat4,
     u_worldCameraPos: vec3
+}
+
+export interface SkyBoxSourceInfo {
+    name: string
+    posx: string
+    negx: string
+    posy: string
+    negy: string
+    posz: string
+    negz: string
+}
+
+export const defaultSkyBoxSourceInfo = {
+    name: "starsky",
+    posx: starsky_px,
+    negx: starsky_nx,
+    posy: starsky_py,
+    negy: starsky_ny,
+    posz: starsky_pz,
+    negz: starsky_nz,
 }
 
 export class SkyBoxProgram {
@@ -230,7 +256,7 @@ export class SkyBoxProgram {
 
 
     render() {
-        if (this.gl === null) {
+        if (this.gl === null || !this.tinyearth.skybox) {
             return;
         }
         this.use();

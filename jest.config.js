@@ -8,7 +8,7 @@ export default {
 
     transform: {
         '^.+\\.(ts|tsx)$': ['ts-jest', { useESM: true }],
-        '\\.(glsl|vert|frag|txt|json)$': "<rootDir>/jest-raw-transformer.js"
+        '\\.(glsl|vert|frag|txt|json|png)$': "<rootDir>/jest-raw-transformer.js"
     },
 
     moduleNameMapper: {

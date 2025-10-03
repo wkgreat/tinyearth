@@ -4,17 +4,22 @@ import EventBus from "./event.js";
 import { buildFrustum } from "./frustum.js";
 import { vec4_t3 } from "./glmatrix_utils.js";
 import Scene, { type SceneOptions } from "./scene.js";
-import { SkyBoxProgram } from "./skybox.js";
+import { defaultSkyBoxSourceInfo, SkyBoxProgram, type SkyBoxSourceInfo } from "./skybox.js";
 import { getSunPositionECEF } from "./sun.js";
 import { GlobeTileProgram, TileProvider, type TileSourceInfo } from "./tilerender.js";
 import Timer, { EVENT_TIMER_TICK } from "./timer.js";
 import proj4 from "proj4";
 import { EPSG_4326, EPSG_4978 } from "./proj.js";
+import type { ColorLike } from "./color.js";
+import Color from "./color.js";
 glMatrix.setMatrixArrayType(Array);
 
 interface TinyEarthOptions {
     canvas: HTMLCanvasElement | string;
     scene?: Omit<SceneOptions, "viewport">
+    night?: boolean
+    skybox?: boolean
+    bgcolor?: ColorLike
 }
 
 const cameraFrom = proj4(EPSG_4326, EPSG_4978, [118.778869, 32.043823, 1E7]);
@@ -55,6 +60,12 @@ export default class TinyEarth {
     skyboxProgram: SkyBoxProgram | null = null;
 
     #startDrawFrame: boolean = true;
+
+    night: boolean = false
+
+    skybox: boolean = true
+
+    bgcolor: Color = new Color(0, 0, 0, 1);
 
     constructor(options: TinyEarthOptions) {
 
@@ -126,15 +137,27 @@ export default class TinyEarth {
             }
         });
 
+        // config
+        this.night = options.night ?? false;
+
+        this.skybox = options.skybox ?? true;
+
+        // program
         this.globeTilePorgram = new GlobeTileProgram(this);
 
         this.skyboxProgram = new SkyBoxProgram(this);
+
+        this.setSkyboxSource(defaultSkyBoxSourceInfo);
+    }
+
+    clearColor() {
+        this.gl.clearColor(this.bgcolor.r, this.bgcolor.g, this.bgcolor.b, this.bgcolor.a);
     }
 
     // webgl clear and setup
     glInit() {
         if (this.gl !== null) {
-            this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+            this.clearColor();
             this.gl.clearDepth(1.0);
             this.gl.enable(this.gl.DEPTH_TEST);
             this.gl.enable(this.gl.CULL_FACE);
@@ -150,7 +173,7 @@ export default class TinyEarth {
         const tileProvider = new TileProvider(tileInfo.url, this);
         tileProvider.setMinLevel(tileInfo.minLevel);
         tileProvider.setMaxLevel(tileInfo.maxLevel);
-        tileProvider.setIsNight(!!tileInfo.night);
+        tileProvider.setIsNight(tileInfo.night ?? false);
         this.addTileProvider(tileProvider);
         return tileProvider;
     }
@@ -159,6 +182,29 @@ export default class TinyEarth {
         if (this.globeTilePorgram !== null) {
             this.globeTilePorgram.addTileProvider(provider);
         }
+    }
+
+    setSkyboxSource(skyboxInfo: SkyBoxSourceInfo) {
+        const cubemapInfo = [
+            { face: this.gl.TEXTURE_CUBE_MAP_POSITIVE_X, src: skyboxInfo.posx },
+            { face: this.gl.TEXTURE_CUBE_MAP_POSITIVE_Y, src: skyboxInfo.posy },
+            { face: this.gl.TEXTURE_CUBE_MAP_POSITIVE_Z, src: skyboxInfo.posz },
+            { face: this.gl.TEXTURE_CUBE_MAP_NEGATIVE_X, src: skyboxInfo.negx },
+            { face: this.gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, src: skyboxInfo.negy },
+            { face: this.gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, src: skyboxInfo.negz }
+        ]
+        this.skyboxProgram?.setCubeMap(cubemapInfo);
+    }
+
+    setBackGroudColor(c: ColorLike) {
+        const color = Color.build(c);
+        if (color) {
+            this.bgcolor = color;
+        }
+    }
+
+    getBackGroudColor(): Color {
+        return this.bgcolor;
     }
 
     startDraw() {
@@ -181,6 +227,20 @@ export default class TinyEarth {
     }
     stopTimer() {
         this.timer.stop();
+    }
+
+    enableNight() {
+        this.night = true;
+    }
+    disableNight() {
+        this.night = false;
+    }
+
+    enableSkybox() {
+        this.skybox = true;
+    }
+    disableSkybox() {
+        this.skybox = false;
     }
 
     draw() {
@@ -211,7 +271,7 @@ export default class TinyEarth {
                 that.timer.tick(t);
 
                 if (that.gl && that.scene) {
-                    that.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+                    that.clearColor();
                     that.gl.clearDepth(1.0);
                     that.gl.clear(that.gl.COLOR_BUFFER_BIT | that.gl.DEPTH_BUFFER_BIT);
                     that.scene.setViewWidth(that.viewWidth);

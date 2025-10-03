@@ -7,7 +7,7 @@ import tileFragSource from "./tile.frag";
 import tileVertSource from "./tile.vert";
 import Frustum, { buildFrustum } from "./frustum.js";
 import TinyEarth from "./tinyearth.js";
-import { createHelperDiv } from "./helper.js";
+import { createHelperDiv } from "./helpers/helper.js";
 import type { xyzObject } from "./sun.js";
 import type { NumArr3 } from "./defines.js";
 
@@ -295,8 +295,12 @@ export class GlobeTileProgram {
     render(modelMtx: mat4, camera: Camera, projMtx: mat4) {
         if (this.gl && this.program) {
             this.gl.useProgram(this.program);
+            this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_enableNight"), this.tinyearth.night ? 1 : 0);
             const that = this;
             for (let provider of this.tileProviders) {
+                if (provider.getIsNight() && !this.tinyearth.night) {
+                    continue;
+                }
                 provider.frustum = this.tinyearth.scene!.getFrustum();
                 provider.tiletree.fetchOrCreateTileNodesToLevel(provider.curlevel, provider.frustum, !provider.isStop(), async (node) => {
                     if (node && node.tile && node.tile.ready) {

@@ -1,4 +1,4 @@
-import TinyEarth from "./tinyearth.js";
+import TinyEarth from "../tinyearth.js";
 
 export function createHelperDiv(id: string, innerHtml: string = ""): HTMLDivElement {
     const container = document.createElement('div');

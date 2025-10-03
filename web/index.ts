@@ -1,12 +1,13 @@
 import '../src/tinyearth.css';
 import './styles.css';
 
-import { addDebugHelper } from "../src/helper.js";
+import { addDebugHelper } from "../src/helpers/helper.js";
 import ContextMenuTool from "../src/tools/context_menu.js";
 import { addTileProviderHelper, addTileSelectHelper, TileResources } from "../src/tilerender.js";
 import Timer, { addTimeHelper } from "../src/timer.js";
 import TinyEarth from '../src/tinyearth.js';
 import { MousePositionTool } from "../src/tools/mouse_position.js";
+import TinyEarthHelper from "../src/helpers/tinyearth_helper.js";
 
 function main() {
 
@@ -16,8 +17,13 @@ function main() {
     if (canvas !== null) {
 
         tinyearth = new TinyEarth({
-            canvas: canvas
+            canvas: canvas,
+            night: true
         });
+
+        // tinyearth helper
+        const tinyearthHelper = new TinyEarthHelper(tinyearth);
+        tinyearthHelper.addTo(document.getElementById("helper") as HTMLDivElement);
 
         // add tile source
         const provider0 = tinyearth.addTileSource(TileResources.GOOGLE_IMAGERY);
@@ -34,15 +40,16 @@ function main() {
         });
         addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "夜晚灯光瓦片底图", provider1);
 
-        //skybox
-        tinyearth.skyboxProgram!.setCubeMap([
-            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_POSITIVE_X, src: "assets/starsky/px.png" },
-            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_POSITIVE_Y, src: "assets/starsky/py.png" },
-            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_POSITIVE_Z, src: "assets/starsky/pz.png" },
-            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_NEGATIVE_X, src: "assets/starsky/nx.png" },
-            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_NEGATIVE_Y, src: "assets/starsky/ny.png" },
-            { face: tinyearth.gl!.TEXTURE_CUBE_MAP_NEGATIVE_Z, src: "assets/starsky/nz.png" }
-        ]);
+        // skybox
+        // tinyearth.setSkyboxSource({
+        //     name: "starsky",
+        //     posx: "assets/starsky/px.png",
+        //     negx: "assets/starsky/nx.png",
+        //     posy: "assets/starsky/py.png",
+        //     negy: "assets/starsky/ny.png",
+        //     posz: "assets/starsky/pz.png",
+        //     negz: "assets/starsky/nz.png",
+        // });
 
         //timer set
         tinyearth.startTimer();

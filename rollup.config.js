@@ -1,6 +1,7 @@
 import resolve from '@rollup/plugin-node-resolve';
-import postcss from 'rollup-plugin-postcss'
-import glsl from 'rollup-plugin-glsl'
+import postcss from 'rollup-plugin-postcss';
+import glsl from 'rollup-plugin-glsl';
+import url from '@rollup/plugin-url';
 import path from 'path';
 import fg from "fast-glob";
 
@@ -22,6 +23,13 @@ const glslPlugin = glsl({
     include: ['**/*.glsl', '**/*.vert', '**/*.frag'],
     exclude: 'node_modules/**',
     sourceMap: true
+});
+
+const urlPlugin = url({
+    limit: 10 * 1024,
+    fileName: '[dirname][name][extname]',
+    include: ['**/*.png', '**/*.jpg', '**/*.gif', '**/*.svg'],
+    sourceDir: "./output/src"
 });
 
 export default [
@@ -46,7 +54,7 @@ export default [
             }
         },
         treeshake: false,
-        plugins: [glslPlugin, resolve()],
+        plugins: [glslPlugin, urlPlugin, resolve()],
         external: ["gl-matrix", "mgrs", "proj4", "wkt-parser"]
     },
     {

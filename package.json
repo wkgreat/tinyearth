@@ -36,6 +36,7 @@
         "@rollup/plugin-commonjs": "^28.0.6",
         "@rollup/plugin-node-resolve": "^16.0.1",
         "@rollup/plugin-typescript": "^12.1.4",
+        "@rollup/plugin-url": "^8.0.2",
         "@types/jest": "^30.0.0",
         "@types/node": "^24.5.2",
         "@types/proj4": "^2.19.0",
@@ -69,7 +70,7 @@
         "webpack-dev-server": "^5.2.2"
     },
     "scripts": {
-        "build:types": "npx tsc && npx copyfiles -u 1 src/**/*.{css,vert,frag,glsl,html,json} output/src/",
+        "build:types": "npx tsc && npx copyfiles -u 1 src/**/*.{css,vert,frag,glsl,html,json,png} output/src/",
         "build:tinyearth": "yarn run build:types && rollup -c && npx copyfiles -u 1 output/types/* dist/",
         "build:demo": "webpack --config webpack.config.js",
         "start:demo": "webpack-dev-server --config webpack.config.js",

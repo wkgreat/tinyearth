@@ -52,10 +52,21 @@ export default [{
                 test: /\.css$/,
                 exclude: /node_modules/,
                 use: ['style-loader', 'css-loader']
-            }, {
+            },
+            {
+                test: /\.(png|gif|jpg|jpeg|svg|xml)$/,
+                include: [
+                    path.resolve(__dirname, 'src/assets')
+                ],
+                type: 'asset/inline'
+            },
+            {
                 test: /\.(png|gif|jpg|jpeg|svg|xml)$/,
                 exclude: /node_modules/,
-                use: ['url-loader']
+                use: ['url-loader'],
+                exclude: [
+                    path.resolve(__dirname, 'src/assets')
+                ],
             }, {
                 test: /\.(glsl|vs|fs|vert|frag)$/,
                 exclude: /node_modules/,
