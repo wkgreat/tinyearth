@@ -112,7 +112,7 @@ export function addTimeHelper(timer: Timer, root: HTMLDivElement) {
         </div>
     `
 
-    const container = createHelperDiv(id, innerHTML);
+    const container = createHelperDiv(id, "Timer Helper", innerHTML);
 
     root.appendChild(container);
 

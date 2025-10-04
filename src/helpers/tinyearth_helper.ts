@@ -21,7 +21,6 @@ export default class TinyEarthHelper {
 
         const innerHTML = `
         <div>
-            <label>TinyEarth Options</label></br>
             <div>
             <label>Enable Night:</label>
             <input type="checkbox" id="${this.nightCheckboxId}"></input>
@@ -40,7 +39,7 @@ export default class TinyEarthHelper {
         </div>
         `
 
-        this.helper = createHelperDiv(this.helperId, innerHTML);
+        this.helper = createHelperDiv(this.helperId, "Tinyearth Helper", innerHTML);
 
         div.appendChild(this.helper);
 

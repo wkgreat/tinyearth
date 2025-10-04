@@ -3,8 +3,25 @@
     background: rgba(1, 255, 200, 0.1);
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
+    font-size: 15px;
+    border: 1px solid black;
+    padding: 0px;
+    margin: 0px;
+}
+
+.cls-tinyearth-helper-title-div {
+    width: inherit;
+    background: rgba(1, 255, 200, 0.1);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
     border: 1px solid rgba(255, 255, 255, 0.2);
     font-size: 15px;
+    margin: 0px;
+}
+
+.cls-tinyearth-helper-body-div {
+    width: inherit;
+    padding: 5px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -16,10 +33,23 @@
 .cls-helper-div select {
     line-height: 1;
     margin: 4px;
+    height: 20px;
+
 }
 
 .cls-helper-div input[type=range] {
     vertical-align: middle;
+    width: 100px;
+}
+
+.cls-helper-div input[type=color] {
+    -webkit-appearance: none;
+    appearance: none;
+    vertical-align: middle;
+    width: 36px;
+    padding: 0px;
+    border: 0px;
+    box-sizing: border-box;
 }
 
 #tinyearth-menu {

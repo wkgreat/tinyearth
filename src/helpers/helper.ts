@@ -1,11 +1,13 @@
 import TinyEarth from "../tinyearth.js";
 
-export function createHelperDiv(id: string, innerHtml: string = ""): HTMLDivElement {
+export function createHelperDiv(id: string, title: string = "helper", innerHtml: string = ""): HTMLDivElement {
     const container = document.createElement('div');
     container.id = id;
     container.className = "cls-helper-div";
-    container.style = "border: 1px solid black; padding: 10px;"
-    container.innerHTML = innerHtml;
+    const titleDivId = `tinyearth-helper-title-div-${crypto.randomUUID()}`
+    container.innerHTML = `
+        <div id="${titleDivId}" class="cls-tinyearth-helper-title-div">${title}</div>
+        <div class='cls-tinyearth-helper-body-div'>${innerHtml}</div>`;
     return container;
 }
 
@@ -15,13 +17,12 @@ export function addDebugHelper(root: HTMLDivElement, tinyearth: TinyEarth) {
 
     const innerHTML = `
     <div>
-        <label>调试器</label></br>
         <label>停止渲染</label>
         <input type="checkbox" id=${drawCheckboxId}></input>
     </div>
     `;
 
-    const div = createHelperDiv("tinyearth-debug-helper", innerHTML);
+    const div = createHelperDiv("tinyearth-debug-helper", "Debugger Helper", innerHTML);
     root.appendChild(div);
 
     const checkbox = document.getElementById(drawCheckboxId) as HTMLInputElement;

@@ -700,13 +700,12 @@ export function addTileProviderHelper(root: HTMLDivElement, title: string, tileP
     const uuid = crypto.randomUUID();
     const innerHTML = `
     <div>
-        ${title}</br>
         获取/暂停获取瓦片
         <input type="checkbox" id="${uuid}"></br>     
     </div>
     `;
 
-    const container = createHelperDiv(`tile-provider-helper-${crypto.randomUUID()}`, innerHTML);
+    const container = createHelperDiv(`tile-provider-helper-${crypto.randomUUID()}`, "Tile Provider Helper", innerHTML);
     root.appendChild(container);
 
     const checkbox = document.getElementById(uuid) as HTMLInputElement;
@@ -743,7 +742,6 @@ export function addTileSelectHelper(root: HTMLDivElement, title: string, tilePro
     const innerHTML = `
     
     <div>
-        <label>${title} 瓦片选择器</label></br>
         <select id="tile-select" name="tile-select">
             ${createTileOptions()}
         </select>
@@ -751,7 +749,7 @@ export function addTileSelectHelper(root: HTMLDivElement, title: string, tilePro
     
     `;
 
-    const div = createHelperDiv(divId, innerHTML);
+    const div = createHelperDiv(divId, "Tile Provider Source Select Helper", innerHTML);
 
     root.appendChild(div);
 
