@@ -10,54 +10,7 @@ import TinyEarth from "./tinyearth.js";
 import { createHelperDiv } from "./helpers/helper.js";
 import type { xyzObject } from "./sun.js";
 import type { NumArr3 } from "./defines.js";
-
-export interface TileSourceInfo {
-    name: string
-    url: string
-    minLevel: number
-    maxLevel: number
-    night?: boolean
-}
-
-export class TileResources {
-
-    static GOOGLE_IMAGERY: TileSourceInfo = {
-        name: "Google Imagery",
-        url: "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-        minLevel: 1,
-        maxLevel: 20
-    }
-    static ESRI_IMAGERY: TileSourceInfo = {
-        name: "ESRI Imagery",
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        minLevel: 1,
-        maxLevel: 20
-    }
-    static ESRI_TOPO: TileSourceInfo = {
-        name: "ESRI TOPO",
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-        minLevel: 1,
-        maxLevel: 20
-    }
-    static OSM: TileSourceInfo = {
-        name: "OSM",
-        url: "http://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        minLevel: 1,
-        maxLevel: 20
-    }
-    static CARDODB_LIGHT_ALL: TileSourceInfo = {
-        name: "CARDODB LIGHT ALL",
-        url: "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        minLevel: 1,
-        maxLevel: 20
-    }
-    static CARDODB_DARK_ALL: TileSourceInfo = {
-        name: "CARDODB DARK ALL",
-        url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        minLevel: 1,
-        maxLevel: 20
-    }
-}
+import { TileResources, type TileSourceInfo } from "./tilesource.js";
 
 interface GlobeTileProgramBufferInfo {
     vertices?: WebGLBuffer,
@@ -302,7 +255,8 @@ export class GlobeTileProgram {
                     continue;
                 }
                 provider.frustum = this.tinyearth.scene!.getFrustum();
-                provider.tiletree.fetchOrCreateTileNodesToLevel(provider.curlevel, provider.frustum, !provider.isStop(), async (node) => {
+                const level = provider.curlevel;
+                provider.tiletree.fetchOrCreateTileNodesToLevel(level, provider.frustum, !provider.isStop(), async (node) => {
                     if (node && node.tile && node.tile.ready) {
                         that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.getIsNight());
                     }
@@ -360,12 +314,12 @@ type TileNodeCallback = (node: TileNode) => void;
 export class TileTree {
 
     root: TileNode = TileNode.createEmptyTileNode(0, 0, 0);
-    url: string = "";
+    source: TileSourceInfo;
     #startRecLevel: number = 2;
     frustum: Frustum | null = null;
 
-    constructor(url: string) {
-        this.url = url;
+    constructor(source: TileSourceInfo) {
+        this.source = source;
     }
 
     addTile(tile: Tile) {
@@ -430,7 +384,7 @@ export class TileTree {
                 if (node.key.z >= 6) {
                     tile = node.tile;
                     if (!tile) {
-                        tile = new Tile(node.key.x, node.key.y, node.key.z, "");
+                        tile = new Tile("", node.key.x, node.key.y, node.key.z);
                     }
                     if (!tile.intersectFrustum(this.frustum) || tile.tileIsBack(this.frustum)) {
                         continue;
@@ -515,12 +469,12 @@ export class TileTree {
                     let node = this.getTileNode(z, i, j);
                     if (!create && (node === null || node.tile === null)) { continue; }
                     if (node === null) {
-                        const tile = new Tile(i, j, z, this.url);
+                        const tile = new Tile(this.source.url, i, j, z);
                         tile.toMesh();
                         this.addTile(tile);
                         node = this.getTileNode(z, i, j);
                     } else if (node.tile === null) {
-                        const tile = new Tile(i, j, z, this.url);
+                        const tile = new Tile(this.source.url, i, j, z);
                         tile.toMesh();
                         node.tile = tile;
                     }
@@ -545,7 +499,7 @@ export class TileTree {
 
         if (curNode.tile === null) {
             if (create) {
-                curNode.tile = new Tile(curNode.key.x, curNode.key.y, curNode.key.z, this.url);
+                curNode.tile = new Tile(this.source.url, curNode.key.x, curNode.key.y, curNode.key.z);
                 curNode.tile.toMesh();
             }
         }
@@ -586,11 +540,9 @@ export class TileProvider {
 
     tinyearth: TinyEarth;
 
-    url: string = "";
+    source: TileSourceInfo;
 
-    camera: Camera | null = null;
-
-    curlevel: number = 0;
+    #curlevel: number = 0;
 
     tiletree: TileTree;
 
@@ -602,42 +554,36 @@ export class TileProvider {
 
     opacity: number = 1.0;
 
-    minLevel: number = 2;
-
-    maxLevel: number = 20;
-
-    #isNight: boolean = false;
-
-    constructor(url: string, tinyearth: TinyEarth) {
+    constructor(source: TileSourceInfo, tinyearth: TinyEarth) {
         this.tinyearth = tinyearth;
-        this.url = url;
-        this.tiletree = new TileTree(this.url);
-        this.camera = tinyearth.scene!.getCamera()
+        this.source = source;
+        this.tiletree = new TileTree(source);
         this.callback = this.provideCallbackGen();
-        this.callback(this.camera);
-        this.camera.addOnchangeEeventListener(this.callback);
+        const camera = this.tinyearth.scene?.getCamera();
+        if (camera) {
+            this.callback(camera);
+            camera.addOnchangeEeventListener(this.callback);
+        }
     }
 
     setMinLevel(level: number) {
-        this.minLevel = level;
+        this.source.minLevel = level;
     }
 
     setMaxLevel(level: number) {
-        this.maxLevel = level;
+        this.source.maxLevel = level;
     }
 
     setIsNight(b: boolean) {
-        this.#isNight = b;
+        this.source.night = b;
     }
 
     getIsNight(): boolean {
-        return this.#isNight;
+        return this.source.night ?? false;
     }
 
-    changeTileSource(url: string, minLevel: number, maxLevel: number) {
-        this.url = url;
-        this.minLevel = minLevel;
-        this.maxLevel = maxLevel;
+    changeTileSource(source: TileSourceInfo) {
+        this.source = source;
         const that = this;
         if (this.tiletree) {
             this.tiletree.forEachNode(node => {
@@ -652,7 +598,8 @@ export class TileProvider {
                 }
             });
         }
-        this.tiletree = new TileTree(this.url);
+        this.curlevel = this.tileLevel();
+        this.tiletree = new TileTree(source);
     }
 
     setFrustum(frustum: Frustum) {
@@ -679,7 +626,24 @@ export class TileProvider {
         return this.#stop;
     }
 
-    tileLevel(camera: Camera) {
+    get curlevel() {
+        return this.#curlevel;
+    }
+
+    set curlevel(level) {
+        this.#curlevel = level;
+    }
+
+    tileLevel() {
+        const camera = this.tinyearth.scene?.getCamera();
+        if (camera) {
+            return this.tileLevelWithCamera(camera);
+        } else {
+            return this.source.minLevel;
+        }
+    }
+
+    tileLevelWithCamera(camera: Camera) {
         const tileSize = 256;
         const from = camera.getFrom()
         let pos: NumArr3 = proj4(EPSG_4978, EPSG_4326, [from[0], from[1], from[2]]);
@@ -687,7 +651,7 @@ export class TileProvider {
         const initialResolution = 2 * Math.PI * EARTH_RADIUS / tileSize;
         const groundResolution = height * 2 / tileSize;
         const zoom = Math.log2(initialResolution / groundResolution) + 1;
-        return Math.min(Math.max(Math.ceil(zoom), this.minLevel), this.maxLevel);
+        return Math.min(Math.max(Math.ceil(zoom), this.source.minLevel), this.source.maxLevel);
     }
 
 
@@ -701,7 +665,7 @@ export class TileProvider {
                 return;
             }
 
-            const level = that.tileLevel(camera);
+            const level = that.tileLevelWithCamera(camera);
 
             const projection = that.tinyearth.scene?.getProjection();
 
@@ -791,11 +755,23 @@ export function addTileSelectHelper(root: HTMLDivElement, title: string, tilePro
 
     const tileSelect = document.getElementById("tile-select") as HTMLInputElement;
 
+    tileSelect.value = tileProvider.source.name;
+
     tileSelect.addEventListener('change', event => {
         const tileName = (event as any).target.value; // TODO resovle any type
-        const tileinfo = TileResources[tileName as keyof typeof TileResources] as TileSourceInfo;
-        if (tileinfo) {
-            tileProvider.changeTileSource(tileinfo.url, tileinfo.minLevel, tileinfo.maxLevel);
+
+        let tileInfo: TileSourceInfo | null = null;
+        for (const key of Object.keys(TileResources)) {
+            const info = TileResources[key as keyof typeof TileResources] as TileSourceInfo;
+            if (info.name === tileName) {
+                tileInfo = info;
+            }
+        }
+
+        if (tileInfo) {
+            tileProvider.changeTileSource(tileInfo);
+        } else {
+            console.warn("tileinfo is null");
         }
     });
 }

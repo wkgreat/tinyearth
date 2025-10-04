@@ -6,12 +6,13 @@ import { vec4_t3 } from "./glmatrix_utils.js";
 import Scene, { type SceneOptions } from "./scene.js";
 import { defaultSkyBoxSourceInfo, SkyBoxProgram, type SkyBoxSourceInfo } from "./skybox.js";
 import { getSunPositionECEF } from "./sun.js";
-import { GlobeTileProgram, TileProvider, type TileSourceInfo } from "./tilerender.js";
+import { GlobeTileProgram, TileProvider } from "./tilerender.js";
 import Timer, { EVENT_TIMER_TICK } from "./timer.js";
 import proj4 from "proj4";
 import { EPSG_4326, EPSG_4978 } from "./proj.js";
 import type { ColorLike } from "./color.js";
 import Color from "./color.js";
+import type { TileSourceInfo } from "./tilesource.js";
 glMatrix.setMatrixArrayType(Array);
 
 interface TinyEarthOptions {
@@ -170,7 +171,7 @@ export default class TinyEarth {
     }
 
     addTileSource(tileInfo: TileSourceInfo): TileProvider {
-        const tileProvider = new TileProvider(tileInfo.url, this);
+        const tileProvider = new TileProvider(tileInfo, this);
         tileProvider.setMinLevel(tileInfo.minLevel);
         tileProvider.setMaxLevel(tileInfo.maxLevel);
         tileProvider.setIsNight(tileInfo.night ?? false);

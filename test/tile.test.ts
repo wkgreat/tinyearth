@@ -21,7 +21,7 @@ describe("tile", () => {
 
         const point4326 = [118.767335, 32.050471, 0];
         const point3857 = proj4(EPSG_4326, EPSG_3857, point4326);
-        const tile = new Tile(x, y, z, url);
+        const tile = new Tile(url, x, y, z);
         const [xmin, ymin, xmax, ymax] = tile.extent();
 
         expect(point3857[0]).toBeGreaterThan(xmin);
@@ -76,7 +76,7 @@ describe("tile", () => {
         const z = 15;
         const x = 27194;
         const y = 13301;
-        const tile = new Tile(x, y, z, url);
+        const tile = new Tile(url, x, y, z);
 
         expect(tile.pointInFrustum(vp, frustum)).toBeTruthy();
 
@@ -118,7 +118,7 @@ describe("tile", () => {
         const z = 15;
         const x = 27194;
         const y = 13301;
-        const tile = new Tile(x, y, z, url);
+        const tile = new Tile(url, x, y, z);
 
         let curtile = tile;
         while (curtile.z >= 6) {
@@ -138,7 +138,7 @@ describe("TileTree", () => {
 
         const tree = new TileTree("");
 
-        const tile = new Tile(0, 0, 1, "");
+        const tile = new Tile("", 0, 0, 1);
 
         tree.addTile(tile);
 

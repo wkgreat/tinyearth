@@ -26,7 +26,7 @@ const glslPlugin = glsl({
 });
 
 const urlPlugin = url({
-    limit: 10 * 1024,
+    limit: 0,
     fileName: '[dirname][name][extname]',
     include: ['**/*.png', '**/*.jpg', '**/*.gif', '**/*.svg'],
     sourceDir: "./output/src"

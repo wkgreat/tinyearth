@@ -2,12 +2,13 @@ import '../src/tinyearth.css';
 import './styles.css';
 
 import { addDebugHelper } from "../src/helpers/helper.js";
-import ContextMenuTool from "../src/tools/context_menu.js";
-import { addTileProviderHelper, addTileSelectHelper, TileResources } from "../src/tilerender.js";
-import Timer, { addTimeHelper } from "../src/timer.js";
-import TinyEarth from '../src/tinyearth.js';
-import { MousePositionTool } from "../src/tools/mouse_position.js";
 import TinyEarthHelper from "../src/helpers/tinyearth_helper.js";
+import { addTileProviderHelper, addTileSelectHelper } from "../src/tilerender.js";
+import { TileResources } from '../src/tilesource.js';
+import { addTimeHelper } from "../src/timer.js";
+import TinyEarth from '../src/tinyearth.js';
+import ContextMenuTool from "../src/tools/context_menu.js";
+import { MousePositionTool } from "../src/tools/mouse_position.js";
 
 function main() {
 
@@ -18,7 +19,7 @@ function main() {
 
         tinyearth = new TinyEarth({
             canvas: canvas,
-            night: true
+            night: false
         });
 
         // tinyearth helper
@@ -39,17 +40,6 @@ function main() {
             night: true
         });
         addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "夜晚灯光瓦片底图", provider1);
-
-        // skybox
-        // tinyearth.setSkyboxSource({
-        //     name: "starsky",
-        //     posx: "assets/starsky/px.png",
-        //     negx: "assets/starsky/nx.png",
-        //     posy: "assets/starsky/py.png",
-        //     negy: "assets/starsky/ny.png",
-        //     posz: "assets/starsky/pz.png",
-        //     negz: "assets/starsky/nz.png",
-        // });
 
         //timer set
         tinyearth.startTimer();

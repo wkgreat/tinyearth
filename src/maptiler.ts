@@ -1,12 +1,14 @@
 import { glMatrix, vec3, vec4 } from "gl-matrix";
 import proj4 from "proj4";
+import type { Extent, Interval, NumArr3 } from "./defines.js";
 import Frustum from "./frustum.js";
-import { Plane, planeCrossPlane, pointOutSidePlane, rayCrossTriangle, Triangle } from "./geometry.js";
+import { Plane, pointOutSidePlane } from "./geometry.js";
 import { vec3_add, vec3_normalize, vec3_scale, vec3_sub, vec3_t4 } from "./glmatrix_utils.js";
 import { EPSG_3857, EPSG_4326, EPSG_4978, type projcode_t } from "./proj.js";
-import { loadTileImage } from "./tileutils.js";
 import type { TileProvider } from "./tilerender.js";
-import type { Extent, Interval, NumArr3 } from "./defines.js";
+import type { TileURL } from "./tilesource.js";
+import { loadTileImage } from "./tileutils.js";
+
 glMatrix.setMatrixArrayType(Array);
 
 const XLIMIT: Interval = [-20037508.3427892, 20037508.3427892];
@@ -41,12 +43,22 @@ export class Tile {
 
     corners: [vec3, vec3, vec3, vec3] | null = null;
 
-    constructor(x: number, y: number, z: number, url: string) {
+    constructor(url: TileURL, x: number = 0, y: number = 0, z: number = 0) {
+        this.setUrl(url, x, y, z);
+    }
+
+    setUrl(url: TileURL, x: number = 0, y: number = 0, z: number = 0) {
         this.x = x;
         this.y = y;
         this.z = z;
-        this.urltem = url;
-        this.url = url.replace("{z}", `${z}`).replace("{x}", `${x}`).replace("{y}", `${y}`);
+        if (typeof url === 'function') {
+            this.url = url(x, y, z);
+            this.urltem = this.url;
+        } else {
+            this.urltem = url;
+            this.url = url.replace("{z}", `${z}`).replace("{x}", `${x}`).replace("{y}", `${y}`);
+        }
+
     }
 
     supTileAtLevel(level: number): Tile {
@@ -65,15 +77,15 @@ export class Tile {
         const newZ = this.z - 1;
         const newX = this.x >> 1;
         const newY = this.y >> 1;
-        return new Tile(newX, newY, newZ, this.urltem);
+        return new Tile(this.urltem, newX, newY, newZ);
     }
 
     subTiles(): [Tile, Tile, Tile, Tile] {
         return [
-            new Tile(this.x * 2, this.y * 2, this.z + 1, this.urltem),
-            new Tile(this.x * 2 + 1, this.y * 2, this.z + 1, this.urltem),
-            new Tile(this.x * 2, this.y * 2 + 1, this.z + 1, this.urltem),
-            new Tile(this.x * 2 + 1, this.y * 2 + 1, this.z + 1, this.urltem)
+            new Tile(this.urltem, this.x * 2, this.y * 2, this.z + 1),
+            new Tile(this.urltem, this.x * 2 + 1, this.y * 2, this.z + 1),
+            new Tile(this.urltem, this.x * 2, this.y * 2 + 1, this.z + 1),
+            new Tile(this.urltem, this.x * 2 + 1, this.y * 2 + 1, this.z + 1)
         ];
     }
 
@@ -325,12 +337,15 @@ export class Tile {
         return [xmin, ymin, xmax, ymax];
     }
 
-    async fetchTile(): Promise<HTMLImageElement | null> {
-        const image = await loadTileImage(this.url, this.x, this.y, this.z);
-        this.image = image;
-        this.ready = true;
-        return this.image;
-
+    async fetchTile() {
+        if (!this.ready) {
+            loadTileImage(this.url, this.x, this.y, this.z).then(image => {
+                this.image = image;
+                this.ready = true;
+            }).catch(e => {
+                this.ready = false;
+            });
+        }
     }
 
     center() {

@@ -8,6 +8,7 @@ export async function loadTileImage(url: string, x: number, y: number, z: number
             const img = new Image();
             img.onload = () => resolve(img);
             img.onerror = (err) => {
+                console.warn(url);
                 console.warn("loadImage ERROR: ", err);
                 reject(err);
             }

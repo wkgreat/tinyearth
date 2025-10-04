@@ -70,7 +70,7 @@
         "webpack-dev-server": "^5.2.2"
     },
     "scripts": {
-        "build:types": "npx tsc && npx copyfiles -u 1 src/**/*.{css,vert,frag,glsl,html,json,png} output/src/",
+        "build:types": "npx tsc && npx copyfiles -u 1 src/**/*.{css,vert,frag,glsl,html,json,png,jpg} output/src/",
         "build:tinyearth": "yarn run build:types && rollup -c && npx copyfiles -u 1 output/types/* dist/",
         "build:demo": "webpack --config webpack.config.js",
         "start:demo": "webpack-dev-server --config webpack.config.js",
