@@ -77,7 +77,6 @@ export default class TinyEarthHelper {
             const color = Color.build(hex);
             color?.setAlpha(this.tinyearth.getBackGroudColor().a);
             if (color !== null) {
-                console.log(color);
                 this.tinyearth.setBackGroudColor(color);
             }
         });

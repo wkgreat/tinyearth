@@ -38,8 +38,16 @@ export class GlobeTileProgram {
         this.createBuffer();
     }
 
+    existTileProvider(tileProvider: TileProvider): boolean {
+        return this.tileProviders.filter(p => p === tileProvider).length > 0;
+    }
+
     addTileProvider(tileProvider: TileProvider) {
         this.tileProviders.push(tileProvider);
+    }
+
+    removeTileProvider(tileProvider: TileProvider) {
+        this.tileProviders = this.tileProviders.filter(p => p !== tileProvider);
     }
 
     createTileProgram(): WebGLProgram | null {
@@ -251,14 +259,14 @@ export class GlobeTileProgram {
             this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_enableNight"), this.tinyearth.night ? 1 : 0);
             const that = this;
             for (let provider of this.tileProviders) {
-                if (provider.getIsNight() && !this.tinyearth.night) {
+                if (provider.night && !this.tinyearth.night) {
                     continue;
                 }
                 provider.frustum = this.tinyearth.scene!.getFrustum();
                 const level = provider.curlevel;
                 provider.tiletree.fetchOrCreateTileNodesToLevel(level, provider.frustum, !provider.isStop(), async (node) => {
                     if (node && node.tile && node.tile.ready) {
-                        that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.getIsNight());
+                        that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
                     }
                 });
             }
@@ -563,23 +571,17 @@ export class TileProvider {
         if (camera) {
             this.callback(camera);
             camera.addOnchangeEeventListener(this.callback);
+            this.curlevel = this.tileLevel();
         }
     }
 
-    setMinLevel(level: number) {
-        this.source.minLevel = level;
-    }
-
-    setMaxLevel(level: number) {
-        this.source.maxLevel = level;
-    }
-
-    setIsNight(b: boolean) {
-        this.source.night = b;
-    }
-
-    getIsNight(): boolean {
+    get night(): boolean {
         return this.source.night ?? false;
+    }
+
+    set night(b: boolean | undefined | null) {
+        this.source.night = b ?? false;
+
     }
 
     changeTileSource(source: TileSourceInfo) {

@@ -26,20 +26,20 @@ function main() {
         const tinyearthHelper = new TinyEarthHelper(tinyearth);
         tinyearthHelper.addTo(document.getElementById("helper") as HTMLDivElement);
 
-        // add tile source
-        const provider0 = tinyearth.addTileSource(TileResources.GOOGLE_IMAGERY);
-        addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "影像瓦片底图", provider0);
-        addTileSelectHelper(document.getElementById("helper") as HTMLDivElement, "影像瓦片底图", provider0);
+        // tinyearth default tile provider
+        const defaultTilePorvider = tinyearth.defaultTilePorvider;
+        addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "Tile Provider", defaultTilePorvider);
+        addTileSelectHelper(document.getElementById("helper") as HTMLDivElement, "Tile Provider", defaultTilePorvider);
 
         // add night tile source
-        const provider1 = tinyearth.addTileSource({
+        const nightTileProvider = tinyearth.addTileSource({
             name: "earthatnight",
             url: "https://demo.ldproxy.net/earthatnight/map/tiles/WebMercatorQuad/{z}/{y}/{x}?f=jpeg",
             minLevel: 2,
             maxLevel: 6,
             night: true
         });
-        addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "夜晚灯光瓦片底图", provider1);
+        addTileProviderHelper(document.getElementById("helper") as HTMLDivElement, "Night Tile Provider", nightTileProvider);
 
         //timer set
         tinyearth.startTimer();

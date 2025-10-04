@@ -12,7 +12,7 @@ import proj4 from "proj4";
 import { EPSG_4326, EPSG_4978 } from "./proj.js";
 import type { ColorLike } from "./color.js";
 import Color from "./color.js";
-import type { TileSourceInfo } from "./tilesource.js";
+import { TileResources, type TileSourceInfo } from "./tilesource.js";
 glMatrix.setMatrixArrayType(Array);
 
 interface TinyEarthOptions {
@@ -61,6 +61,8 @@ export default class TinyEarth {
     skyboxProgram: SkyBoxProgram | null = null;
 
     #startDrawFrame: boolean = true;
+
+    #defaultTileProvider: TileProvider;
 
     night: boolean = false
 
@@ -143,9 +145,14 @@ export default class TinyEarth {
 
         this.skybox = options.skybox ?? true;
 
-        // program
+        // tile program
         this.globeTilePorgram = new GlobeTileProgram(this);
 
+        this.#defaultTileProvider = this.getDefaultTileProvider();
+
+        this.addTileProvider(this.#defaultTileProvider);
+
+        // skybox program
         this.skyboxProgram = new SkyBoxProgram(this);
 
         this.setSkyboxSource(defaultSkyBoxSourceInfo);
@@ -172,17 +179,48 @@ export default class TinyEarth {
 
     addTileSource(tileInfo: TileSourceInfo): TileProvider {
         const tileProvider = new TileProvider(tileInfo, this);
-        tileProvider.setMinLevel(tileInfo.minLevel);
-        tileProvider.setMaxLevel(tileInfo.maxLevel);
-        tileProvider.setIsNight(tileInfo.night ?? false);
+        tileProvider.night = tileInfo.night;
         this.addTileProvider(tileProvider);
         return tileProvider;
     }
 
     addTileProvider(provider: TileProvider) {
         if (this.globeTilePorgram !== null) {
+            const isNight = provider.source.night ?? false;
+            if (!isNight) {
+                this.globeTilePorgram.removeTileProvider(this.#defaultTileProvider);
+            }
             this.globeTilePorgram.addTileProvider(provider);
         }
+    }
+
+    removeTileProvider(provider: TileProvider) {
+        if (this.globeTilePorgram !== null) {
+            this.globeTilePorgram.removeTileProvider(provider);
+        }
+    }
+
+    getDefaultTileProvider(): TileProvider {
+        const tileInfo = TileResources.OFFLINE_IMAGERY;
+        const tileProvider = new TileProvider(tileInfo, this);
+        tileProvider.night = tileInfo.night;
+        return tileProvider;
+    }
+
+    addDefaultTileProvider() {
+        if (this.globeTilePorgram !== null) {
+            this.globeTilePorgram.addTileProvider(this.#defaultTileProvider);
+        }
+    }
+
+    removeAllTileProvider() {
+        if (this.globeTilePorgram !== null) {
+            this.globeTilePorgram.tileProviders = [];
+        }
+    }
+
+    get defaultTilePorvider(): TileProvider {
+        return this.#defaultTileProvider;
     }
 
     setSkyboxSource(skyboxInfo: SkyBoxSourceInfo) {
