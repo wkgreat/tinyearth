@@ -1,16 +1,15 @@
-import { mat4, vec4 } from "gl-matrix";
+import { mat4 } from "gl-matrix";
 import proj4 from "proj4";
 import Camera from "./camera.js";
+import type { NumArr3 } from "./defines.js";
+import Frustum, { buildFrustum } from "./frustum.js";
 import { Tile } from "./maptiler.js";
 import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
+import type { xyzObject } from "./sun.js";
 import tileFragSource from "./tile.frag";
 import tileVertSource from "./tile.vert";
-import Frustum, { buildFrustum } from "./frustum.js";
+import { type TileSourceInfo } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
-import { createHelperDiv } from "./helpers/helper.js";
-import type { xyzObject } from "./sun.js";
-import type { NumArr3 } from "./defines.js";
-import { TileResources, type TileSourceInfo } from "./tilesource.js";
 
 interface GlobeTileProgramBufferInfo {
     vertices?: WebGLBuffer,
@@ -694,85 +693,5 @@ export class TileProvider {
         return cb;
     }
 
-}
-
-export function addTileProviderHelper(root: HTMLDivElement, title: string, tileProvider: TileProvider) {
-    const uuid = crypto.randomUUID();
-    const innerHTML = `
-    <div>
-        获取/暂停获取瓦片
-        <input type="checkbox" id="${uuid}"></br>     
-    </div>
-    `;
-
-    const container = createHelperDiv(`tile-provider-helper-${crypto.randomUUID()}`, "Tile Provider Helper", innerHTML);
-    root.appendChild(container);
-
-    const checkbox = document.getElementById(uuid) as HTMLInputElement;
-
-    if (checkbox) {
-        checkbox.checked = !tileProvider.isStop();
-        checkbox.addEventListener("change", (event) => {
-            if ((event as any).target.checked) { // TODO resolve any type
-                tileProvider.start();
-            } else {
-                tileProvider.stop();
-            }
-        });
-    } else {
-        console.error("addTileProviderHelper checkbox is null.");
-    }
-
-}
-
-function createTileOptions() {
-    let options = "";
-
-    for (const key of Object.keys(TileResources)) {
-        const info = TileResources[key as keyof typeof TileResources] as TileSourceInfo;
-        options = `${options}<option value="${info.name}">${info.name}</option>`
-    }
-    return options;
-}
-
-export function addTileSelectHelper(root: HTMLDivElement, title: string, tileProvider: TileProvider) {
-
-    const divId = `tile-select-helper-${crypto.randomUUID()}`;
-
-    const innerHTML = `
-    
-    <div>
-        <select id="tile-select" name="tile-select">
-            ${createTileOptions()}
-        </select>
-    </div>
-    
-    `;
-
-    const div = createHelperDiv(divId, "Tile Provider Source Select Helper", innerHTML);
-
-    root.appendChild(div);
-
-    const tileSelect = document.getElementById("tile-select") as HTMLInputElement;
-
-    tileSelect.value = tileProvider.source.name;
-
-    tileSelect.addEventListener('change', event => {
-        const tileName = (event as any).target.value; // TODO resovle any type
-
-        let tileInfo: TileSourceInfo | null = null;
-        for (const key of Object.keys(TileResources)) {
-            const info = TileResources[key as keyof typeof TileResources] as TileSourceInfo;
-            if (info.name === tileName) {
-                tileInfo = info;
-            }
-        }
-
-        if (tileInfo) {
-            tileProvider.changeTileSource(tileInfo);
-        } else {
-            console.warn("tileinfo is null");
-        }
-    });
 }
 

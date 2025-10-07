@@ -24,6 +24,7 @@ import x3y0z2 from './assets/tiles/imagery/x3y0z2.jpg';
 import x3y1z2 from './assets/tiles/imagery/x3y1z2.jpg';
 import x3y2z2 from './assets/tiles/imagery/x3y2z2.jpg';
 import x3y3z2 from './assets/tiles/imagery/x3y3z2.jpg';
+import { MOCK_TILE_URL } from './tileutils';
 
 const offlineImageryTileInfo: { [key: string]: string } = {
     "x0y0z0": x0y0z0,
@@ -62,6 +63,13 @@ export interface TileSourceInfo {
 }
 
 export class TileResources {
+
+    static DEBUG_TILE: TileSourceInfo = {
+        name: "Debug Tile",
+        url: MOCK_TILE_URL,
+        minLevel: 0,
+        maxLevel: 20
+    }
 
     static OFFLINE_IMAGERY: TileSourceInfo = {
         name: "Offline Imagery",

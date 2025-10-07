@@ -1,23 +1,25 @@
-import { createHelperDiv } from "./helper";
-import type TinyEarth from "../tinyearth";
 import Color from "../color";
+import { BaseHelper, type BaseHelperOptions } from "./helper";
 
-export default class TinyEarthHelper {
+export interface TinyEarthHelperOptions extends BaseHelperOptions {};
 
-    tinyearth: TinyEarth;
+export default class TinyEarthHelper extends BaseHelper {
+
     helperId = "tinyearth-helper";
-    helper: HTMLDivElement | null = null;
     nightCheckboxId = "tinyearth-helper-night-checkbox";
     skyboxCheckboxId = "tinyearth-helper-skybox-checkbox";
     bgcolorInputId = "tinyearth-helper-bgcolor-input";
     bgcolorAlphaInputId = "tinyearth-helper-bgcolor-alpha-input"
+    renderCheckboxId = "tinyearth-render-checkbox"
+    title: string = "";
 
 
-    constructor(tinyearth: TinyEarth) {
-        this.tinyearth = tinyearth;
+    constructor(options: TinyEarthHelperOptions) {
+        super(options);
+        this.title = options.title ?? "Tinyearth Helper"
     }
 
-    addTo(div: HTMLDivElement) {
+    createElement(): HTMLDivElement | null {
 
         const innerHTML = `
         <div>
@@ -33,16 +35,43 @@ export default class TinyEarthHelper {
             <label>Background Color:</label>
             <input type="color" id="${this.bgcolorInputId}"></input>
             </div>
+            <div>
             <label>Background Alpha:</label>
             <input type="range" id="${this.bgcolorAlphaInputId}" min="0" max="1" step="0.01"></input>
+            </div>
+            <div>
+            <label>Render Start/Stop</label>
+            <input type="checkbox" id=${this.renderCheckboxId}></input>
             </div>
         </div>
         `
 
-        this.helper = createHelperDiv(this.helperId, "Tinyearth Helper", innerHTML);
+        const item0 = this.createItem(
+            this.createLabel("Enable Night"),
+            this.createInput(this.nightCheckboxId, "checkbox")
+        );
+        const item1 = this.createItem(
+            this.createLabel("Enable Skybox"),
+            this.createInput(this.skyboxCheckboxId, "checkbox")
+        );
+        const item2 = this.createItem(
+            this.createLabel("Background Color"),
+            this.createInput(this.bgcolorInputId, "color")
+        );
+        const item3 = this.createItem(
+            this.createLabel("Background Alpha"),
+            this.createInput(this.bgcolorAlphaInputId, "range", { min: "0", max: "1", step: "0.01" })
+        );
+        const item4 = this.createItem(
+            this.createLabel("Render Start/Stop"),
+            this.createInput(this.renderCheckboxId, "checkbox")
+        );
 
-        div.appendChild(this.helper);
 
+        return this.createHelperDiv(this.helperId, this.title, [item0, item1, item2, item3, item4]);
+    }
+
+    afterAddToContainer() {
         const nightCheckbox = document.getElementById(this.nightCheckboxId) as HTMLInputElement;
 
         nightCheckbox.checked = this.tinyearth.night;
@@ -88,6 +117,20 @@ export default class TinyEarthHelper {
             let v = (event as any).target.value
             this.tinyearth.getBackGroudColor().setAlpha(v);
         });
+
+        const renderCheckBox = document.getElementById(this.renderCheckboxId) as HTMLInputElement;
+
+        if (renderCheckBox) {
+            renderCheckBox.checked = this.tinyearth.isStartDraw();
+            renderCheckBox.addEventListener("change", (event) => {
+                if ((event as any).target.checked) { // TODO resolve any type
+                    this.tinyearth.startDraw();
+                } else {
+                    this.tinyearth.stopDraw();
+                }
+            });
+        }
+
 
     }
 }

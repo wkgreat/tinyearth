@@ -1,7 +1,7 @@
-const mockTile = false;
+export const MOCK_TILE_URL = "mock://{x}/{y}/{z}";
 
 export async function loadTileImage(url: string, x: number, y: number, z: number): Promise<HTMLImageElement | null> {
-    if (mockTile) {
+    if (url.startsWith("mock")) {
         return loadMockTileImage(url, x, y, z);
     } else {
         return new Promise((resolve, reject) => {
@@ -29,7 +29,7 @@ async function loadMockTileImage(url: string, x: number, y: number, z: number): 
             resolve(null);
         } else {
             // 设置背景（可选）
-            ctx.fillStyle = "#f0f0f0";
+            ctx.fillStyle = "#484848ff";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             ctx.strokeStyle = "red"
@@ -39,7 +39,7 @@ async function loadMockTileImage(url: string, x: number, y: number, z: number): 
             // 设置字体样式
             ctx.textAlign = "center";       // 水平居中
             ctx.textBaseline = "middle";    // 垂直居中
-            ctx.fillStyle = "black";
+            ctx.fillStyle = "white";
             ctx.font = "24px Arial";
             ctx.fillText(`${z},${x},${y}`, canvas.width / 2, canvas.height / 2);
 
