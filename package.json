@@ -1,6 +1,6 @@
 {
     "name": "tinyearth",
-    "version": "1.0.0",
+    "version": "1.0.1-beta.0",
     "type": "module",
     "description": "tinyearth: a 3d earth visualization library",
     "main": "dist/tinyearth.js",
