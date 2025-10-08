@@ -6,8 +6,11 @@ import path from 'path';
 import fg from "fast-glob";
 
 const entries = {};
+
+const excludeExts = ['.map', '.css', '.png', '.jpg', '.jpeg'];
+
 for (const file of fg.sync("output/src/**/*")) {
-    if (!file.endsWith(".map") && !file.endsWith(".css")) {
+    if (!excludeExts.includes(path.extname(file))) {
         const name = file.replace(/^output\/src\//, "");
         console.log(`${name}: ${file}`);
         entries[name] = file;
@@ -27,10 +30,25 @@ const glslPlugin = glsl({
 
 const urlPlugin = url({
     limit: 0,
+    emitFiles: true,
     fileName: '[dirname][name][extname]',
     include: ['**/*.png', '**/*.jpg', '**/*.gif', '**/*.svg'],
-    sourceDir: "./output/src"
+    sourceDir: "./output/src",
+    destDir: "dist"
 });
+
+const mapFilterPlugin = {
+    name: 'filter-maps',
+    generateBundle(_, bundle) {
+        for (const name of Object.keys(bundle)) {
+
+            const maps = excludeExts.map(ext => `${ext}.map`);
+            if (maps.some(map => name.endsWith(map))) {
+                delete bundle[name];
+            }
+        }
+    }
+};
 
 export default [
     {
@@ -41,20 +59,20 @@ export default [
             preserveModules: true,
             sourcemap: true,
             entryFileNames: (chunkInfo) => {
-                if (chunkInfo.name.includes("css")) {
-                    console.log(chunkInfo.name)
-                }
                 const id = chunkInfo.facadeModuleId;
                 if (!id) return '[name].js';
                 const ext = path.extname(id);
                 if (ext === '.js') {
                     return '[name]';
                 }
+                if (excludeExts.includes(ext)) {
+                    return '[name]';
+                }
                 return '[name].js';
             }
         },
         treeshake: false,
-        plugins: [glslPlugin, urlPlugin, resolve()],
+        plugins: [glslPlugin, urlPlugin, resolve(), mapFilterPlugin],
         external: ["gl-matrix", "mgrs", "proj4", "wkt-parser"]
     },
     {
@@ -65,10 +83,7 @@ export default [
             dir: "dist",
             format: 'esm',
             preserveModules: true,
-            sourcemap: true,
-            entryFileNames: (chunkInfo) => {
-                return '[name]';
-            }
+            entryFileNames: (chunkInfo) => '[name]'
         },
         treeshake: false,
         sourceMap: false,
