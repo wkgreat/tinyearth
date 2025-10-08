@@ -7,6 +7,12 @@
     "files": [
         "dist"
     ],
+    "exports": {
+        "./*": {
+            "import": "./dist/*.js",
+            "types": "./dist/*.d.ts"
+        }
+    },
     "keywords": [
         "webgl",
         "earth",
@@ -62,6 +68,7 @@
         "jest-raw-loader": "^1.0.1",
         "json-loader": "^0.5.7",
         "raw-loader": "^4.0.2",
+        "rimraf": "^6.0.1",
         "rollup": "^4.52.3",
         "rollup-plugin-glsl": "^1.3.0",
         "rollup-plugin-postcss": "^4.0.2",
@@ -76,11 +83,13 @@
         "webpack-dev-server": "^5.2.2"
     },
     "scripts": {
+        "clean": "rimraf output dist",
         "build:types": "npx tsc && npx copyfiles -u 1 src/**/*.{css,vert,frag,glsl,html,json,png,jpg} output/src/",
         "build:tinyearth": "yarn run build:types && rollup -c && npx copyfiles -u 1 output/types/* dist/",
         "build": "yarn run build:tinyearth",
         "build:demo": "webpack --config webpack.config.js",
         "start:demo": "webpack-dev-server --config webpack.config.js",
-        "test": "jest --runInBand --no-watchman"
+        "test": "jest --runInBand --no-watchman",
+        "prepublishOnly": "yarn run clean && yarn run build"
     }
 }
