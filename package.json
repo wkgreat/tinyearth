@@ -85,7 +85,7 @@
     "scripts": {
         "clean": "rimraf output dist",
         "build:types": "npx tsc && npx copyfiles -u 1 src/**/*.{css,vert,frag,glsl,html,json,png,jpg} output/src/",
-        "build:tinyearth": "yarn run build:types && rollup -c && npx copyfiles -u 1 output/types/* dist/",
+        "build:tinyearth": "yarn run build:types && rollup -c && npx copyfiles -u 3 output/types/src/**/* dist/",
         "build": "yarn run build:tinyearth",
         "build:demo": "webpack --config webpack.config.js",
         "start:demo": "webpack-dev-server --config webpack.config.js",
