@@ -7,7 +7,8 @@ import fg from "fast-glob";
 
 const entries = {};
 
-const excludeExts = ['.map', '.css', '.png', '.jpg', '.jpeg'];
+const assetExts = ['.png', '.jpg', '.jpeg'];
+const excludeExts = ['.map', '.css', ...assetExts];
 
 for (const file of fg.sync("output/src/**/*")) {
     if (!excludeExts.includes(path.extname(file))) {
@@ -30,18 +31,14 @@ const glslPlugin = glsl({
 
 const urlPlugin = url({
     limit: 0,
-    emitFiles: true,
-    fileName: '[dirname][name][extname]',
-    include: ['**/*.png', '**/*.jpg', '**/*.gif', '**/*.svg'],
-    sourceDir: "./output/src",
-    destDir: "dist"
+    emitFiles: false,
+    include: ['**/*.png', '**/*.jpg', '**/*.gif', '**/*.svg']
 });
 
 const mapFilterPlugin = {
     name: 'filter-maps',
     generateBundle(_, bundle) {
         for (const name of Object.keys(bundle)) {
-
             const maps = excludeExts.map(ext => `${ext}.map`);
             if (maps.some(map => name.endsWith(map))) {
                 delete bundle[name];
@@ -58,6 +55,7 @@ export default [
             format: 'esm',
             preserveModules: true,
             sourcemap: true,
+            // assetFileNames: 'assets/[name]-[hash][extname]',
             entryFileNames: (chunkInfo) => {
                 const id = chunkInfo.facadeModuleId;
                 if (!id) return '[name].js';
