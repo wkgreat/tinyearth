@@ -282,6 +282,10 @@ export default class TinyEarth {
         this.skybox = false;
     }
 
+    addTimerTickCallback(callback: (timer: Timer) => void): string {
+        return this.eventBus.addEventListener(EVENT_TIMER_TICK, { callback });
+    }
+
     draw() {
 
         if (this.globeTilePorgram === null || this.scene === null) {
@@ -289,7 +293,7 @@ export default class TinyEarth {
         }
         this.glInit();
 
-        this.globeTilePorgram.setMaterial(getSunPositionECEF(this.timer.getDate()), this.scene.getCamera());
+        this.globeTilePorgram.setMaterial(getSunPositionECEF(this.timer.date), this.scene.getCamera());
 
         let that = this;
 
@@ -297,7 +301,7 @@ export default class TinyEarth {
             this.eventBus.addEventListener(EVENT_TIMER_TICK, {
                 callback: (timer: Timer) => {
                     if (timer === that.timer) {
-                        const sunPos = getSunPositionECEF(timer.getDate());
+                        const sunPos = getSunPositionECEF(timer.date);
                         that.globeTilePorgram!.setUniform3f("light.position", sunPos.x, sunPos.y, sunPos.z);
                     }
                 }

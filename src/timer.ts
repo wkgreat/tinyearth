@@ -4,17 +4,22 @@ export const EVENT_TIMER_TICK = "timer:tick";
 
 export default class Timer {
 
-    currentTime: number;
+
     multipler = 1;
     running = false;
     onTimeChange = null;
-    lastFrameTime: number = 0;
-    currentFrameTime: number = 0;
+
+
+    #lastTime: number;
+    #currentTime: number;
+    #lastFrameTime: number = 0;
+    #currentFrameTime: number = 0;
 
     eventBus: EventBus | null = null;
 
     constructor(millseconds: number = Date.now()) {
-        this.currentTime = millseconds;
+        this.#currentTime = millseconds;
+        this.#lastTime = this.#currentTime;
     }
 
     setEventBus(eventBus: EventBus) {
@@ -36,43 +41,77 @@ export default class Timer {
     }
 
     #addTime(millseconds: number) {
-        this.currentTime += millseconds * this.multipler;
+        this.#lastTime = this.#currentTime;
+        this.#currentTime += millseconds * this.multipler;
     }
-    #subTime(millseconds: number) {
-        this.currentTime -= millseconds * this.multipler;
+
+    get lastTime(): number {
+        return this.#lastTime;
     }
-    getTime(): number {
-        return this.currentTime;
+
+    get lastDate(): Date {
+        return new Date(this.#lastTime);
     }
-    getDate(): Date {
-        return new Date(this.currentTime);
+
+    get time(): number {
+        return this.#currentTime;
     }
+
+    get currentTime(): number {
+        return this.#currentTime;
+    }
+
+    set currentTime(t) {
+        this.#lastTime = this.#currentTime;
+        this.#currentTime = t;
+    }
+
+    get date(): Date {
+        return new Date(this.#currentTime);
+    }
+
+    get currentDate(): Date {
+        return new Date(this.#currentTime);
+    }
+
+    get deltaTime(): number {
+        return this.currentTime - this.lastTime;
+    }
+
     setMultipler(m: number) {
         this.multipler = m;
     }
+
     getMultipler(): number {
         return this.multipler;
     }
+
     start() {
         this.running = true;
     }
+
     stop() {
         this.running = false;
     }
+
     reset() {
-        this.currentTime = Date.now();
+        this.#currentTime = Date.now();
     }
+
     #setLastFrameTime(t: number) {
-        this.lastFrameTime = t;
+        this.#lastFrameTime = t;
     }
+
     #setCurrentFrameTime(t: number) {
-        this.currentFrameTime = t;
+        this.#currentFrameTime = t;
     }
+
     getLastFrameTime(): number {
-        return this.lastFrameTime;
+        return this.#lastFrameTime;
     }
+
     getCurrentFrameTime(): number {
-        return this.currentFrameTime;
+        return this.#currentFrameTime;
     }
 
 }

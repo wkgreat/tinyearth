@@ -58,14 +58,14 @@ export default class TimerHelper extends BaseHelper {
 
         const item1 = this.createItem(
             this.createLabel("Multipler"),
-            this.createInput(this.timerMultiplerInputId, "range", { min: "1", max: "100000" }),
+            this.createInput(this.timerMultiplerInputId, "range", { min: "1", max: `${3600 * 24}` }),
             this.createLabel("", this.multiplierLabelId),
 
         );
 
         const item2 = this.createItem(
             this.createLabel("Time"),
-            this.createInput(this.timerTimeInputId, "datetime-local", { step: "1", value: this.#formatDateToDatetimeLocal(this.timer.getDate()) })
+            this.createInput(this.timerTimeInputId, "datetime-local", { step: "1", value: this.#formatDateToDatetimeLocal(this.timer.date) })
         );
 
         return this.createHelperDiv(this.helperId, this.title, [item0, item1, item2]);
@@ -84,8 +84,8 @@ export default class TimerHelper extends BaseHelper {
 
         if (this.timer.eventBus && timeInput) {
             this.timer.eventBus.addEventListener(EVENT_TIMER_TICK, {
-                callback: (_timer) => {
-                    timeInput.value = this.#formatDateToDatetimeLocal(_timer.getDate())
+                callback: (_timer: Timer) => {
+                    timeInput.value = this.#formatDateToDatetimeLocal(_timer.date)
                 }
             })
         }
@@ -124,7 +124,7 @@ export default class TimerHelper extends BaseHelper {
             resetButton.addEventListener('click', () => {
                 this.timer.reset();
                 if (timeInput) {
-                    timeInput.value = this.#formatDateToDatetimeLocal(this.timer.getDate());
+                    timeInput.value = this.#formatDateToDatetimeLocal(this.timer.date);
                 }
             });
         }
