@@ -65,10 +65,9 @@ class Camera {
     }
 
     /**
-     * 相机绕目标点(to)旋转
-     * @param dx x方向上旋转（绕y轴旋转）的角度
-     * @param dy y方向上旋转（绕x轴旋转）的角度
-     * TODO 根据比例尺移动，round时避免重复请求
+     * round by to point, in camera view coordinate system
+     * @param dx rotation angle in x axis direction (round by y axis)
+     * @param dy rotation angle in y axis direction (round by x axis)
     */
     round(dx: number, dy: number) {
 
@@ -92,6 +91,23 @@ class Camera {
 
         this._look();
 
+        for (let f of this.#changeFunc) {
+            f(this, { type: "round" });
+        }
+    }
+
+    /**
+     * camera round like earth is self rotating
+     * @param a the angular velocity in radians of earth rotation (from west to east)
+     * {@link ../docs/source/camera.md | Earth Self Rotation Effect}
+    */
+    roundForEarthSelfRotationEffect(a: number) {
+        const mat = mat4.create();
+        mat4.identity(mat);
+        mat4.rotateZ(mat, mat, -a);
+        vec4.transformMat4(this.#from, this.#from, mat);
+        this.#to = vec4.fromValues(0, 0, 0, 1);
+        this._look();
         for (let f of this.#changeFunc) {
             f(this, { type: "round" });
         }

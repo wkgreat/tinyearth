@@ -9,10 +9,11 @@ import { TileResources } from '../src/tilesource.js';
 import TinyEarth from '../src/tinyearth.js';
 import ContextMenuTool from "../src/tools/context_menu.js";
 import { MousePositionTool } from "../src/tools/mouse_position.js";
+import EarthRotationTool, { EarthRotationToolHelper } from "../src/tools/earth_rotation.js";
 
 function main() {
 
-    let tinyearth = null;
+    let tinyearth: TinyEarth | null = null;
 
     const canvas = document.getElementById("tinyearth-canvas") as HTMLCanvasElement;
     if (canvas !== null) {
@@ -61,7 +62,7 @@ function main() {
 
         //timer set
         tinyearth.startTimer();
-        tinyearth.setTimerMultipler(10000);
+        tinyearth.setTimerMultipler(3600);
         const timerHelper = new TimerHelper({ tinyearth });
         helperContainer.addHelper(timerHelper);
 
@@ -76,6 +77,16 @@ function main() {
             textElementId: "status-mouse-location-input"
         });
         mousePosTool.enable();
+
+        //earth self rotation
+        const earthRotationTool = new EarthRotationTool({ tinyearth });
+        earthRotationTool.disable();
+        const earthRotationToolHelper = new EarthRotationToolHelper({
+            tinyearth,
+            tool: earthRotationTool
+        });
+
+        helperContainer.addHelper(earthRotationToolHelper);
 
         tinyearth.draw();
     } else {
