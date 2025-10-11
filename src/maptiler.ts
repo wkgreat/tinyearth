@@ -337,26 +337,22 @@ export class Tile {
         return [xmin, ymin, xmax, ymax];
     }
 
-    async fetchTile() {
-        if (!this.ready) {
-            loadTileImage(this.url, this.x, this.y, this.z).then(image => {
-                this.image = image;
-                this.ready = true;
-            }).catch(e => {
-                this.ready = false;
-            });
-        }
-    }
-
     center() {
         const ext = this.extent();
         return [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2];
     }
 
-    async toMesh() {
-        await this.fetchTile();
-        const data = TileMesher.toMesh(this, 4, EPSG_4978);
-        this.mesh = data.vertices;
+    toMesh() {
+        if (!this.ready) {
+            loadTileImage(this.url, this.x, this.y, this.z).then(image => {
+                this.image = image;
+                const data = TileMesher.toMesh(this, 4, EPSG_4978);
+                this.mesh = data.vertices;
+                this.ready = true;
+            }).catch(e => {
+                this.ready = false;
+            });
+        }
     }
 }
 
