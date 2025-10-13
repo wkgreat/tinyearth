@@ -1,6 +1,6 @@
 import { glMatrix, mat4, vec3, vec4 } from "gl-matrix";
 import proj4 from "proj4";
-import { vec3_array, vec4_t3 } from "./glmatrix_utils.js";
+import { mat4_mul, mat4_rotateAroundLine, vec3_array, vec3_normalize, vec3_t4, vec4_t3 } from "./glmatrix_utils.js";
 import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
 import Scene from "./scene.js";
 import { LEFTBUTTON, WHEELBUTTON, type MouseEventHandler, type NumArr2, type NumArr3, type WheelEventHandler } from "./defines.js";
@@ -16,7 +16,6 @@ class Camera {
     #up: vec4 = vec4.fromValues(0, 1, 0, 0);
     #viewMtx: mat4 = mat4.create();
     #invViewMtx: mat4 = mat4.create();
-    // #changeFunc: CameraEventCallback[] = [];
 
     #scene: Scene;
 
@@ -165,12 +164,38 @@ class Camera {
             camera: this,
             type: "move"
         });
-
     }
 
-    // addOnchangeEeventListener(f: CameraEventCallback) {
-    //     this.#changeFunc.push(f);
-    // }
+    /**
+     * @param ax angle(radians) of target point orbit around line (earth center to camera position)
+     * @param ay angle(radians) of target point orbit around by x axis of view coordinator system
+    */
+    moveTarget(ax: number, ay: number) {
+
+        // the axis from earth center to camera position (perpendicular to ground)
+        const panAxis = vec3_t4(vec3_normalize(vec4_t3(this.#from)), 1);
+
+        // the axis of view space x axis transformed to world space
+        const tiltAxis = vec4.fromValues(1, 0, 0, 0); // the x axis in view space
+        vec4.transformMat4(tiltAxis, tiltAxis, this.#invViewMtx); // transform to world space
+
+        // transform
+        const panMatrix = mat4_rotateAroundLine(this.#from, panAxis, ax);
+        const tiltMatrix = mat4_rotateAroundLine(this.#from, tiltAxis, ay);
+        const m = mat4_mul(panMatrix, tiltMatrix);
+        vec4.transformMat4(this.#to, this.#to, m);
+
+        // set camera up alwary perpendicular to ground.
+        this.#up = panAxis;
+
+        this._look();
+
+        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+            camera: this,
+            type: "panTilt"
+        });
+
+    }
 
     getFrom() {
         return this.#from;
@@ -265,7 +290,7 @@ export class CameraMouseControl {
                 e.preventDefault();
                 const dx = e.clientX - that.lastMouseX;
                 const dy = e.clientY - that.lastMouseY;
-                that.camera.move(-dx / 5, dy / 5);
+                that.camera.moveTarget(-dx * (Math.PI / 180.0) / 10, -dy * (Math.PI / 180.0) / 10);
             }
             that.lastMouseX = e.clientX;
             that.lastMouseY = e.clientY;

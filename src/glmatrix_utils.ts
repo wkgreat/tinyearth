@@ -58,6 +58,10 @@ export function vec4_array(v: vec4): NumArr4 {
     return [v[0], v[1], v[2], v[3]];
 }
 
+export function vec4_sub(v0: vec4, v1: vec4): vec4 {
+    return vec4.sub(vec4.create(), v0, v1);
+}
+
 // mat4
 export function mat4_mul(m1: mat4, m2: mat4): mat4 {
     return mat4.multiply(mat4.create(), m1, m2);
@@ -65,4 +69,30 @@ export function mat4_mul(m1: mat4, m2: mat4): mat4 {
 
 export function mat4_inv(m: mat4): mat4 | null {
     return mat4.invert(mat4.create(), m);
+}
+
+export function mat4_rotateAroundLine(point: vec4, axis: vec4, a: number): mat4 {
+
+    const m = mat4.create()
+    const t1 = mat4.create()
+    const r = mat4.create()
+    const t2 = mat4.create()
+
+    // normalize axis vector
+    const nAxis = vec3.normalize(vec3.create(), axis)
+
+    //T1 move axis, make axis cross origin
+    mat4.fromTranslation(t1, vec3.negate(vec3.create(), point))
+
+    //R rotate around axis
+    mat4.fromRotation(r, a, nAxis)
+
+    //T2 move back
+    mat4.fromTranslation(t2, point)
+
+    mat4.multiply(m, r, t1)   // R * T1
+    mat4.multiply(m, t2, m)   // T2 * (R * T1)
+
+    return m
+
 }
