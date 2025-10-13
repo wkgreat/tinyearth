@@ -3,12 +3,12 @@ import proj4 from "proj4";
 import Camera from "./camera.js";
 import type { NumArr3 } from "./defines.js";
 import Frustum, { buildFrustum } from "./frustum.js";
-import { Tile } from "./maptiler.js";
+import { Tile, TileStatus } from "./maptiler.js";
 import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
 import type { xyzObject } from "./sun.js";
 import tileFragSource from "./tile.frag";
 import tileVertSource from "./tile.vert";
-import { type TileSourceInfo } from "./tilesource.js";
+import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
 
 interface GlobeTileProgramBufferInfo {
@@ -263,14 +263,13 @@ export class GlobeTileProgram {
                 }
                 provider.frustum = this.tinyearth.scene!.getFrustum();
                 const level = provider.curlevel;
-                provider.tiletree.fetchOrCreateTileNodesToLevel(level, provider.frustum, !provider.isStop(), async (node) => {
+                provider.tiletree.fixedLevelProvide(level, provider.frustum, async (node) => {
                     if (node && node.tile && node.tile.ready) {
                         that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
                     }
-                });
+                })
             }
         }
-
     }
 
     setFrustum(frustum: Frustum) {
@@ -288,57 +287,97 @@ interface TileNodeKey {
 
 export class TileNode {
 
-    key: TileNodeKey = { z: 0, x: 0, y: 0 };
+    #key: TileNodeKey;
 
-    tile: Tile | null = null;
+    #tile: Tile;
 
-    vertexBuffer: WebGLBuffer | null = null; //
+    #vertexBuffer: WebGLBuffer | null = null;
 
-    texture: WebGLTexture | null = null;
+    #texture: WebGLTexture | null = null;
 
-    children: TileNode[] = [];
+    #children: TileNode[] = [];
 
-    /**@param {Tile} tile */
-    static createTileNode(tile: Tile): TileNode {
-        const node = new TileNode();
-        node.key = { x: tile.x, y: tile.y, z: tile.z };
-        node.tile = tile;
-        node.children = [];
-        return node;
-    }
-    static createEmptyTileNode(z: number, x: number, y: number): TileNode {
-        const node = new TileNode();
-        node.key = { z, x, y };
-        node.tile = null;
-        node.children = [];
-        return node;
+    constructor(url: TileURL, z: number, x: number, y: number) {
+        this.#key = { z, x, y };
+        this.#tile = new Tile(url, x, y, z);
+        this.#children = [];
     }
 
+    get key(): TileNodeKey {
+        return { ...this.#key };
+    }
+
+    get tile(): Tile {
+        return this.#tile;
+    }
+
+    set tile(tile: Tile) {
+        this.#tile = tile;
+        // TODO need refresh texture.
+    }
+
+    set vertexBuffer(buffer: WebGLBuffer | null) {
+        this.#vertexBuffer = buffer;
+    }
+
+    get vertexBuffer(): WebGLBuffer | null {
+        return this.#vertexBuffer;
+    }
+
+    set texture(t: WebGLTexture | null) {
+        this.#texture = t;
+    }
+
+    get texture(): WebGLTexture | null {
+        return this.#texture;
+    }
+
+    get children(): TileNode[] {
+        return this.#children;
+    }
+
+    get ready(): boolean {
+        return this.#tile?.ready ?? false;
+    }
 }
 
 type TileNodeCallback = (node: TileNode) => void;
 
+enum TileNodeOmitStatus {
+    OMIT = "OMIT"
+}
+
+type TileNodeStatus = TileStatus | TileNodeOmitStatus;
+
+/**
+ * Tile Tree
+*/
 export class TileTree {
 
-    root: TileNode = TileNode.createEmptyTileNode(0, 0, 0);
+    //TODO or directly use Map<key,node> for tile tree instead?
+
+    root: TileNode;
     source: TileSourceInfo;
     #startRecLevel: number = 2;
     frustum: Frustum | null = null;
 
     constructor(source: TileSourceInfo) {
         this.source = source;
+        this.root = new TileNode(this.source.url, 0, 0, 0);
     }
 
-    addTile(tile: Tile) {
-        this.#addTileRec(this.root, tile);
+    addTile(tile: Tile): TileNode | null {
+        const node = this.#addTileRec(this.root, tile);
+        return node;
     }
 
-    #addTileRec(curNode: TileNode, tile: Tile) {
+    #addTileRec(curNode: TileNode, tile: Tile): TileNode | null {
         if (tile.z === curNode.key.z) {
             if (tile.x === curNode.key.x && tile.y === curNode.key.y) {
                 curNode.tile = tile;
+                return curNode;
             } else {
-                return;
+                return null;
             }
         } else if (curNode.key.z < tile.z) {
 
@@ -347,11 +386,7 @@ export class TileTree {
             const py = tile.y >> dz;
 
             if (px !== curNode.key.x || py !== curNode.key.y) {
-                return;
-            }
-
-            if (curNode.children === null) {
-                curNode.children = [];
+                return null;
             }
 
             if (curNode.children.length === 0) {
@@ -360,50 +395,29 @@ export class TileTree {
                 const cx = curNode.key.x;
                 const cy = curNode.key.y;
 
-                curNode.children.push(TileNode.createEmptyTileNode(cz + 1, cx << 1, cy << 1));
-                curNode.children.push(TileNode.createEmptyTileNode(cz + 1, cx << 1 | 1, cy << 1));
-                curNode.children.push(TileNode.createEmptyTileNode(cz + 1, cx << 1, cy << 1 | 1));
-                curNode.children.push(TileNode.createEmptyTileNode(cz + 1, cx << 1 | 1, cy << 1 | 1));
+                curNode.children.push(new TileNode(this.source.url, cz + 1, cx << 1, cy << 1));
+                curNode.children.push(new TileNode(this.source.url, cz + 1, cx << 1 | 1, cy << 1));
+                curNode.children.push(new TileNode(this.source.url, cz + 1, cx << 1, cy << 1 | 1));
+                curNode.children.push(new TileNode(this.source.url, cz + 1, cx << 1 | 1, cy << 1 | 1));
 
             }
 
+            let r: TileNode | null = null;
+
             for (let node of curNode.children) {
-                this.#addTileRec(node, tile);
-            }
-
-        } else {
-            console.error("should not be here.");
-            return;
-        }
-    }
-
-    //TODO 根据视锥体剪枝
-    forEachTileNodesOfLevel(z: number, callback: TileNodeCallback) {
-        this.#forEachTileNodesOfLevel(this.root, z, callback);
-    }
-
-    #forEachTileNodesOfLevel(curNode: TileNode, z: number, callback: TileNodeCallback) {
-        if (z === curNode.key.z) {
-            callback(curNode);
-        } else if (curNode.key.z < z) {
-            for (let node of curNode.children) {
-                let tile = null;
-                if (node.key.z >= 6) {
-                    tile = node.tile;
-                    if (!tile) {
-                        tile = new Tile("", node.key.x, node.key.y, node.key.z);
-                    }
-                    if (!tile.intersectFrustum(this.frustum) || tile.tileIsBack(this.frustum)) {
-                        continue;
-                    }
+                const thenode = this.#addTileRec(node, tile);
+                if (thenode !== null) {
+                    r = thenode;
                 }
-                this.#forEachTileNodesOfLevel(node, z, callback);
             }
+
+            return r;
+
         } else {
             console.error("should not be here.");
+            return null;
         }
     }
-
 
     forEachNode(callback: TileNodeCallback) {
         this.#forEachNode(this.root, callback);
@@ -466,72 +480,58 @@ export class TileTree {
         }
     }
 
-    fetchOrCreateTileNodesToLevel(z: number, frustum: Frustum, create: boolean, callback: TileNodeCallback) {
-
-        if (z <= this.#startRecLevel) {
-            const nrows = Math.pow(2, z);
-            const ncols = Math.pow(2, z);
-            for (let i = 0; i < ncols; ++i) {
-                for (let j = 0; j < nrows; ++j) {
-                    let node = this.getTileNode(z, i, j);
-                    if (!create && (node === null || node.tile === null)) { continue; }
-                    if (node === null) {
-                        const tile = new Tile(this.source.url, i, j, z);
-                        tile.toMesh();
-                        this.addTile(tile);
-                        node = this.getTileNode(z, i, j);
-                    } else if (node.tile === null) {
-                        const tile = new Tile(this.source.url, i, j, z);
-                        tile.toMesh();
-                        node.tile = tile;
-                    }
-                    if (node) {
-                        callback(node);
-                    }
-                }
-            }
-        } else {
-
-            this.#fetchOrCreateTileNodesToLevelRec(this.root, z, frustum, create, callback);
-
-        }
-
+    fixedLevelProvide(level: number, frustum: Frustum, callback: TileNodeCallback) {
+        this.#fixedLevelProvideRec(this.root, level, frustum, callback);
     }
 
-    #fetchOrCreateTileNodesToLevelRec(curNode: TileNode | null, z: number, frustum: Frustum, create: boolean, callback: TileNodeCallback) {
+    #fixedLevelProvideRec(node: TileNode, level: number, frustum: Frustum, callback: TileNodeCallback): TileNodeStatus {
 
-        if (curNode === null) {
-            return;
+
+        if (node.key.z > level) {
+            return TileNodeOmitStatus.OMIT;
         }
 
-        if (curNode.tile === null) {
-            if (create) {
-                curNode.tile = new Tile(this.source.url, curNode.key.x, curNode.key.y, curNode.key.z);
-                curNode.tile.toMesh();
+        if (node.key.z > this.#startRecLevel && (!node.tile.intersectFrustum(frustum)) || (node.key.z > this.#startRecLevel && node.tile.tileIsBack(frustum))) {
+            return TileNodeOmitStatus.OMIT;
+        }
+
+        let status: TileNodeStatus = TileNodeOmitStatus.OMIT;
+
+        if (node.key.z === level) {
+
+            status = node.tile.load();
+            if (status === TileStatus.READY) {
+                callback(node);
+            }
+
+        } else if (node.key.z < level) {
+
+            if (node.children.length === 0) {
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1, node.key.y << 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1 | 1, node.key.y << 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1, node.key.y << 1 | 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1 | 1, node.key.y << 1 | 1));
+            }
+
+            const childrenStatus = node.children.map(child => this.#fixedLevelProvideRec(child, level, frustum, callback));
+
+            if (this.#needInternalNodeRender(childrenStatus)) {
+                status = node.tile.load();
+                if (status === TileStatus.READY) {
+                    callback(node);
+                }
+            } else {
+                status = TileStatus.READY;
             }
         }
 
-        if (curNode.tile != null) {
-            if ((!curNode.tile.intersectFrustum(frustum)) || (curNode.key.z > this.#startRecLevel && curNode.tile.tileIsBack(frustum))) {
-                return;
-            }
-        }
+        return status;
+    }
 
-        if (curNode.key.z === z) {
-            callback(curNode);
-        } else if (curNode.key.z <= z) {
-            if (curNode.children.length === 0) {
-                curNode.children.push(TileNode.createEmptyTileNode(curNode.key.z + 1, curNode.key.x << 1, curNode.key.y << 1));
-                curNode.children.push(TileNode.createEmptyTileNode(curNode.key.z + 1, curNode.key.x << 1 | 1, curNode.key.y << 1));
-                curNode.children.push(TileNode.createEmptyTileNode(curNode.key.z + 1, curNode.key.x << 1, curNode.key.y << 1 | 1));
-                curNode.children.push(TileNode.createEmptyTileNode(curNode.key.z + 1, curNode.key.x << 1 | 1, curNode.key.y << 1 | 1));
-            }
-            for (let node of curNode.children) {
-                this.#fetchOrCreateTileNodesToLevelRec(node, z, frustum, create, callback);
-            }
-        } else {
-            console.warn("should not be here!");
-        }
+
+    // NEW LAOADING FAILED DEAD [READY OMIT]
+    #needInternalNodeRender(status: TileNodeStatus[]): boolean {
+        return !status.every(s => s === TileStatus.READY || s === TileNodeOmitStatus.OMIT);
     }
 
     vaccum() {
@@ -566,10 +566,12 @@ export class TileProvider {
         this.source = source;
         this.tiletree = new TileTree(source);
         this.callback = this.provideCallbackGen();
+
+        // TODO remove it.
         const camera = this.tinyearth.scene?.getCamera();
         if (camera) {
-            this.callback(camera);
-            camera.addOnchangeEeventListener(this.callback);
+            this.callback(camera); //TODO should not add event here.
+            camera.addOnchangeEeventListener(this.callback); //TODO should not add event here.
             this.curlevel = this.tileLevel();
         }
     }
@@ -588,7 +590,7 @@ export class TileProvider {
         const that = this;
         if (this.tiletree) {
             this.tiletree.forEachNode(node => {
-                node.tile = null;
+                node.tile = new Tile(source.url, node.key.x, node.key.y, node.key.z);
                 if (node.texture) {
                     that.tinyearth.gl!.deleteTexture(node.texture);
                     node.texture = null;
@@ -661,33 +663,11 @@ export class TileProvider {
         let that = this;
 
         const cb: TileProviderCallback = (camera, info) => {
-
             if (camera === null) {
                 return;
             }
-
             const level = that.tileLevelWithCamera(camera);
-
-            const projection = that.tinyearth.scene?.getProjection();
-
-            if (projection && camera) {
-                that.frustum = buildFrustum(projection, camera);
-            }
-
-            if (that.frustum === null) {
-                console.log("frustum is null");
-                return;
-            }
-
-            if (!that.isStop()) {
-                if (info === undefined || (info["type"] === 'zoom' && that.curlevel !== level) || info["type"] === 'move' || info["type"] === 'round') {
-
-                    that.curlevel = level;
-
-                    that.tiletree.fetchOrCreateTileNodesToLevel(level, that.frustum, true, async (node) => {/*do nothing*/ });
-
-                }
-            }
+            this.#curlevel = level;
         }
 
         return cb;

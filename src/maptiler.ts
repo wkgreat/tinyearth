@@ -14,6 +14,14 @@ glMatrix.setMatrixArrayType(Array);
 const XLIMIT: Interval = [-20037508.3427892, 20037508.3427892];
 const YLIMIT: Interval = [-20037508.3427892, 20037508.3427892];
 
+export enum TileStatus {
+    NEW = "NEW",
+    LOADING = "LOADING",
+    READY = "READY",
+    FAILED = "FAILED",
+    DEAD = "DEAD"
+};
+
 /**
  * Tile
 */
@@ -33,7 +41,11 @@ export class Tile {
 
     provider: TileProvider | null = null;
 
-    ready: boolean = false;
+    #retryTime: number = 0;
+
+    #maxRetryTile: number = 10;
+
+    #status: TileStatus = TileStatus.NEW;
 
     mesh: Float32Array | null = null;
 
@@ -45,6 +57,7 @@ export class Tile {
 
     constructor(url: TileURL, x: number = 0, y: number = 0, z: number = 0) {
         this.setUrl(url, x, y, z);
+        this.#status = TileStatus.NEW;
     }
 
     setUrl(url: TileURL, x: number = 0, y: number = 0, z: number = 0) {
@@ -342,17 +355,31 @@ export class Tile {
         return [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2];
     }
 
-    toMesh() {
-        if (!this.ready) {
+    load(): TileStatus {
+        if (this.#status === TileStatus.NEW || this.#status === TileStatus.FAILED) {
+            this.#status = TileStatus.LOADING;
             loadTileImage(this.url, this.x, this.y, this.z).then(image => {
                 this.image = image;
                 const data = TileMesher.toMesh(this, 4, EPSG_4978);
                 this.mesh = data.vertices;
-                this.ready = true;
+                this.#status = TileStatus.READY;
             }).catch(e => {
-                this.ready = false;
+                this.#status = TileStatus.FAILED;
+                this.#retryTime++;
+                if (this.#retryTime > this.#maxRetryTile) {
+                    this.#status = TileStatus.DEAD;
+                }
             });
         }
+        return this.#status;
+    }
+
+    get status(): TileStatus {
+        return this.#status;
+    }
+
+    get ready(): boolean {
+        return this.#status === TileStatus.READY;
     }
 }
 
