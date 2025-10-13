@@ -81,11 +81,11 @@ export class SkyBoxProgram {
     */
     createVetexData(scene: Scene) {
 
-        const cameraFrom = scene.getCamera().getFrom();
-        const cameraTo = scene.getCamera().getTo();
-        const near = scene.getProjection().getNear();
-        const fovy = scene.getProjection().getFovy();
-        const aspect = scene.getProjection().getAspect();
+        const cameraFrom = scene.camera.getFrom();
+        const cameraTo = scene.camera.getTo();
+        const near = scene.projection.getNear();
+        const fovy = scene.projection.getFovy();
+        const aspect = scene.projection.getAspect();
 
         const forward = vec3_normalize(vec3_sub(vec4_t3(cameraTo), vec4_t3(cameraFrom)));
         const worldup = vec3.fromValues(0, 0, 1);

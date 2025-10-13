@@ -10,6 +10,7 @@ import tileFragSource from "./tile.frag";
 import tileVertSource from "./tile.vert";
 import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
+import { TinyEarthEvent } from "./event.js";
 
 interface GlobeTileProgramBufferInfo {
     vertices?: WebGLBuffer,
@@ -261,7 +262,7 @@ export class GlobeTileProgram {
                 if (provider.night && !this.tinyearth.night) {
                     continue;
                 }
-                provider.frustum = this.tinyearth.scene!.getFrustum();
+                provider.frustum = this.tinyearth.scene!.frustum;
                 const level = provider.curlevel;
                 provider.tiletree.fixedLevelProvide(level, provider.frustum, async (node) => {
                     if (node && node.tile && node.tile.ready) {
@@ -540,7 +541,7 @@ export class TileTree {
 
 }
 
-type TileProviderCallback = (camera: Camera | null, info?: any) => void;
+type TileProviderCameraCallback = (info: { camera: Camera; type?: string }) => void
 
 
 export class TileProvider {
@@ -557,7 +558,13 @@ export class TileProvider {
 
     frustum: Frustum | null = null;
 
-    callback: TileProviderCallback | null = null;
+    #cameraCallback: TileProviderCameraCallback = (info) => {
+        if (info.camera === null || info.camera !== this.tinyearth.scene.camera) {
+            return;
+        }
+        const level = this.tileLevelWithCamera(info.camera);
+        this.#curlevel = level;
+    };
 
     opacity: number = 1.0;
 
@@ -565,15 +572,10 @@ export class TileProvider {
         this.tinyearth = tinyearth;
         this.source = source;
         this.tiletree = new TileTree(source);
-        this.callback = this.provideCallbackGen();
-
-        // TODO remove it.
-        const camera = this.tinyearth.scene?.getCamera();
-        if (camera) {
-            this.callback(camera); //TODO should not add event here.
-            camera.addOnchangeEeventListener(this.callback); //TODO should not add event here.
-            this.curlevel = this.tileLevel();
-        }
+        this.#cameraCallback({ camera: this.tinyearth.scene.camera });
+        this.tinyearth.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
+            callback: this.#cameraCallback
+        });
     }
 
     get night(): boolean {
@@ -638,7 +640,7 @@ export class TileProvider {
     }
 
     tileLevel() {
-        const camera = this.tinyearth.scene?.getCamera();
+        const camera = this.tinyearth.scene.camera;
         if (camera) {
             return this.tileLevelWithCamera(camera);
         } else {
@@ -655,22 +657,6 @@ export class TileProvider {
         const groundResolution = height * 2 / tileSize;
         const zoom = Math.log2(initialResolution / groundResolution) + 1;
         return Math.min(Math.max(Math.ceil(zoom), this.source.minLevel), this.source.maxLevel);
-    }
-
-
-    provideCallbackGen() {
-
-        let that = this;
-
-        const cb: TileProviderCallback = (camera, info) => {
-            if (camera === null) {
-                return;
-            }
-            const level = that.tileLevelWithCamera(camera);
-            this.#curlevel = level;
-        }
-
-        return cb;
     }
 
 }

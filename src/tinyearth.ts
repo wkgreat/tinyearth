@@ -1,13 +1,13 @@
 import { glMatrix, mat4 } from "gl-matrix";
 import { checkGLError } from "./debug.js";
-import EventBus from "./event.js";
+import EventBus, { TinyEarthEvent } from "./event.js";
 import { buildFrustum } from "./frustum.js";
 import { vec4_t3 } from "./glmatrix_utils.js";
 import Scene, { type SceneOptions } from "./scene.js";
 import { defaultSkyBoxSourceInfo, SkyBoxProgram, type SkyBoxSourceInfo } from "./skybox.js";
 import { getSunPositionECEF } from "./sun.js";
 import { GlobeTileProgram, TileProvider } from "./tilerender.js";
-import Timer, { EVENT_TIMER_TICK } from "./timer.js";
+import Timer from "./timer.js";
 import proj4 from "proj4";
 import { EPSG_4326, EPSG_4978 } from "./proj.js";
 import type { ColorLike } from "./color.js";
@@ -27,7 +27,7 @@ const cameraFrom = proj4(EPSG_4326, EPSG_4978, [118.778869, 32.043823, 1E7]);
 const cameraTo = [0, 0, 0];
 const cameraUp = [0, 0, 1];
 
-const defaultSceneOptions: Omit<SceneOptions, "viewport"> = {
+const defaultSceneOptions: Omit<SceneOptions, "viewport" | "tinyearth"> = {
     camera: {
         from: cameraFrom,
         to: cameraTo,
@@ -46,7 +46,7 @@ export default class TinyEarth {
 
     gl: WebGLRenderingContext;
 
-    scene: Scene | null = null;
+    scene: Scene;
 
     timer: Timer;
 
@@ -112,14 +112,14 @@ export default class TinyEarth {
         this.viewWidth = this.canvas.width;
 
 
-        const _sceneOpts: Omit<SceneOptions, "viewport"> = options.scene ?? defaultSceneOptions;
+        const _sceneOpts: Omit<SceneOptions, "viewport" | "tinyearth"> = options.scene ?? defaultSceneOptions;
         const viewportOpts = {
             viewport: {
                 width: this.viewWidth,
                 height: this.viewHeight
             }
         }
-        this.scene = new Scene({ ..._sceneOpts, ...viewportOpts });
+        this.scene = new Scene({ ..._sceneOpts, ...viewportOpts, tinyearth: this });
 
         this.scene.addCameraControl(this.canvas);
 
@@ -134,8 +134,8 @@ export default class TinyEarth {
                     that.gl.viewport(0, 0, that.viewWidth, that.viewHeight);
                 }
                 if (that.scene !== null) {
-                    that.scene.setViewHeight(that.viewHeight);
-                    that.scene.setViewWidth(that.viewWidth);
+                    that.scene.viewHeight = that.viewHeight;
+                    that.scene.viewWidth = that.viewWidth;
                 }
             }
         });
@@ -283,7 +283,7 @@ export default class TinyEarth {
     }
 
     addTimerTickCallback(callback: (timer: Timer) => void): string {
-        return this.eventBus.addEventListener(EVENT_TIMER_TICK, { callback });
+        return this.eventBus.addEventListener(TinyEarthEvent.TIMER_TICK, { callback });
     }
 
     draw() {
@@ -293,12 +293,12 @@ export default class TinyEarth {
         }
         this.glInit();
 
-        this.globeTilePorgram.setMaterial(getSunPositionECEF(this.timer.date), this.scene.getCamera());
+        this.globeTilePorgram.setMaterial(getSunPositionECEF(this.timer.date), this.scene.camera);
 
         let that = this;
 
         if (this.eventBus !== null) {
-            this.eventBus.addEventListener(EVENT_TIMER_TICK, {
+            this.eventBus.addEventListener(TinyEarthEvent.TIMER_TICK, {
                 callback: (timer: Timer) => {
                     if (timer === that.timer) {
                         const sunPos = getSunPositionECEF(timer.date);
@@ -317,17 +317,17 @@ export default class TinyEarth {
                     that.clearColor();
                     that.gl.clearDepth(1.0);
                     that.gl.clear(that.gl.COLOR_BUFFER_BIT | that.gl.DEPTH_BUFFER_BIT);
-                    that.scene.setViewWidth(that.viewWidth);
-                    that.scene.setViewHeight(that.viewHeight);
+                    that.scene.viewWidth = that.viewWidth;
+                    that.scene.viewHeight = that.viewHeight;
 
                     const modelMtx = mat4.create();
-                    const projMtx = that.scene.getProjection().perspective();
-                    const viewMtx = that.scene.getCamera().getMatrix().viewMtx;
+                    const projMtx = that.scene.projection.perspective();
+                    const viewMtx = that.scene.camera.getMatrix().viewMtx;
 
                     const invProjViewMtx = mat4.create();
                     mat4.multiply(invProjViewMtx, projMtx, viewMtx);
                     mat4.invert(invProjViewMtx, invProjViewMtx);
-                    const cameraWorldPos = vec4_t3(that.scene.getCamera().getFrom());
+                    const cameraWorldPos = vec4_t3(that.scene.camera.getFrom());
 
 
                     if (that.skyboxProgram !== null) {
@@ -343,10 +343,10 @@ export default class TinyEarth {
 
                     if (that.globeTilePorgram !== null) {
                         const frustum = buildFrustum(
-                            that.scene.getProjection(),
-                            that.scene.getCamera());
+                            that.scene.projection,
+                            that.scene.camera);
                         that.globeTilePorgram.setFrustum(frustum);
-                        that.globeTilePorgram.render(modelMtx, that.scene.getCamera(), projMtx);
+                        that.globeTilePorgram.render(modelMtx, that.scene.camera, projMtx);
                     }
                 }
             }

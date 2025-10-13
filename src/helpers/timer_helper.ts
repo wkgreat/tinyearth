@@ -1,5 +1,5 @@
+import { TinyEarthEvent } from "../event";
 import type Timer from "../timer";
-import { EVENT_TIMER_TICK } from "../timer";
 import { BaseHelper, type BaseHelperOptions } from "./helper";
 
 export interface TimerHelperOptions extends BaseHelperOptions {
@@ -83,7 +83,7 @@ export default class TimerHelper extends BaseHelper {
         const timeInput = document.getElementById(this.timerTimeInputId) as HTMLInputElement | null;
 
         if (this.timer.eventBus && timeInput) {
-            this.timer.eventBus.addEventListener(EVENT_TIMER_TICK, {
+            this.timer.eventBus.addEventListener(TinyEarthEvent.TIMER_TICK, {
                 callback: (_timer: Timer) => {
                     timeInput.value = this.#formatDateToDatetimeLocal(_timer.date)
                 }

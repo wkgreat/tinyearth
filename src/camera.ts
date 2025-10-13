@@ -4,6 +4,7 @@ import { vec3_array, vec4_t3 } from "./glmatrix_utils.js";
 import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
 import Scene from "./scene.js";
 import { LEFTBUTTON, WHEELBUTTON, type MouseEventHandler, type NumArr2, type NumArr3, type WheelEventHandler } from "./defines.js";
+import { TinyEarthEvent } from "./event.js";
 glMatrix.setMatrixArrayType(Array);
 
 export type CameraEventCallback = (camera: Camera, info: any) => void;
@@ -15,12 +16,12 @@ class Camera {
     #up: vec4 = vec4.fromValues(0, 1, 0, 0);
     #viewMtx: mat4 = mat4.create();
     #invViewMtx: mat4 = mat4.create();
-    #changeFunc: CameraEventCallback[] = [];
+    // #changeFunc: CameraEventCallback[] = [];
 
-    scene: Scene;
+    #scene: Scene;
 
     constructor(scene: Scene, from: vec4, to: vec4, up: vec4) {
-        this.scene = scene;
+        this.#scene = scene;
         this.setFrom(from);
         this.setTo(to);
         this.setUp(up);
@@ -91,9 +92,10 @@ class Camera {
 
         this._look();
 
-        for (let f of this.#changeFunc) {
-            f(this, { type: "round" });
-        }
+        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+            camera: this,
+            type: "round"
+        });
     }
 
     /**
@@ -108,9 +110,11 @@ class Camera {
         vec4.transformMat4(this.#from, this.#from, mat);
         this.#to = vec4.fromValues(0, 0, 0, 1);
         this._look();
-        for (let f of this.#changeFunc) {
-            f(this, { type: "round" });
-        }
+
+        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+            camera: this,
+            type: "roundForEarthSelfRotationEffect"
+        });
     }
 
     /**
@@ -131,9 +135,10 @@ class Camera {
         vec4.add(this.#from, this.#from, d);
         this._look();
 
-        for (let f of this.#changeFunc) {
-            f(this, { type: "zoom" });
-        }
+        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+            camera: this,
+            type: "zoom"
+        });
     }
 
     /**
@@ -155,15 +160,17 @@ class Camera {
         vec4.transformMat4(this.#to, viewTo4, this.#invViewMtx);
 
         this._look();
-        for (let f of this.#changeFunc) {
-            f(this, { type: "move" });
-        }
+
+        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+            camera: this,
+            type: "move"
+        });
 
     }
 
-    addOnchangeEeventListener(f: CameraEventCallback) {
-        this.#changeFunc.push(f);
-    }
+    // addOnchangeEeventListener(f: CameraEventCallback) {
+    //     this.#changeFunc.push(f);
+    // }
 
     getFrom() {
         return this.#from;
@@ -171,10 +178,6 @@ class Camera {
 
     getTo() {
         return this.#to;
-    }
-
-    getLevel() {
-
     }
 
     getHeightToSurface() {
@@ -190,9 +193,9 @@ class Camera {
      * TODO 暂时不考虑视角倾斜
     */
     getResolution(): NumArr2 {
-        const projection = this.scene.getProjection();
-        const viewWidth = this.scene.getViewWidth();
-        const viewHeight = this.scene.getViewHeight();
+        const projection = this.#scene.projection;
+        const viewWidth = this.#scene.viewWidth;
+        const viewHeight = this.#scene.viewHeight;
         const height = this.getHeightToSurface();
         const half_foy = projection.fovy / 2.0;
         const half_fox = projection.getFovx() / 2.0;
@@ -202,7 +205,7 @@ class Camera {
     }
 
     getFieldFromEarthCenter() {
-        const projection = this.scene.getProjection();
+        const projection = this.#scene.projection;
         const height = this.getHeightToSurface();
         const half_foy = projection.fovy / 2.0;
         const half_fox = projection.getFovx() / 2.0;

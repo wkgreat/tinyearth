@@ -1,6 +1,6 @@
+import { TinyEarthEvent } from "../event";
 import { BaseHelper, type BaseHelperOptions } from "../helpers/helper";
 import type Timer from "../timer";
-import { EVENT_TIMER_TICK } from "../timer";
 import type TinyEarth from "../tinyearth";
 
 /**
@@ -44,14 +44,14 @@ export default class EarthRotationTool {
         const callback = (timer: Timer) => {
             const dt = timer.deltaTime;
             const w = this.#velocity * dt;
-            this.tinyearth.scene!.getCamera().roundForEarthSelfRotationEffect(w);
+            this.tinyearth.scene.camera.roundForEarthSelfRotationEffect(w);
         };
-        this.#callbackId = this.tinyearth.eventBus.addEventListener(EVENT_TIMER_TICK, { callback });
+        this.#callbackId = this.tinyearth.eventBus.addEventListener(TinyEarthEvent.TIMER_TICK, { callback });
     }
 
     disable() {
         if (this.#callbackId) {
-            this.tinyearth.eventBus.removeEventListener(EVENT_TIMER_TICK, this.#callbackId);
+            this.tinyearth.eventBus.removeEventListener(TinyEarthEvent.TIMER_TICK, this.#callbackId);
             this.#callbackId = null;
         }
     }
