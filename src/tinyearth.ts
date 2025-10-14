@@ -321,13 +321,13 @@ export default class TinyEarth {
                     that.scene.viewHeight = that.viewHeight;
 
                     const modelMtx = mat4.create();
-                    const projMtx = that.scene.projection.perspective();
-                    const viewMtx = that.scene.camera.getMatrix().viewMtx;
+                    const projMtx = that.scene.projection.perspectiveMatrix;
+                    const viewMtx = that.scene.camera.viewMatrix;
 
                     const invProjViewMtx = mat4.create();
                     mat4.multiply(invProjViewMtx, projMtx, viewMtx);
                     mat4.invert(invProjViewMtx, invProjViewMtx);
-                    const cameraWorldPos = vec4_t3(that.scene.camera.getFrom());
+                    const cameraWorldPos = vec4_t3(that.scene.camera.from);
 
 
                     if (that.skyboxProgram !== null) {

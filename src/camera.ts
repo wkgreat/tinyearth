@@ -21,47 +21,31 @@ class Camera {
 
     constructor(scene: Scene, from: vec4, to: vec4, up: vec4) {
         this.#scene = scene;
-        this.setFrom(from);
-        this.setTo(to);
-        this.setUp(up);
+        this.#setVec4(this.#from, from)
+        this.#setVec4(this.#to, to)
+        this.#setVec4(this.#up, up)
+        this._look();
     }
 
-    setFrom(vin: vec3 | vec4) {
-        this.setVector4(this.#from, vin);
-    }
-    setTo(vin: vec3 | vec4) {
-        this.setVector4(this.#to, vin);
-    }
-    setUp(vin: vec3 | vec4) {
-        this.setVector4(this.#up, vin);
-    }
-
-    setVector4(vout: vec4, vin: vec3 | vec4) {
-        const len = vin.length;
-        if (len < 3) {
-            console.log("len < 3");
-        } else if (len == 3) {
+    #setVec4(vout: vec4, vin: vec3 | vec4) {
+        if (vin.length == 3) {
             vec4.set(vout, vin[0], vin[1], vin[2], 1);
         } else {
             vec4.set(vout, vin[0], vin[1], vin[2], vin[3] as number);
         }
     }
 
-    _vec3(v: vec3 | vec4) {
-        return vec3.set(vec3.create(), v[0], v[1], v[2]);
-    }
-
     _look() {
-        mat4.lookAt(this.#viewMtx, this._vec3(this.#from), this._vec3(this.#to), this._vec3(this.#up));
+        mat4.lookAt(this.#viewMtx, vec4_t3(this.#from), vec4_t3(this.#to), vec4_t3(this.#up));
         mat4.invert(this.#invViewMtx, this.#viewMtx);
     }
 
-    getMatrix() {
-        this._look();
-        return {
-            viewMtx: this.#viewMtx,
-            invViewMtx: this.#invViewMtx
-        };
+    get viewMatrix() {
+        return this.#viewMtx;
+    }
+
+    get ViewMatrixInv() {
+        return this.#invViewMtx;
     }
 
     /**
@@ -80,8 +64,8 @@ class Camera {
 
         const viewFrom4 = vec4.transformMat4(vec4.create(), this.#from, this.#viewMtx);
         const viewTo4 = vec4.transformMat4(vec4.create(), this.#to, this.#viewMtx);
-        const viewFrom3 = this._vec3(viewFrom4);
-        const viewTo3 = this._vec3(viewTo4);
+        const viewFrom3 = vec4_t3(viewFrom4);
+        const viewTo3 = vec4_t3(viewTo4);
 
         vec3.rotateY(viewFrom3, viewFrom3, viewTo3, ax); // 绕Y轴旋转dx
         vec3.rotateX(viewFrom3, viewFrom3, viewTo3, ay); // 绕x轴旋转dy
@@ -197,11 +181,19 @@ class Camera {
 
     }
 
-    getFrom() {
+    get from() {
         return this.#from;
     }
 
-    getTo() {
+    get position() {
+        return this.#from;
+    }
+
+    get to() {
+        return this.#to;
+    }
+
+    get target() {
         return this.#to;
     }
 
@@ -223,7 +215,7 @@ class Camera {
         const viewHeight = this.#scene.viewHeight;
         const height = this.getHeightToSurface();
         const half_foy = projection.fovy / 2.0;
-        const half_fox = projection.getFovx() / 2.0;
+        const half_fox = projection.fovx / 2.0;
         const h = height * Math.tan(half_foy) * 2;
         const v = height * Math.tan(half_fox) * 2;
         return [v / viewWidth, h / viewHeight];
@@ -233,7 +225,7 @@ class Camera {
         const projection = this.#scene.projection;
         const height = this.getHeightToSurface();
         const half_foy = projection.fovy / 2.0;
-        const half_fox = projection.getFovx() / 2.0;
+        const half_fox = projection.fovx / 2.0;
         const vlength = height * Math.tan(half_foy);
         const hlength = height * Math.tan(half_fox);
         const radius = EARTH_RADIUS;

@@ -1,4 +1,4 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec4 } from "gl-matrix";
 import proj4 from "proj4";
 import Camera from "./camera.js";
 import type { NumArr3 } from "./defines.js";
@@ -11,6 +11,10 @@ import tileVertSource from "./tile.vert";
 import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
 import { TinyEarthEvent } from "./event.js";
+import type Scene from "./scene.js";
+import { vec3_t4, vec4_affine } from "./glmatrix_utils.js";
+
+const DefaultTileSize: number = 256;
 
 interface GlobeTileProgramBufferInfo {
     vertices?: WebGLBuffer,
@@ -137,7 +141,7 @@ export class GlobeTileProgram {
 
     setMaterial(sunPos: xyzObject, camera: Camera) {
         if (this.gl && this.program) {
-            const from = camera.getFrom();
+            const from = camera.from;
             this.gl.useProgram(this.program);
             this.setUniform3f("light.position", sunPos.x, sunPos.y, sunPos.z);
             this.setUniform4f("light.color", 1.0, 1.0, 1.0, 1.0);
@@ -243,7 +247,7 @@ export class GlobeTileProgram {
             this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_normal")); // 激活属性
 
             this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_modelMtx"), false, modelMtx);
-            this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_viewMtx"), false, camera.getMatrix().viewMtx);
+            this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_viewMtx"), false, camera.viewMatrix);
             this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_projMtx"), false, projMtx);
 
             this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
@@ -262,9 +266,17 @@ export class GlobeTileProgram {
                 if (provider.night && !this.tinyearth.night) {
                     continue;
                 }
+
                 provider.frustum = this.tinyearth.scene!.frustum;
                 const level = provider.curlevel;
-                provider.tiletree.fixedLevelProvide(level, provider.frustum, async (node) => {
+
+                // provider.tiletree.fixedLevelProvide(level, provider.frustum, async (node) => {
+                //     if (node && node.tile && node.tile.ready) {
+                //         that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
+                //     }
+                // })
+
+                provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, async (node) => {
                     if (node && node.tile && node.tile.ready) {
                         that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
                     }
@@ -530,10 +542,93 @@ export class TileTree {
     }
 
 
+    #vec4_dist2d(v0: vec4, v1: vec4): number {
+
+        return Math.sqrt(Math.pow(v1[0] - v0[0], 2) + Math.pow(v1[1] - v0[1], 2));
+
+    }
+
+    getTileResolution(scene: Scene, tile: Tile): number {
+
+        const corners = tile.getTileCorner();
+        const m = scene.worldToScreenMatrix;
+
+        let p0 = vec3_t4(corners[0]);
+        let p1 = vec3_t4(corners[1]);
+        let p2 = vec3_t4(corners[2]);
+        let p3 = vec3_t4(corners[3]);
+
+        p0 = vec4_affine(p0, m);
+        p1 = vec4_affine(p1, m);
+        p2 = vec4_affine(p2, m);
+        p3 = vec4_affine(p3, m);
+
+        const r0 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
+        const r1 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
+        const r2 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
+        const r3 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
+
+        const mr = (r0 + r1 + r2 + r3) / 4.0;
+
+        return mr;
+    }
+
+    dynamicLevelProvide(level: number, scene: Scene, callback: TileNodeCallback) {
+        this.#dynamicLevelProvideRec(this.root, level, scene, callback);
+    }
+
+    #dynamicLevelProvideRec(node: TileNode, level: number, scene: Scene, callback: TileNodeCallback): TileNodeStatus {
+
+
+        if (node.key.z > level) {
+            return TileNodeOmitStatus.OMIT;
+        }
+
+        if (node.key.z > this.#startRecLevel && ((!node.tile.intersectFrustum(scene.frustum)) || node.tile.tileIsBack(scene.frustum))) {
+            return TileNodeOmitStatus.OMIT;
+        }
+
+        let status: TileNodeStatus = TileNodeOmitStatus.OMIT;
+
+        const tileRes = this.getTileResolution(scene, node.tile);
+
+        if ((node.key.z > 3 && tileRes <= 1.0) || node.key.z === level) {
+
+            status = node.tile.load();
+            if (status === TileStatus.READY) {
+                callback(node);
+            }
+
+        } else if (node.key.z < level) {
+
+            if (node.children.length === 0) {
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1, node.key.y << 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1 | 1, node.key.y << 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1, node.key.y << 1 | 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1 | 1, node.key.y << 1 | 1));
+            }
+
+            const childrenStatus = node.children.map(child => this.#dynamicLevelProvideRec(child, level, scene, callback));
+
+            if (this.#needInternalNodeRender(childrenStatus)) {
+                status = node.tile.load();
+                if (status === TileStatus.READY) {
+                    callback(node);
+                }
+            } else {
+                status = TileStatus.READY;
+            }
+        }
+
+        return status;
+    }
+
     // NEW LAOADING FAILED DEAD [READY OMIT]
     #needInternalNodeRender(status: TileNodeStatus[]): boolean {
         return !status.every(s => s === TileStatus.READY || s === TileNodeOmitStatus.OMIT);
     }
+
+
 
     vaccum() {
         //TODO 定期清理不用的tile
@@ -650,7 +745,7 @@ export class TileProvider {
 
     tileLevelWithCamera(camera: Camera) {
         const tileSize = 256;
-        const from = camera.getFrom()
+        const from = camera.from
         let pos: NumArr3 = proj4(EPSG_4978, EPSG_4326, [from[0], from[1], from[2]]);
         let height = pos[2];
         const initialResolution = 2 * Math.PI * EARTH_RADIUS / tileSize;

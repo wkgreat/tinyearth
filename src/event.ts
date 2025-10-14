@@ -6,7 +6,8 @@ interface CallbackInfo {
 
 export enum TinyEarthEvent {
     TIMER_TICK = "timer:tick",
-    CAMERA_CHANGE = "camera:change"
+    CAMERA_CHANGE = "camera:change",
+    PROJECTION_CHANGE = "projection:chage"
 }
 
 export default class EventBus {

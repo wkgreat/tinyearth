@@ -3,6 +3,7 @@ import Camera, { CameraMouseControl } from "./camera.js";
 import Frustum, { buildFrustum } from "./frustum.js";
 import Projection from "./projection.js";
 import type TinyEarth from "./tinyearth.js";
+import { TinyEarthEvent } from "./event.js";
 
 export interface SceneOptions {
 
@@ -34,6 +35,10 @@ export default class Scene {
     #viewHeight: number = 0;
     #viewWidth: number = 0;
 
+    #frustum: Frustum;
+    #worldToScreenMatrix: mat4;
+
+    // move to tools
     #cameraControl: CameraMouseControl | null = null;
 
     constructor(options: SceneOptions) {
@@ -42,7 +47,22 @@ export default class Scene {
         this.#projection = new Projection(this, options.projection.fovy, options.viewport.width / options.viewport.height, options.projection.near, options.projection.far);
         this.#viewWidth = options.viewport.width;
         this.#viewHeight = options.viewport.height;
+        this.#frustum = this.computeFrustum();
+        this.#worldToScreenMatrix = this.computeWorldToScreenMatrix();
 
+        this.tinyearth.eventBus.addEventListener(TinyEarthEvent.PROJECTION_CHANGE, {
+            callback: (info) => {
+                this.computeFrustum();
+                this.computeWorldToScreenMatrix();
+            }
+        });
+
+        this.tinyearth.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
+            callback: (info) => {
+                this.computeFrustum();
+                this.computeWorldToScreenMatrix();
+            }
+        });
     }
 
     get tinyearth(): TinyEarth {
@@ -51,12 +71,14 @@ export default class Scene {
 
     set viewHeight(height: number) {
         this.#viewHeight = height;
-        this.#projection.setAspect(this.#viewWidth / this.#viewHeight);
+        this.#projection.aspect = this.#viewWidth / this.#viewHeight;
+        this.#worldToScreenMatrix = this.computeWorldToScreenMatrix();
     }
 
     set viewWidth(width: number) {
         this.#viewWidth = width;
-        this.#projection.setAspect(this.#viewWidth / this.#viewHeight);
+        this.#projection.aspect = this.#viewWidth / this.#viewHeight;
+        this.#worldToScreenMatrix = this.computeWorldToScreenMatrix();
     }
 
     get viewHeight(): number {
@@ -102,8 +124,25 @@ export default class Scene {
         }
     }
 
+    computeFrustum(): Frustum {
+        this.#frustum = buildFrustum(this.#projection, this.#camera);
+        return this.#frustum;
+    }
+
+    computeWorldToScreenMatrix(): mat4 {
+        const m = mat4.create();
+        mat4.multiply(m, this.#projection.perspectiveMatrix, this.#camera.viewMatrix);
+        mat4.multiply(m, this.viewportMatrix, m);
+        this.#worldToScreenMatrix = m;
+        return this.#worldToScreenMatrix;
+    }
+
     get frustum(): Frustum {
-        return buildFrustum(this.#projection, this.#camera);
+        return this.#frustum;
+    }
+
+    get worldToScreenMatrix(): mat4 {
+        return this.#worldToScreenMatrix;
     }
 
 };
