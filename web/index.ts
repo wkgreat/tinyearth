@@ -4,6 +4,7 @@ import './styles.css';
 import { TinyEarthHelperContainer } from "../src/helpers/helper.js";
 import TileProviderHelper from '../src/helpers/tileprovider_helper.js';
 import TinyEarthHelper from "../src/helpers/tinyearth_helper.js";
+import CameraHelper from "../src/helpers/camera_helper.js";
 import TimerHelper from '../src/helpers/timer_helper.js';
 import { TileResources } from '../src/tilesource.js';
 import TinyEarth from '../src/tinyearth.js';
@@ -33,6 +34,10 @@ function main() {
         // tinyearth helper
         const tinyearthHelper = new TinyEarthHelper({ tinyearth });
         helperContainer.addHelper(tinyearthHelper);
+
+        // camera helper
+        const cameraHelper = new CameraHelper({ tinyearth });
+        helperContainer.addHelper(cameraHelper);
 
         // tile provider
         const provider = tinyearth.addTileSource(TileResources.GOOGLE_IMAGERY);
@@ -67,7 +72,7 @@ function main() {
         helperContainer.addHelper(timerHelper);
 
         //context menu
-        const contextMenu = new ContextMenuTool(tinyearth);
+        const contextMenu = new ContextMenuTool({ tinyearth });
         contextMenu.enable();
 
         //mouse position tool

@@ -3,6 +3,30 @@ import { Ray, rayCrossSpheriod, Spheriod, type Point3D } from "../geometry";
 import { mat4_inv, mat4_mul, vec3_normalize, vec3_sub, vec4_affine, vec4_t3 } from "../glmatrix_utils";
 import type Scene from "../scene";
 import { WGS84_SPHERIOD_A, WGS84_SPHERIOD_B } from "../proj";
+import type TinyEarth from "../tinyearth";
+
+export interface BaseToolOptions {
+    tinyearth: TinyEarth
+}
+
+export default abstract class BaseTool {
+
+    #tinyearth: TinyEarth
+
+    constructor(options: BaseToolOptions) {
+        this.#tinyearth = options.tinyearth;
+        this.bind();
+    }
+
+    get tinyearth(): TinyEarth {
+        return this.#tinyearth;
+    }
+
+    bind() {
+        this.#tinyearth.addTool(this);
+    }
+
+}
 
 export function positionAtPixel(scene: Scene, x: number, y: number): Point3D | null {
 

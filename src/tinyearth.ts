@@ -13,6 +13,8 @@ import { EPSG_4326, EPSG_4978 } from "./proj.js";
 import type { ColorLike } from "./color.js";
 import Color from "./color.js";
 import { TileResources, type TileSourceInfo } from "./tilesource.js";
+import type BaseTool from "./tools/tool.js";
+import CameraMouseControlTool from "./tools/camera_mouse_control.js";
 glMatrix.setMatrixArrayType(Array);
 
 interface TinyEarthOptions {
@@ -70,6 +72,8 @@ export default class TinyEarth {
 
     bgcolor: Color = new Color(0, 0, 0, 1);
 
+    #tools: BaseTool[] = [];
+
     constructor(options: TinyEarthOptions) {
 
         this.eventBus = new EventBus();
@@ -121,8 +125,6 @@ export default class TinyEarth {
         }
         this.scene = new Scene({ ..._sceneOpts, ...viewportOpts, tinyearth: this });
 
-        this.scene.addCameraControl(this.canvas);
-
         const that = this;
         window.addEventListener('resize', () => {
             if (that.canvas !== null) {
@@ -156,6 +158,12 @@ export default class TinyEarth {
         this.skyboxProgram = new SkyBoxProgram(this);
 
         this.setSkyboxSource(defaultSkyBoxSourceInfo);
+
+        // default Tools
+        const cameraMouseControlTool = new CameraMouseControlTool({
+            tinyearth: this
+        });
+        cameraMouseControlTool.enable();
     }
 
     clearColor() {
@@ -244,6 +252,12 @@ export default class TinyEarth {
 
     getBackGroudColor(): Color {
         return this.bgcolor;
+    }
+
+    addTool(tool: BaseTool) {
+        if (!this.#tools.includes(tool)) {
+            this.#tools.push(tool);
+        }
     }
 
     startDraw() {

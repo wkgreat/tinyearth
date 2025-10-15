@@ -2,7 +2,7 @@ import proj4 from "proj4";
 import type { MouseEventHandler } from "../defines.js";
 import { EPSG_4326, EPSG_4978 } from "../proj.js";
 import TinyEarth from "../tinyearth.js";
-import { positionAtPixel } from "./tool.js";
+import BaseTool, { positionAtPixel, type BaseToolOptions } from "./tool.js";
 import type ContextMenuTool from "./context_menu.js";
 
 type ValueElement =
@@ -11,15 +11,13 @@ type ValueElement =
     HTMLSelectElement |
     HTMLButtonElement;
 
-interface MousePositionToolOptions {
-    tinyearth: TinyEarth
+interface MousePositionToolOptions extends BaseToolOptions {
     contextMenu?: ContextMenuTool
     textElementId?: string
 }
 
-export class MousePositionTool {
+export class MousePositionTool extends BaseTool {
 
-    tinyearth: TinyEarth;
     handleMouseMoveFunc: MouseEventHandler | null = null;
 
     mouseX: number = 0;
@@ -28,7 +26,7 @@ export class MousePositionTool {
     textElementId: string = "";
 
     constructor(options: MousePositionToolOptions) {
-        this.tinyearth = options.tinyearth;
+        super({ tinyearth: options.tinyearth });
         if (options.contextMenu) {
             const option = document.createElement('li');
             option.innerHTML = "复制坐标";

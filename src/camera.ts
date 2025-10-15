@@ -1,10 +1,10 @@
 import { glMatrix, mat4, vec3, vec4 } from "gl-matrix";
 import proj4 from "proj4";
+import { type NumArr2, type NumArr3 } from "./defines.js";
+import { TinyEarthEvent } from "./event.js";
 import { mat4_mul, mat4_rotateAroundLine, vec3_array, vec3_normalize, vec3_t4, vec4_t3 } from "./glmatrix_utils.js";
 import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
 import Scene from "./scene.js";
-import { LEFTBUTTON, WHEELBUTTON, type MouseEventHandler, type NumArr2, type NumArr3, type WheelEventHandler } from "./defines.js";
-import { TinyEarthEvent } from "./event.js";
 glMatrix.setMatrixArrayType(Array);
 
 export type CameraEventCallback = (camera: Camera, info: any) => void;
@@ -197,6 +197,37 @@ class Camera {
         return this.#to;
     }
 
+    get up() {
+        return this.#up;
+    }
+
+    set from(from: vec4) {
+        this.#from = from;
+        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+            camera: this,
+            type: "from"
+        });
+        this._look();
+    }
+
+    set to(to: vec4) {
+        this.#to = to;
+        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+            camera: this,
+            type: "to"
+        });
+        this._look();
+    }
+
+    set up(up: vec4) {
+        this.#up = up;
+        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+            camera: this,
+            type: "up"
+        });
+        this._look();
+    }
+
     getHeightToSurface() {
         const from = proj4(EPSG_4978, EPSG_4326, vec3_array(vec4_t3(this.#from)));
         return from[2];
@@ -236,112 +267,6 @@ class Camera {
 
 
 
-};
-
-export class CameraMouseControl {
-
-    camera: Camera;
-    canvas: HTMLCanvasElement;
-    leftButtonDown: boolean = false;
-    wheelButtonDown: boolean = false;
-    lastMouseX: number = 0;
-    lastMouseY: number = 0;
-    handleMouseDownFunc: MouseEventHandler | null = null;
-    handleMouseMoveFunc: MouseEventHandler | null = null;
-    handleMouseUpFunc: MouseEventHandler | null = null;
-    handleMouseLeaveFunc: MouseEventHandler | null = null;
-    handleMouseWheelFunc: WheelEventHandler | null = null;
-
-    constructor(camera: Camera, canvas: HTMLCanvasElement) {
-        this.camera = camera;
-        this.canvas = canvas;
-    }
-
-    handleMouseDown(): MouseEventHandler {
-        const that = this;
-        return (e) => {
-            if (e.button == LEFTBUTTON) {
-                that.leftButtonDown = true;
-            } else if (e.button == WHEELBUTTON) {
-                that.wheelButtonDown = true;
-            }
-            that.lastMouseX = e.clientX;
-            that.lastMouseY = e.clientY;
-
-        }
-    }
-
-    handleMouseMove(): MouseEventHandler {
-        const that = this;
-        return (e) => {
-            if (this.leftButtonDown) {
-                const dx = e.clientX - that.lastMouseX;
-                const dy = e.clientY - that.lastMouseY;
-                that.camera.round(dx, dy);
-            } else if (this.wheelButtonDown) {
-                e.preventDefault();
-                const dx = e.clientX - that.lastMouseX;
-                const dy = e.clientY - that.lastMouseY;
-                that.camera.moveTarget(-dx * (Math.PI / 180.0) / 10, -dy * (Math.PI / 180.0) / 10);
-            }
-            that.lastMouseX = e.clientX;
-            that.lastMouseY = e.clientY;
-        }
-    }
-
-    handleMouseUp(): MouseEventHandler {
-        const that = this;
-        return (e) => {
-            if (e.button == LEFTBUTTON) {
-                that.leftButtonDown = false;
-            }
-            if (e.button == WHEELBUTTON) {
-                that.wheelButtonDown = false;
-            }
-        }
-    }
-
-    handleMouseLeave(): MouseEventHandler {
-        const that = this;
-        return (e) => {
-            that.leftButtonDown = false;
-            that.wheelButtonDown = false;
-        }
-    }
-
-    handleMouseWheel(): WheelEventHandler {
-        const that = this;
-        return (e) => {
-            e.preventDefault();
-            this.camera.zoom(e.deltaY / 120 * (1 / 10));
-        }
-    }
-
-    enable() {
-        this.handleMouseDownFunc = this.handleMouseDown();
-        this.handleMouseMoveFunc = this.handleMouseMove();
-        this.handleMouseUpFunc = this.handleMouseUp();
-        this.handleMouseLeaveFunc = this.handleMouseLeave();
-        this.handleMouseWheelFunc = this.handleMouseWheel();
-        this.canvas.addEventListener('mousedown', this.handleMouseDownFunc);
-        this.canvas.addEventListener('mousemove', this.handleMouseMoveFunc)
-        this.canvas.addEventListener('mouseup', this.handleMouseUpFunc);
-        this.canvas.addEventListener('mouseleave', this.handleMouseLeaveFunc);
-        this.canvas.addEventListener('wheel', this.handleMouseWheelFunc);
-    }
-    disable() {
-        //TODO resolve any type
-        this.canvas.removeEventListener('mousedown', this.handleMouseDownFunc as any);
-        this.canvas.removeEventListener('mousemove', this.handleMouseMoveFunc as any)
-        this.canvas.removeEventListener('mouseup', this.handleMouseUpFunc as any);
-        this.canvas.removeEventListener('mouseleave', this.handleMouseLeaveFunc as any);
-        this.canvas.removeEventListener('wheel', this.handleMouseWheelFunc as any);
-        this.handleMouseDownFunc = null;
-        this.handleMouseMoveFunc = null;
-        this.handleMouseUpFunc = null;
-        this.handleMouseLeaveFunc = null;
-        this.handleMouseWheelFunc = null;
-    }
 };
 
 export default Camera;

@@ -45,9 +45,13 @@ export abstract class BaseHelper {
     tinyearth: TinyEarth;
     element: HTMLDivElement | null = null;
     container: TinyEarthHelperContainer | null = null;
+    title: string = "";
 
     constructor(options: BaseHelperOptions) {
         this.tinyearth = options.tinyearth;
+        if (options.title) {
+            this.title = options.title;
+        }
     }
 
     abstract createElement(): HTMLDivElement | null;

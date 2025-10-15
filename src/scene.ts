@@ -1,5 +1,5 @@
 import { mat4, vec3 } from "gl-matrix";
-import Camera, { CameraMouseControl } from "./camera.js";
+import Camera from "./camera.js";
 import Frustum, { buildFrustum } from "./frustum.js";
 import Projection from "./projection.js";
 import type TinyEarth from "./tinyearth.js";
@@ -37,9 +37,6 @@ export default class Scene {
 
     #frustum: Frustum;
     #worldToScreenMatrix: mat4;
-
-    // move to tools
-    #cameraControl: CameraMouseControl | null = null;
 
     constructor(options: SceneOptions) {
         this.#tinyearth = options.tinyearth;
@@ -112,16 +109,6 @@ export default class Scene {
             w / 2, h / 2, 0.5, 1
         );
         return m;
-    }
-
-    addCameraControl(canvas: HTMLCanvasElement) {
-        if (this.#cameraControl) {
-            this.#cameraControl.disable();
-        }
-        if (this.#camera) {
-            this.#cameraControl = new CameraMouseControl(this.#camera, canvas);
-            this.#cameraControl.enable();
-        }
     }
 
     computeFrustum(): Frustum {

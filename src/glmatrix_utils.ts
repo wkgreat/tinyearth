@@ -62,6 +62,20 @@ export function vec4_sub(v0: vec4, v1: vec4): vec4 {
     return vec4.sub(vec4.create(), v0, v1);
 }
 
+export function vec4_text(v: vec4): string {
+    return `${v[0]},${v[1]},${v[2]},${v[3]}`
+}
+
+export function vec4_fromtext(t: string): vec4 | null {
+    t = t.trim();
+    if (t.match(/^-?\d+(\.\d+)?(e[+-]?\d+)?,-?\d+(\.\d+)?(e[+-]?\d+)?,-?\d+(\.\d+)?(e[+-]?\d+)?,-?\d+(\.\d+)?(e[+-]?\d+)?$/)) {
+        const vs = t.split(",").slice(0, 4).map(v => parseFloat(v.trim()));
+        return vec4.fromValues(vs[0] ?? 0, vs[1] ?? 0, vs[2] ?? 0, vs[3] ?? 0);
+    }
+    return null;
+
+}
+
 // mat4
 export function mat4_mul(m1: mat4, m2: mat4): mat4 {
     return mat4.multiply(mat4.create(), m1, m2);
