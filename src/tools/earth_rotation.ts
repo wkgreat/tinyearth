@@ -1,16 +1,14 @@
+import { TinyEarthEvent } from "../event";
 import { BaseHelper, type BaseHelperOptions } from "../helpers/helper";
 import type Timer from "../timer";
-import { EVENT_TIMER_TICK } from "../timer";
 import type TinyEarth from "../tinyearth";
+import type { BaseToolOptions } from "./tool";
+import BaseTool from "./tool";
 
 /**
  * The options of EarthRotationTool
 */
-export interface EarthRotationToolOptions {
-    /**
-     * tinyearth instance
-    */
-    tinyearth: TinyEarth;
+export interface EarthRotationToolOptions extends BaseToolOptions {
     /**
      * angular velocity (radians/ms) of earth self rotation
      * optional, default value is real earth self roation velocity.
@@ -29,14 +27,13 @@ export const DefaultEarthRotationVelocity: number = Math.PI / (12 * 3600 * 1000)
  * because thie world coordinate system is ECEF, the earth cannot rotaion in ECEF system.
  * {@link ../../docs/source/camera.md | Earth Self Rotation Effect}
 */
-export default class EarthRotationTool {
+export default class EarthRotationTool extends BaseTool {
 
-    tinyearth: TinyEarth;
     #callbackId: string | null = null;
     #velocity: number;
 
     constructor(options: EarthRotationToolOptions) {
-        this.tinyearth = options.tinyearth;
+        super({ tinyearth: options.tinyearth });
         this.#velocity = options.velocity ?? DefaultEarthRotationVelocity;
     }
 
@@ -44,14 +41,14 @@ export default class EarthRotationTool {
         const callback = (timer: Timer) => {
             const dt = timer.deltaTime;
             const w = this.#velocity * dt;
-            this.tinyearth.scene!.getCamera().roundForEarthSelfRotationEffect(w);
+            this.tinyearth.scene.camera.roundForEarthSelfRotationEffect(w);
         };
-        this.#callbackId = this.tinyearth.eventBus.addEventListener(EVENT_TIMER_TICK, { callback });
+        this.#callbackId = this.tinyearth.eventBus.addEventListener(TinyEarthEvent.TIMER_TICK, { callback });
     }
 
     disable() {
         if (this.#callbackId) {
-            this.tinyearth.eventBus.removeEventListener(EVENT_TIMER_TICK, this.#callbackId);
+            this.tinyearth.eventBus.removeEventListener(TinyEarthEvent.TIMER_TICK, this.#callbackId);
             this.#callbackId = null;
         }
     }

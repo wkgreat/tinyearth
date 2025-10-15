@@ -1,20 +1,26 @@
 import { mat4, vec3 } from "gl-matrix";
-import Camera, { CameraMouseControl } from "./camera.js";
+import Camera from "./camera.js";
 import Frustum, { buildFrustum } from "./frustum.js";
 import Projection from "./projection.js";
+import type TinyEarth from "./tinyearth.js";
+import { TinyEarthEvent } from "./event.js";
 
 export interface SceneOptions {
+
+    tinyearth: TinyEarth;
 
     camera: {
         from: vec3,
         to: vec3,
         up: vec3
     },
+
     projection: {
         fovy: number,
         near: number,
         far: number
     },
+
     viewport: {
         width: number,
         height: number
@@ -23,50 +29,75 @@ export interface SceneOptions {
 
 export default class Scene {
 
+    #tinyearth: TinyEarth;
     #camera: Camera;
     #projection: Projection;
     #viewHeight: number = 0;
     #viewWidth: number = 0;
 
-    #cameraControl: CameraMouseControl | null = null;
+    #frustum: Frustum;
+    #worldToScreenMatrix: mat4;
 
     constructor(options: SceneOptions) {
+        this.#tinyearth = options.tinyearth;
         this.#camera = new Camera(this, options.camera.from, options.camera.to, options.camera.up);
         this.#projection = new Projection(this, options.projection.fovy, options.viewport.width / options.viewport.height, options.projection.near, options.projection.far);
         this.#viewWidth = options.viewport.width;
         this.#viewHeight = options.viewport.height;
+        this.#frustum = this.computeFrustum();
+        this.#worldToScreenMatrix = this.computeWorldToScreenMatrix();
+
+        this.tinyearth.eventBus.addEventListener(TinyEarthEvent.PROJECTION_CHANGE, {
+            callback: (info) => {
+                this.computeFrustum();
+                this.computeWorldToScreenMatrix();
+            }
+        });
+
+        this.tinyearth.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
+            callback: (info) => {
+                this.computeFrustum();
+                this.computeWorldToScreenMatrix();
+            }
+        });
     }
 
-    setViewHeight(height: number) {
+    get tinyearth(): TinyEarth {
+        return this.#tinyearth;
+    }
+
+    set viewHeight(height: number) {
         this.#viewHeight = height;
-        this.#projection.setAspect(this.#viewWidth / this.#viewHeight);
+        this.#projection.aspect = this.#viewWidth / this.#viewHeight;
+        this.#worldToScreenMatrix = this.computeWorldToScreenMatrix();
     }
 
-    setViewWidth(width: number) {
+    set viewWidth(width: number) {
         this.#viewWidth = width;
-        this.#projection.setAspect(this.#viewWidth / this.#viewHeight);
+        this.#projection.aspect = this.#viewWidth / this.#viewHeight;
+        this.#worldToScreenMatrix = this.computeWorldToScreenMatrix();
     }
 
-    getViewHeight(): number {
+    get viewHeight(): number {
         return this.#viewHeight;
     }
 
-    getViewWidth(): number {
+    get viewWidth(): number {
         return this.#viewWidth;
     }
 
-    getCamera(): Camera {
+    get camera(): Camera {
         return this.#camera;
     }
 
-    getProjection(): Projection {
+    get projection(): Projection {
         return this.#projection;
     }
 
     /**
      * 获取视口变换矩阵（包含Y轴反转）
     */
-    getViewportMatrix(): mat4 {
+    get viewportMatrix(): mat4 {
         const m = mat4.create();
         const w = this.#viewWidth;
         const h = this.#viewHeight;
@@ -80,18 +111,25 @@ export default class Scene {
         return m;
     }
 
-    addCameraControl(canvas: HTMLCanvasElement) {
-        if (this.#cameraControl) {
-            this.#cameraControl.disable();
-        }
-        if (this.#camera) {
-            this.#cameraControl = new CameraMouseControl(this.#camera, canvas);
-            this.#cameraControl.enable();
-        }
+    computeFrustum(): Frustum {
+        this.#frustum = buildFrustum(this.#projection, this.#camera);
+        return this.#frustum;
     }
 
-    getFrustum(): Frustum {
-        return buildFrustum(this.#projection, this.#camera);
+    computeWorldToScreenMatrix(): mat4 {
+        const m = mat4.create();
+        mat4.multiply(m, this.#projection.perspectiveMatrix, this.#camera.viewMatrix);
+        mat4.multiply(m, this.viewportMatrix, m);
+        this.#worldToScreenMatrix = m;
+        return this.#worldToScreenMatrix;
+    }
+
+    get frustum(): Frustum {
+        return this.#frustum;
+    }
+
+    get worldToScreenMatrix(): mat4 {
+        return this.#worldToScreenMatrix;
     }
 
 };

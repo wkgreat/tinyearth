@@ -1,6 +1,5 @@
 import type EventBus from "./event.js";
-
-export const EVENT_TIMER_TICK = "timer:tick";
+import { TinyEarthEvent } from "./event.js";
 
 export default class Timer {
 
@@ -32,7 +31,7 @@ export default class Timer {
             let dt = Math.trunc((frameTime - this.getLastFrameTime()));
             this.#addTime(dt);
             if (this.eventBus) {
-                this.eventBus.fire(EVENT_TIMER_TICK, this);
+                this.eventBus.fire(TinyEarthEvent.TIMER_TICK, this);
             } else {
                 console.warn("Time eventBus is NULL!");
             }

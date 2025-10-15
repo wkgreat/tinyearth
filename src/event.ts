@@ -4,6 +4,12 @@ interface CallbackInfo {
     callback: EventCallBack
 };
 
+export enum TinyEarthEvent {
+    TIMER_TICK = "timer:tick",
+    CAMERA_CHANGE = "camera:change",
+    PROJECTION_CHANGE = "projection:chage"
+}
+
 export default class EventBus {
 
     callbackMap: Map<string, CallbackInfo[]> = new Map();

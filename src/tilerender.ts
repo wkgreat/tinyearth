@@ -1,15 +1,20 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec4 } from "gl-matrix";
 import proj4 from "proj4";
 import Camera from "./camera.js";
 import type { NumArr3 } from "./defines.js";
 import Frustum, { buildFrustum } from "./frustum.js";
-import { Tile } from "./maptiler.js";
+import { Tile, TileStatus } from "./maptiler.js";
 import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
 import type { xyzObject } from "./sun.js";
 import tileFragSource from "./tile.frag";
 import tileVertSource from "./tile.vert";
-import { type TileSourceInfo } from "./tilesource.js";
+import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
+import { TinyEarthEvent } from "./event.js";
+import type Scene from "./scene.js";
+import { vec3_t4, vec4_affine } from "./glmatrix_utils.js";
+
+const DefaultTileSize: number = 256;
 
 interface GlobeTileProgramBufferInfo {
     vertices?: WebGLBuffer,
@@ -136,7 +141,7 @@ export class GlobeTileProgram {
 
     setMaterial(sunPos: xyzObject, camera: Camera) {
         if (this.gl && this.program) {
-            const from = camera.getFrom();
+            const from = camera.from;
             this.gl.useProgram(this.program);
             this.setUniform3f("light.position", sunPos.x, sunPos.y, sunPos.z);
             this.setUniform4f("light.color", 1.0, 1.0, 1.0, 1.0);
@@ -242,7 +247,7 @@ export class GlobeTileProgram {
             this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_normal")); // 激活属性
 
             this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_modelMtx"), false, modelMtx);
-            this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_viewMtx"), false, camera.getMatrix().viewMtx);
+            this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_viewMtx"), false, camera.viewMatrix);
             this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_projMtx"), false, projMtx);
 
             this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
@@ -261,16 +266,23 @@ export class GlobeTileProgram {
                 if (provider.night && !this.tinyearth.night) {
                     continue;
                 }
-                provider.frustum = this.tinyearth.scene!.getFrustum();
+
+                provider.frustum = this.tinyearth.scene!.frustum;
                 const level = provider.curlevel;
-                provider.tiletree.fetchOrCreateTileNodesToLevel(level, provider.frustum, !provider.isStop(), async (node) => {
+
+                // provider.tiletree.fixedLevelProvide(level, provider.frustum, async (node) => {
+                //     if (node && node.tile && node.tile.ready) {
+                //         that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
+                //     }
+                // })
+
+                provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, async (node) => {
                     if (node && node.tile && node.tile.ready) {
                         that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
                     }
-                });
+                })
             }
         }
-
     }
 
     setFrustum(frustum: Frustum) {
@@ -288,57 +300,97 @@ interface TileNodeKey {
 
 export class TileNode {
 
-    key: TileNodeKey = { z: 0, x: 0, y: 0 };
+    #key: TileNodeKey;
 
-    tile: Tile | null = null;
+    #tile: Tile;
 
-    vertexBuffer: WebGLBuffer | null = null; //
+    #vertexBuffer: WebGLBuffer | null = null;
 
-    texture: WebGLTexture | null = null;
+    #texture: WebGLTexture | null = null;
 
-    children: TileNode[] = [];
+    #children: TileNode[] = [];
 
-    /**@param {Tile} tile */
-    static createTileNode(tile: Tile): TileNode {
-        const node = new TileNode();
-        node.key = { x: tile.x, y: tile.y, z: tile.z };
-        node.tile = tile;
-        node.children = [];
-        return node;
-    }
-    static createEmptyTileNode(z: number, x: number, y: number): TileNode {
-        const node = new TileNode();
-        node.key = { z, x, y };
-        node.tile = null;
-        node.children = [];
-        return node;
+    constructor(url: TileURL, z: number, x: number, y: number) {
+        this.#key = { z, x, y };
+        this.#tile = new Tile(url, x, y, z);
+        this.#children = [];
     }
 
+    get key(): TileNodeKey {
+        return { ...this.#key };
+    }
+
+    get tile(): Tile {
+        return this.#tile;
+    }
+
+    set tile(tile: Tile) {
+        this.#tile = tile;
+        // TODO need refresh texture.
+    }
+
+    set vertexBuffer(buffer: WebGLBuffer | null) {
+        this.#vertexBuffer = buffer;
+    }
+
+    get vertexBuffer(): WebGLBuffer | null {
+        return this.#vertexBuffer;
+    }
+
+    set texture(t: WebGLTexture | null) {
+        this.#texture = t;
+    }
+
+    get texture(): WebGLTexture | null {
+        return this.#texture;
+    }
+
+    get children(): TileNode[] {
+        return this.#children;
+    }
+
+    get ready(): boolean {
+        return this.#tile?.ready ?? false;
+    }
 }
 
 type TileNodeCallback = (node: TileNode) => void;
 
+enum TileNodeOmitStatus {
+    OMIT = "OMIT"
+}
+
+type TileNodeStatus = TileStatus | TileNodeOmitStatus;
+
+/**
+ * Tile Tree
+*/
 export class TileTree {
 
-    root: TileNode = TileNode.createEmptyTileNode(0, 0, 0);
+    //TODO or directly use Map<key,node> for tile tree instead?
+
+    root: TileNode;
     source: TileSourceInfo;
     #startRecLevel: number = 2;
     frustum: Frustum | null = null;
 
     constructor(source: TileSourceInfo) {
         this.source = source;
+        this.root = new TileNode(this.source.url, 0, 0, 0);
     }
 
-    addTile(tile: Tile) {
-        this.#addTileRec(this.root, tile);
+    addTile(tile: Tile): TileNode | null {
+        const node = this.#addTileRec(this.root, tile);
+        return node;
     }
 
-    #addTileRec(curNode: TileNode, tile: Tile) {
+    #addTileRec(curNode: TileNode, tile: Tile): TileNode | null {
         if (tile.z === curNode.key.z) {
             if (tile.x === curNode.key.x && tile.y === curNode.key.y) {
                 curNode.tile = tile;
+                return curNode;
             } else {
-                return;
+                return null;
             }
         } else if (curNode.key.z < tile.z) {
 
@@ -347,11 +399,7 @@ export class TileTree {
             const py = tile.y >> dz;
 
             if (px !== curNode.key.x || py !== curNode.key.y) {
-                return;
-            }
-
-            if (curNode.children === null) {
-                curNode.children = [];
+                return null;
             }
 
             if (curNode.children.length === 0) {
@@ -360,50 +408,29 @@ export class TileTree {
                 const cx = curNode.key.x;
                 const cy = curNode.key.y;
 
-                curNode.children.push(TileNode.createEmptyTileNode(cz + 1, cx << 1, cy << 1));
-                curNode.children.push(TileNode.createEmptyTileNode(cz + 1, cx << 1 | 1, cy << 1));
-                curNode.children.push(TileNode.createEmptyTileNode(cz + 1, cx << 1, cy << 1 | 1));
-                curNode.children.push(TileNode.createEmptyTileNode(cz + 1, cx << 1 | 1, cy << 1 | 1));
+                curNode.children.push(new TileNode(this.source.url, cz + 1, cx << 1, cy << 1));
+                curNode.children.push(new TileNode(this.source.url, cz + 1, cx << 1 | 1, cy << 1));
+                curNode.children.push(new TileNode(this.source.url, cz + 1, cx << 1, cy << 1 | 1));
+                curNode.children.push(new TileNode(this.source.url, cz + 1, cx << 1 | 1, cy << 1 | 1));
 
             }
 
+            let r: TileNode | null = null;
+
             for (let node of curNode.children) {
-                this.#addTileRec(node, tile);
-            }
-
-        } else {
-            console.error("should not be here.");
-            return;
-        }
-    }
-
-    //TODO 根据视锥体剪枝
-    forEachTileNodesOfLevel(z: number, callback: TileNodeCallback) {
-        this.#forEachTileNodesOfLevel(this.root, z, callback);
-    }
-
-    #forEachTileNodesOfLevel(curNode: TileNode, z: number, callback: TileNodeCallback) {
-        if (z === curNode.key.z) {
-            callback(curNode);
-        } else if (curNode.key.z < z) {
-            for (let node of curNode.children) {
-                let tile = null;
-                if (node.key.z >= 6) {
-                    tile = node.tile;
-                    if (!tile) {
-                        tile = new Tile("", node.key.x, node.key.y, node.key.z);
-                    }
-                    if (!tile.intersectFrustum(this.frustum) || tile.tileIsBack(this.frustum)) {
-                        continue;
-                    }
+                const thenode = this.#addTileRec(node, tile);
+                if (thenode !== null) {
+                    r = thenode;
                 }
-                this.#forEachTileNodesOfLevel(node, z, callback);
             }
+
+            return r;
+
         } else {
             console.error("should not be here.");
+            return null;
         }
     }
-
 
     forEachNode(callback: TileNodeCallback) {
         this.#forEachNode(this.root, callback);
@@ -466,73 +493,142 @@ export class TileTree {
         }
     }
 
-    fetchOrCreateTileNodesToLevel(z: number, frustum: Frustum, create: boolean, callback: TileNodeCallback) {
+    fixedLevelProvide(level: number, frustum: Frustum, callback: TileNodeCallback) {
+        this.#fixedLevelProvideRec(this.root, level, frustum, callback);
+    }
 
-        if (z <= this.#startRecLevel) {
-            const nrows = Math.pow(2, z);
-            const ncols = Math.pow(2, z);
-            for (let i = 0; i < ncols; ++i) {
-                for (let j = 0; j < nrows; ++j) {
-                    let node = this.getTileNode(z, i, j);
-                    if (!create && (node === null || node.tile === null)) { continue; }
-                    if (node === null) {
-                        const tile = new Tile(this.source.url, i, j, z);
-                        tile.toMesh();
-                        this.addTile(tile);
-                        node = this.getTileNode(z, i, j);
-                    } else if (node.tile === null) {
-                        const tile = new Tile(this.source.url, i, j, z);
-                        tile.toMesh();
-                        node.tile = tile;
-                    }
-                    if (node) {
-                        callback(node);
-                    }
+    #fixedLevelProvideRec(node: TileNode, level: number, frustum: Frustum, callback: TileNodeCallback): TileNodeStatus {
+
+
+        if (node.key.z > level) {
+            return TileNodeOmitStatus.OMIT;
+        }
+
+        if (node.key.z > this.#startRecLevel && (!node.tile.intersectFrustum(frustum)) || (node.key.z > this.#startRecLevel && node.tile.tileIsBack(frustum))) {
+            return TileNodeOmitStatus.OMIT;
+        }
+
+        let status: TileNodeStatus = TileNodeOmitStatus.OMIT;
+
+        if (node.key.z === level) {
+
+            status = node.tile.load();
+            if (status === TileStatus.READY) {
+                callback(node);
+            }
+
+        } else if (node.key.z < level) {
+
+            if (node.children.length === 0) {
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1, node.key.y << 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1 | 1, node.key.y << 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1, node.key.y << 1 | 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1 | 1, node.key.y << 1 | 1));
+            }
+
+            const childrenStatus = node.children.map(child => this.#fixedLevelProvideRec(child, level, frustum, callback));
+
+            if (this.#needInternalNodeRender(childrenStatus)) {
+                status = node.tile.load();
+                if (status === TileStatus.READY) {
+                    callback(node);
                 }
+            } else {
+                status = TileStatus.READY;
             }
-        } else {
-
-            this.#fetchOrCreateTileNodesToLevelRec(this.root, z, frustum, create, callback);
-
         }
+
+        return status;
+    }
+
+
+    #vec4_dist2d(v0: vec4, v1: vec4): number {
+
+        return Math.sqrt(Math.pow(v1[0] - v0[0], 2) + Math.pow(v1[1] - v0[1], 2));
 
     }
 
-    #fetchOrCreateTileNodesToLevelRec(curNode: TileNode | null, z: number, frustum: Frustum, create: boolean, callback: TileNodeCallback) {
+    getTileResolution(scene: Scene, tile: Tile): number {
 
-        if (curNode === null) {
-            return;
-        }
+        const corners = tile.getTileCorner();
+        const m = scene.worldToScreenMatrix;
 
-        if (curNode.tile === null) {
-            if (create) {
-                curNode.tile = new Tile(this.source.url, curNode.key.x, curNode.key.y, curNode.key.z);
-                curNode.tile.toMesh();
-            }
-        }
+        let p0 = vec3_t4(corners[0]);
+        let p1 = vec3_t4(corners[1]);
+        let p2 = vec3_t4(corners[2]);
+        let p3 = vec3_t4(corners[3]);
 
-        if (curNode.tile != null) {
-            if ((!curNode.tile.intersectFrustum(frustum)) || (curNode.key.z > this.#startRecLevel && curNode.tile.tileIsBack(frustum))) {
-                return;
-            }
-        }
+        p0 = vec4_affine(p0, m);
+        p1 = vec4_affine(p1, m);
+        p2 = vec4_affine(p2, m);
+        p3 = vec4_affine(p3, m);
 
-        if (curNode.key.z === z) {
-            callback(curNode);
-        } else if (curNode.key.z <= z) {
-            if (curNode.children.length === 0) {
-                curNode.children.push(TileNode.createEmptyTileNode(curNode.key.z + 1, curNode.key.x << 1, curNode.key.y << 1));
-                curNode.children.push(TileNode.createEmptyTileNode(curNode.key.z + 1, curNode.key.x << 1 | 1, curNode.key.y << 1));
-                curNode.children.push(TileNode.createEmptyTileNode(curNode.key.z + 1, curNode.key.x << 1, curNode.key.y << 1 | 1));
-                curNode.children.push(TileNode.createEmptyTileNode(curNode.key.z + 1, curNode.key.x << 1 | 1, curNode.key.y << 1 | 1));
-            }
-            for (let node of curNode.children) {
-                this.#fetchOrCreateTileNodesToLevelRec(node, z, frustum, create, callback);
-            }
-        } else {
-            console.warn("should not be here!");
-        }
+        const r0 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
+        const r1 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
+        const r2 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
+        const r3 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
+
+        const mr = (r0 + r1 + r2 + r3) / 4.0;
+
+        return mr;
     }
+
+    dynamicLevelProvide(level: number, scene: Scene, callback: TileNodeCallback) {
+        this.#dynamicLevelProvideRec(this.root, level, scene, callback);
+    }
+
+    #dynamicLevelProvideRec(node: TileNode, level: number, scene: Scene, callback: TileNodeCallback): TileNodeStatus {
+
+
+        if (node.key.z > level) {
+            return TileNodeOmitStatus.OMIT;
+        }
+
+        if (node.key.z > this.#startRecLevel && ((!node.tile.intersectFrustum(scene.frustum)) || node.tile.tileIsBack(scene.frustum))) {
+            return TileNodeOmitStatus.OMIT;
+        }
+
+        let status: TileNodeStatus = TileNodeOmitStatus.OMIT;
+
+        const tileRes = this.getTileResolution(scene, node.tile);
+
+        if ((node.key.z > 3 && tileRes <= 1.0) || node.key.z === level) {
+
+            status = node.tile.load();
+            if (status === TileStatus.READY) {
+                callback(node);
+            }
+
+        } else if (node.key.z < level) {
+
+            if (node.children.length === 0) {
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1, node.key.y << 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1 | 1, node.key.y << 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1, node.key.y << 1 | 1));
+                node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1 | 1, node.key.y << 1 | 1));
+            }
+
+            const childrenStatus = node.children.map(child => this.#dynamicLevelProvideRec(child, level, scene, callback));
+
+            if (this.#needInternalNodeRender(childrenStatus)) {
+                status = node.tile.load();
+                if (status === TileStatus.READY) {
+                    callback(node);
+                }
+            } else {
+                status = TileStatus.READY;
+            }
+        }
+
+        return status;
+    }
+
+    // NEW LAOADING FAILED DEAD [READY OMIT]
+    #needInternalNodeRender(status: TileNodeStatus[]): boolean {
+        return !status.every(s => s === TileStatus.READY || s === TileNodeOmitStatus.OMIT);
+    }
+
+
 
     vaccum() {
         //TODO 定期清理不用的tile
@@ -540,7 +636,7 @@ export class TileTree {
 
 }
 
-type TileProviderCallback = (camera: Camera | null, info?: any) => void;
+type TileProviderCameraCallback = (info: { camera: Camera; type?: string }) => void
 
 
 export class TileProvider {
@@ -557,7 +653,13 @@ export class TileProvider {
 
     frustum: Frustum | null = null;
 
-    callback: TileProviderCallback | null = null;
+    #cameraCallback: TileProviderCameraCallback = (info) => {
+        if (info.camera === null || info.camera !== this.tinyearth.scene.camera) {
+            return;
+        }
+        const level = this.tileLevelWithCamera(info.camera);
+        this.#curlevel = level;
+    };
 
     opacity: number = 1.0;
 
@@ -565,13 +667,10 @@ export class TileProvider {
         this.tinyearth = tinyearth;
         this.source = source;
         this.tiletree = new TileTree(source);
-        this.callback = this.provideCallbackGen();
-        const camera = this.tinyearth.scene?.getCamera();
-        if (camera) {
-            this.callback(camera);
-            camera.addOnchangeEeventListener(this.callback);
-            this.curlevel = this.tileLevel();
-        }
+        this.#cameraCallback({ camera: this.tinyearth.scene.camera });
+        this.tinyearth.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
+            callback: this.#cameraCallback
+        });
     }
 
     get night(): boolean {
@@ -588,7 +687,7 @@ export class TileProvider {
         const that = this;
         if (this.tiletree) {
             this.tiletree.forEachNode(node => {
-                node.tile = null;
+                node.tile = new Tile(source.url, node.key.x, node.key.y, node.key.z);
                 if (node.texture) {
                     that.tinyearth.gl!.deleteTexture(node.texture);
                     node.texture = null;
@@ -636,7 +735,7 @@ export class TileProvider {
     }
 
     tileLevel() {
-        const camera = this.tinyearth.scene?.getCamera();
+        const camera = this.tinyearth.scene.camera;
         if (camera) {
             return this.tileLevelWithCamera(camera);
         } else {
@@ -646,51 +745,13 @@ export class TileProvider {
 
     tileLevelWithCamera(camera: Camera) {
         const tileSize = 256;
-        const from = camera.getFrom()
+        const from = camera.from
         let pos: NumArr3 = proj4(EPSG_4978, EPSG_4326, [from[0], from[1], from[2]]);
         let height = pos[2];
         const initialResolution = 2 * Math.PI * EARTH_RADIUS / tileSize;
         const groundResolution = height * 2 / tileSize;
         const zoom = Math.log2(initialResolution / groundResolution) + 1;
         return Math.min(Math.max(Math.ceil(zoom), this.source.minLevel), this.source.maxLevel);
-    }
-
-
-    provideCallbackGen() {
-
-        let that = this;
-
-        const cb: TileProviderCallback = (camera, info) => {
-
-            if (camera === null) {
-                return;
-            }
-
-            const level = that.tileLevelWithCamera(camera);
-
-            const projection = that.tinyearth.scene?.getProjection();
-
-            if (projection && camera) {
-                that.frustum = buildFrustum(projection, camera);
-            }
-
-            if (that.frustum === null) {
-                console.log("frustum is null");
-                return;
-            }
-
-            if (!that.isStop()) {
-                if (info === undefined || (info["type"] === 'zoom' && that.curlevel !== level) || info["type"] === 'move' || info["type"] === 'round') {
-
-                    that.curlevel = level;
-
-                    that.tiletree.fetchOrCreateTileNodesToLevel(level, that.frustum, true, async (node) => {/*do nothing*/ });
-
-                }
-            }
-        }
-
-        return cb;
     }
 
 }

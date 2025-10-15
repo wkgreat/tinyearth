@@ -14,6 +14,14 @@ glMatrix.setMatrixArrayType(Array);
 const XLIMIT: Interval = [-20037508.3427892, 20037508.3427892];
 const YLIMIT: Interval = [-20037508.3427892, 20037508.3427892];
 
+export enum TileStatus {
+    NEW = "NEW",
+    LOADING = "LOADING",
+    READY = "READY",
+    FAILED = "FAILED",
+    DEAD = "DEAD"
+};
+
 /**
  * Tile
 */
@@ -33,11 +41,13 @@ export class Tile {
 
     provider: TileProvider | null = null;
 
-    ready: boolean = false;
+    #retryTime: number = 0;
+
+    #maxRetryTile: number = 10;
+
+    #status: TileStatus = TileStatus.NEW;
 
     mesh: Float32Array | null = null;
-
-    extentCache = [];
 
     normals: [vec3, vec3, vec3, vec3] | null = null;
 
@@ -45,6 +55,7 @@ export class Tile {
 
     constructor(url: TileURL, x: number = 0, y: number = 0, z: number = 0) {
         this.setUrl(url, x, y, z);
+        this.#status = TileStatus.NEW;
     }
 
     setUrl(url: TileURL, x: number = 0, y: number = 0, z: number = 0) {
@@ -58,7 +69,6 @@ export class Tile {
             this.urltem = url;
             this.url = url.replace("{z}", `${z}`).replace("{x}", `${x}`).replace("{y}", `${y}`);
         }
-
     }
 
     supTileAtLevel(level: number): Tile {
@@ -225,14 +235,14 @@ export class Tile {
 
     }
 
-    getTileCorner(): [vec3, vec3, vec3, vec3] | null {
+    getTileCorner(): [vec3, vec3, vec3, vec3] {
 
         if (!this.corners) {
-            const ext = this.extent();
-            let p0 = [ext[0], ext[1]];
-            let p1 = [ext[0], ext[3]];
-            let p2 = [ext[2], ext[3]];
-            let p3 = [ext[2], ext[1]];
+            const ext = this.extent(); // xmin, ymin, xmax, ymax
+            let p0 = [ext[0], ext[1]]; // lowerleft
+            let p1 = [ext[0], ext[3]]; // upperleft
+            let p2 = [ext[2], ext[3]]; // upperright
+            let p3 = [ext[2], ext[1]]; // lowerright
             p0 = proj4(EPSG_3857, EPSG_4326, p0);
             p1 = proj4(EPSG_3857, EPSG_4326, p1);
             p2 = proj4(EPSG_3857, EPSG_4326, p2);
@@ -245,7 +255,7 @@ export class Tile {
 
             this.corners = [vec3.fromValues(...v0), vec3.fromValues(...v1), vec3.fromValues(...v2), vec3.fromValues(...v3)]
         }
-        return this.corners;;
+        return this.corners as [vec3, vec3, vec3, vec3];
 
     }
 
@@ -337,26 +347,36 @@ export class Tile {
         return [xmin, ymin, xmax, ymax];
     }
 
-    async fetchTile() {
-        if (!this.ready) {
-            loadTileImage(this.url, this.x, this.y, this.z).then(image => {
-                this.image = image;
-                this.ready = true;
-            }).catch(e => {
-                this.ready = false;
-            });
-        }
-    }
-
     center() {
         const ext = this.extent();
         return [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2];
     }
 
-    async toMesh() {
-        await this.fetchTile();
-        const data = TileMesher.toMesh(this, 4, EPSG_4978);
-        this.mesh = data.vertices;
+    load(): TileStatus {
+        if (this.#status === TileStatus.NEW || this.#status === TileStatus.FAILED) {
+            this.#status = TileStatus.LOADING;
+            loadTileImage(this.url, this.x, this.y, this.z).then(image => {
+                this.image = image;
+                const data = TileMesher.toMesh(this, 4, EPSG_4978);
+                this.mesh = data.vertices;
+                this.#status = TileStatus.READY;
+            }).catch(e => {
+                this.#status = TileStatus.FAILED;
+                this.#retryTime++;
+                if (this.#retryTime > this.#maxRetryTile) {
+                    this.#status = TileStatus.DEAD;
+                }
+            });
+        }
+        return this.#status;
+    }
+
+    get status(): TileStatus {
+        return this.#status;
+    }
+
+    get ready(): boolean {
+        return this.#status === TileStatus.READY;
     }
 }
 

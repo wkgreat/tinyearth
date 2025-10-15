@@ -86,76 +86,8 @@ function row(m: mat4, i: number) {
         m[i * 4 + 3] as number);
 }
 
-// /**
-//  * @param {math.Matrix} projMtx64 
-//  * @param {math.Matrix} viewMtx64 
-//  * @returns {Frustum}
-// */
-// export function buildFrustum(projMtx, viewMtx, viewpoint) {
-
-//     const m = mat4.multiply(mat4.create(), projMtx, viewMtx);
-//     const im = mat4.invert(mat4.create(), m);
-//     const tm = mat4.transpose(mat4.create(), m);
-
-//     // FAST EXTRACTION
-//     // 六个视锥体平面（左、右、下、上、近、远）
-//     const planes = {
-//         left: vec4.add(vec4.create(), row(tm, 3), row(tm, 0)),
-//         right: vec4.subtract(vec4.create(), row(tm, 3), row(tm, 0)),
-//         bottom: vec4.add(vec4.create(), row(tm, 3), row(tm, 1)),
-//         top: vec4.subtract(vec4.create(), row(tm, 3), row(tm, 1)),
-//         near: vec4.add(vec4.create(), row(tm, 3), row(tm, 2)),
-//         far: vec4.subtract(vec4.create(), row(tm, 3), row(tm, 2))
-//     };
-
-//     // SLOW EXTRACTION
-//     // const p0 = math_affline(hpvmatrix([-1, -1, -1]), im);
-//     // const p1 = math_affline(hpvmatrix([1, -1, -1]), im);
-//     // const p2 = math_affline(hpvmatrix([1, 1, -1]), im);
-//     // const p3 = math_affline(hpvmatrix([-1, 1, -1]), im);
-//     // const p4 = math_affline(hpvmatrix([-1, 1, 1]), im);
-//     // const p5 = math_affline(hpvmatrix([-1, -1, 1]), im);
-//     // const p6 = math_affline(hpvmatrix([1, -1, 1]), im);
-//     // const p7 = math_affline(hpvmatrix([1, 1, 1]), im);
-
-//     // const planes = {
-//     //     left: Plane.fromThreePoints(p5, p0, p3).params,
-//     //     right: Plane.fromThreePoints(p1, p6, p7).params,
-//     //     bottom: Plane.fromThreePoints(p6, p5, p0).params,
-//     //     top: Plane.fromThreePoints(p4, p3, p2).params,
-//     //     near: Plane.fromThreePoints(p3, p0, p1).params,
-//     //     far: Plane.fromThreePoints(p7, p6, p5).params
-//     // };
-
-//     // 归一化
-//     // planes.left = math.divide(planes.left, math.norm(vec3Fromvec4(planes.left)));
-//     // planes.right = math.divide(planes.right, math.norm(vec3Fromvec4(planes.right)));
-//     // planes.bottom = math.divide(planes.bottom, math.norm(vec3Fromvec4(planes.bottom)));
-//     // planes.top = math.divide(planes.top, math.norm(vec3Fromvec4(planes.top)));
-//     // planes.near = math.divide(planes.near, math.norm(vec3Fromvec4(planes.near)));
-//     // planes.far = math.divide(planes.far, math.norm(vec3Fromvec4(planes.far)));
-
-//     const f = new Frustum(
-//         planes["left"] || null,
-//         planes["right"] || null,
-//         planes["bottom"] || null,
-//         planes["top"] || null,
-//         planes["near"] || null,
-//         planes["far"] || null,
-//     );
-
-//     f.setViewpoint(vec3.fromValues(viewpoint[0], viewpoint[1], viewpoint[2]));
-
-//     const cp = vec4.transformMat4(vec4.create(), vec4.fromValues(0, 0, 0, 1), im);
-
-//     f.setCenterpoint(vec3.fromValues(cp[0], cp[1], cp[2]));
-
-//     return f;
-// };
-
-
 export function buildFrustum(projection: Projection, camera: Camera) {
-    const m = mat4.multiply(mat4.create(), projection.perspective(), camera.getMatrix().viewMtx);
+    const m = mat4.multiply(mat4.create(), projection.perspectiveMatrix, camera.viewMatrix);
     const im = mat4.invert(mat4.create(), m) as mat4;
     const tm = mat4.transpose(mat4.create(), m);
 
@@ -206,8 +138,8 @@ export function buildFrustum(projection: Projection, camera: Camera) {
         planes["far"] || null,
     );
 
-    f.setViewpoint(vec4_t3(camera.getFrom()));
-    f.setTargetpoint(vec4_t3(camera.getTo()));
+    f.setViewpoint(vec4_t3(camera.from));
+    f.setTargetpoint(vec4_t3(camera.to));
     const cp = vec4.transformMat4(vec4.create(), vec4.fromValues(0, 0, 0, 1), im);
     f.setCenterpoint(vec3.fromValues(cp[0], cp[1], cp[2]));
 

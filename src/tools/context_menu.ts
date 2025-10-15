@@ -1,18 +1,21 @@
 import TinyEarth from "../tinyearth.js";
+import type { BaseToolOptions } from "./tool.js";
+import BaseTool from "./tool.js";
 
 type EventHandler = (e: any) => void;
 
-export default class ContextMenuTool {
+export interface ContextMenuToolOptions extends BaseToolOptions {};
 
-    tinyearth: TinyEarth;
+export default class ContextMenuTool extends BaseTool {
+
     menuId: string = "tinyearth-menu";
     menuElem: HTMLElement;
 
     handleContextMenuFunc: EventHandler | null = null;
     handleClickFunc: EventHandler | null = null;
 
-    constructor(tinyearth: TinyEarth) {
-        this.tinyearth = tinyearth;
+    constructor(options: ContextMenuToolOptions) {
+        super({ tinyearth: options.tinyearth });
         this.menuElem = document.createElement('ul');
         this.menuElem.id = this.menuId;
         document.body.appendChild(this.menuElem);
