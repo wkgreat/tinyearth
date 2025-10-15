@@ -1,10 +1,10 @@
 import { glMatrix, vec3, vec4 } from "gl-matrix";
 import proj4 from "proj4";
-import type { Extent, Interval, NumArr3 } from "./defines.js";
+import type { Extent, Interval, NumArr2, NumArr3 } from "./defines.js";
 import Frustum from "./frustum.js";
 import { Plane, pointOutSidePlane } from "./geometry.js";
-import { vec3_add, vec3_normalize, vec3_scale, vec3_sub, vec3_t4 } from "./glmatrix_utils.js";
-import { EPSG_3857, EPSG_4326, EPSG_4978, type projcode_t } from "./proj.js";
+import { vec3_add, vec3_dot, vec3_length, vec3_normalize, vec3_scale, vec3_sub, vec3_t4 } from "./glmatrix_utils.js";
+import { EARTH_RADIUS, EPSG_3857, EPSG_4326, EPSG_4978, type projcode_t } from "./proj.js";
 import type { TileProvider } from "./tilerender.js";
 import type { TileURL } from "./tilesource.js";
 import { loadTileImage } from "./tileutils.js";
@@ -118,14 +118,37 @@ export class Tile {
             this.pointInFrustumPlane(p, frustum.far!);
     }
 
+    /* 注意GOOGLE切片原点视左上角，不是左下角*/
+    extent(): Extent {
+        const dx = (XLIMIT[1] - XLIMIT[0]) / Math.pow(2, this.z);
+        const dy = (YLIMIT[1] - YLIMIT[0]) / Math.pow(2, this.z);
+        const xmin = XLIMIT[0] + dx * this.x;
+        const xmax = XLIMIT[0] + dx * (this.x + 1);
+        const ymin = YLIMIT[1] - dy * (this.y + 1);
+        const ymax = YLIMIT[1] - dy * (this.y);
+        return [xmin, ymin, xmax, ymax];
+    }
+
+    center() {
+        const ext = this.extent();
+        let p = [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2];
+        p = proj4(EPSG_3857, EPSG_4326, p) as number[];
+        p = proj4(EPSG_4326, EPSG_4978, [...p, 0]) as number[];
+        return vec3.fromValues(p[0] as number, p[1] as number, p[2] as number);
+    }
+
+    centerNormal() {
+        return vec3_normalize(this.center());
+    }
+
     getNormals(): [vec3, vec3, vec3, vec3] {
         if (!this.normals) {
             // console.log("CALC");
             const ext = this.extent();
             let p0 = [ext[0], ext[1]];
             let p1 = [ext[0], ext[3]];
-            let p2 = [ext[2], ext[1]];
-            let p3 = [ext[2], ext[3]];
+            let p2 = [ext[2], ext[3]];
+            let p3 = [ext[2], ext[1]];
             p0 = proj4(EPSG_3857, EPSG_4326, p0) as number[];
             p1 = proj4(EPSG_3857, EPSG_4326, p1) as number[];
             p2 = proj4(EPSG_3857, EPSG_4326, p2) as number[];
@@ -137,16 +160,42 @@ export class Tile {
             p3 = proj4(EPSG_4326, EPSG_4978, [...p3, 0]) as number[];
 
             // TODO resolve undefined type
-            const v0 = vec3.fromValues(p0[0]!, p0[1]!, p0[2]!);
-            const v1 = vec3.fromValues(p1[0]!, p1[1]!, p1[2]!);
-            const v2 = vec3.fromValues(p2[0]!, p2[1]!, p2[2]!);
-            const v3 = vec3.fromValues(p3[0]!, p3[1]!, p3[2]!);
+            const v0 = vec3_normalize(vec3.fromValues(p0[0]!, p0[1]!, p0[2]!));
+            const v1 = vec3_normalize(vec3.fromValues(p1[0]!, p1[1]!, p1[2]!));
+            const v2 = vec3_normalize(vec3.fromValues(p2[0]!, p2[1]!, p2[2]!));
+            const v3 = vec3_normalize(vec3.fromValues(p3[0]!, p3[1]!, p3[2]!));
 
             this.normals = [v0, v1, v2, v3];
-        } else {
-            // console.log("SKIP");
         }
         return this.normals;
+    }
+
+    getTileCorner(): [vec3, vec3, vec3, vec3] {
+
+        if (!this.corners) {
+            const ext = this.extent(); // xmin, ymin, xmax, ymax
+            let p0 = [ext[0], ext[1]] as NumArr2; // lowerleft
+            let p1 = [ext[0], ext[3]] as NumArr2; // upperleft
+            let p2 = [ext[2], ext[3]] as NumArr2; // upperright
+            let p3 = [ext[2], ext[1]] as NumArr2; // lowerright
+            p0 = proj4(EPSG_3857, EPSG_4326, p0) as NumArr2;
+            p1 = proj4(EPSG_3857, EPSG_4326, p1) as NumArr2;
+            p2 = proj4(EPSG_3857, EPSG_4326, p2) as NumArr2;
+            p3 = proj4(EPSG_3857, EPSG_4326, p3) as NumArr2;
+
+            const v0 = proj4(EPSG_4326, EPSG_4978, [p0[0], p0[1], 0]) as NumArr3;
+            const v1 = proj4(EPSG_4326, EPSG_4978, [p1[0], p1[1], 0]) as NumArr3;
+            const v2 = proj4(EPSG_4326, EPSG_4978, [p2[0], p2[1], 0]) as NumArr3;
+            const v3 = proj4(EPSG_4326, EPSG_4978, [p3[0], p3[1], 0]) as NumArr3;
+
+            this.corners = [
+                vec3.fromValues(v0[0], v0[1], v0[2]),
+                vec3.fromValues(v1[0], v1[1], v1[2]),
+                vec3.fromValues(v2[0], v2[1], v2[2]),
+                vec3.fromValues(v3[0], v3[1], v3[2])]
+        }
+        return this.corners as [vec3, vec3, vec3, vec3];
+
     }
 
     tileIsBack(frustum: Frustum | null): boolean {
@@ -159,50 +208,95 @@ export class Tile {
             return true;
         }
 
-        const [p0, p1, p2, p3] = this.getNormals();
-
         if (this.z <= 5) {
-            const viewpoint = frustum.getViewpoint() as vec3;
+            const [n0, n1, n2, n3] = this.getNormals();
+            const [p0, p1, p2, p3] = this.getTileCorner();
+            const n4 = this.centerNormal();
+            const p4 = this.center();
             const targetpoint = frustum.getTargetpoint() as vec3;
-            const view = vec3_normalize(vec3_sub(targetpoint, viewpoint));
-            const np0 = vec3_normalize(p0);
-            const np1 = vec3_normalize(p1);
-            const np2 = vec3_normalize(p2);
-            const np3 = vec3_normalize(p3);
+            const viewpoint = frustum.getViewpoint() as vec3;
+            const viewline = vec3_normalize(vec3_sub(targetpoint, viewpoint));
 
-            const d0 = vec3.dot(np0, view);
-            const d1 = vec3.dot(np1, view);
-            const d2 = vec3.dot(np2, view);
-            const d3 = vec3.dot(np3, view);
+            const d0 = vec3_dot(n0, viewline);
+            const d1 = vec3_dot(n1, viewline);
+            const d2 = vec3_dot(n2, viewline);
+            const d3 = vec3_dot(n3, viewline);
+            const d4 = vec3_dot(n4, viewline);
 
-            return d0 >= 0 && d1 >= 0 && d2 >= 0 && d3 >= 0;
+            const tileNotBack = d0 <= 0 || d1 <= 0 || d2 <= 0 || d3 <= 0 || d4 <= 0;
+
+            return !tileNotBack;
+
         } else {
-            const viewpoint = frustum.getViewpoint() as vec3;
+            const [n0, n1, n2, n3] = this.getNormals();
+            const [p0, p1, p2, p3] = this.getTileCorner();
+
             const targetpoint = frustum.getTargetpoint() as vec3;
-            const backview = vec3_normalize(vec3_sub(viewpoint, targetpoint));
-            const backviewpoint = vec3_add(viewpoint, vec3_scale(backview, 1E5));
-            const sp0 = vec3_normalize(p0);
-            const sp1 = vec3_normalize(p1);
-            const sp2 = vec3_normalize(p2);
-            const sp3 = vec3_normalize(p3);
+            const viewpoint = frustum.getViewpoint() as vec3;
 
-            const vp0 = vec3_sub(backviewpoint, p0);
-            const vp1 = vec3_sub(backviewpoint, p1);
-            const vp2 = vec3_sub(backviewpoint, p2);
-            const vp3 = vec3_sub(backviewpoint, p3);
+            const viewNormalInv = vec3_normalize(vec3_sub(viewpoint, targetpoint));
+            const viewScale = vec3_scale(viewNormalInv, 1E5);
 
-            const d0 = vec3.dot(sp0, vp0);
-            const d1 = vec3.dot(sp1, vp1);
-            const d2 = vec3.dot(sp2, vp2);
-            const d3 = vec3.dot(sp3, vp3);
+            const remoteFrom = vec3_add(viewpoint, viewScale);
+            const v0 = vec3_normalize(vec3_sub(p0, remoteFrom));
+            const v1 = vec3_normalize(vec3_sub(p1, remoteFrom));
+            const v2 = vec3_normalize(vec3_sub(p2, remoteFrom));
+            const v3 = vec3_normalize(vec3_sub(p3, remoteFrom));
 
-            const cp = vec3_add(p0, vec3_add(p1, vec3_add(p2, p3)));
-            const cv0 = vec3_normalize(cp)
-            const cv1 = vec3_normalize(vec3_sub(backviewpoint, cp));
-            const cd = vec3.dot(cv0, cv1);
+            const d0 = vec3_dot(v0, n0);
+            const d1 = vec3_dot(v1, n1);
+            const d2 = vec3_dot(v2, n2);
+            const d3 = vec3_dot(v3, n3);
 
-            return !(d0 >= 0 || d1 >= 0 || d2 >= 0 || d3 >= 0 || cd >= 0);
+            const tileNotBack = d0 <= 0 || d1 <= 0 || d2 <= 0 || d3 <= 0;
+
+            return !tileNotBack;
         }
+
+
+
+        // if (this.z <= 5) {
+        //     const viewpoint = frustum.getViewpoint() as vec3;
+        //     const targetpoint = frustum.getTargetpoint() as vec3;
+        //     const view = vec3_normalize(vec3_sub(targetpoint, viewpoint));
+        //     const np0 = vec3_normalize(n0);
+        //     const np1 = vec3_normalize(n1);
+        //     const np2 = vec3_normalize(n2);
+        //     const np3 = vec3_normalize(n3);
+
+        //     const d0 = vec3.dot(np0, view);
+        //     const d1 = vec3.dot(np1, view);
+        //     const d2 = vec3.dot(np2, view);
+        //     const d3 = vec3.dot(np3, view);
+
+        //     return d0 >= 0 && d1 >= 0 && d2 >= 0 && d3 >= 0;
+        // } else {
+        //     const viewpoint = frustum.getViewpoint() as vec3;
+        //     const targetpoint = frustum.getTargetpoint() as vec3;
+        //     const backview = vec3_normalize(vec3_sub(viewpoint, targetpoint));
+        //     const backviewpoint = vec3_add(viewpoint, vec3_scale(backview, 1E5));
+        //     const sp0 = vec3_normalize(n0);
+        //     const sp1 = vec3_normalize(n1);
+        //     const sp2 = vec3_normalize(n2);
+        //     const sp3 = vec3_normalize(n3);
+
+        //     const vp0 = vec3_sub(backviewpoint, n0);
+        //     const vp1 = vec3_sub(backviewpoint, n1);
+        //     const vp2 = vec3_sub(backviewpoint, n2);
+        //     const vp3 = vec3_sub(backviewpoint, n3);
+
+        //     const d0 = vec3.dot(sp0, vp0);
+        //     const d1 = vec3.dot(sp1, vp1);
+        //     const d2 = vec3.dot(sp2, vp2);
+        //     const d3 = vec3.dot(sp3, vp3);
+
+        //     const cp = vec3_add(n0, vec3_add(n1, vec3_add(n2, n3)));
+        //     const cv0 = vec3_normalize(cp)
+        //     const cv1 = vec3_normalize(vec3_sub(backviewpoint, cp));
+        //     const cd = vec3.dot(cv0, cv1);
+
+        //     return !(d0 >= 0 || d1 >= 0 || d2 >= 0 || d3 >= 0 || cd >= 0);
+        // }
 
 
 
@@ -232,30 +326,6 @@ export class Tile {
 
         return this.pointInFrustum(vp0, frustum) || this.pointInFrustum(vp1, frustum)
             || this.pointInFrustum(vp2, frustum) || this.pointInFrustum(vp3, frustum);
-
-    }
-
-    getTileCorner(): [vec3, vec3, vec3, vec3] {
-
-        if (!this.corners) {
-            const ext = this.extent(); // xmin, ymin, xmax, ymax
-            let p0 = [ext[0], ext[1]]; // lowerleft
-            let p1 = [ext[0], ext[3]]; // upperleft
-            let p2 = [ext[2], ext[3]]; // upperright
-            let p3 = [ext[2], ext[1]]; // lowerright
-            p0 = proj4(EPSG_3857, EPSG_4326, p0);
-            p1 = proj4(EPSG_3857, EPSG_4326, p1);
-            p2 = proj4(EPSG_3857, EPSG_4326, p2);
-            p3 = proj4(EPSG_3857, EPSG_4326, p3);
-
-            const v0 = proj4(EPSG_4326, EPSG_4978, [...p0, 0]) as [number, number, number];
-            const v1 = proj4(EPSG_4326, EPSG_4978, [...p1, 0]) as [number, number, number];
-            const v2 = proj4(EPSG_4326, EPSG_4978, [...p2, 0]) as [number, number, number];
-            const v3 = proj4(EPSG_4326, EPSG_4978, [...p3, 0]) as [number, number, number];
-
-            this.corners = [vec3.fromValues(...v0), vec3.fromValues(...v1), vec3.fromValues(...v2), vec3.fromValues(...v3)]
-        }
-        return this.corners as [vec3, vec3, vec3, vec3];
 
     }
 
@@ -334,22 +404,6 @@ export class Tile {
 
         return true;
 
-    }
-
-    /* 注意GOOGLE切片原点视左上角，不是左下角*/
-    extent(): Extent {
-        const dx = (XLIMIT[1] - XLIMIT[0]) / Math.pow(2, this.z);
-        const dy = (YLIMIT[1] - YLIMIT[0]) / Math.pow(2, this.z);
-        const xmin = XLIMIT[0] + dx * this.x;
-        const xmax = XLIMIT[0] + dx * (this.x + 1);
-        const ymin = YLIMIT[1] - dy * (this.y + 1);
-        const ymax = YLIMIT[1] - dy * (this.y);
-        return [xmin, ymin, xmax, ymax];
-    }
-
-    center() {
-        const ext = this.extent();
-        return [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2];
     }
 
     load(): TileStatus {

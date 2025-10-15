@@ -15,6 +15,14 @@ export function vec3_add(v1: vec3, v2: vec3): vec3 {
     return vec3.add(vec3.create(), v1, v2);
 }
 
+export function vec3_dot(v1: vec3, v2: vec3): number {
+    return vec3.dot(v1, v2);
+}
+
+export function vec3_length(v: vec3): number {
+    return vec3.length(v);
+}
+
 export function vec3_normalize(v: vec3): vec3 {
     return vec3.normalize(vec3.create(), v);
 }

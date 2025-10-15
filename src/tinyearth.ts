@@ -363,6 +363,11 @@ export default class TinyEarth {
                         that.globeTilePorgram.render(modelMtx, that.scene.camera, projMtx);
                     }
                 }
+
+                that.eventBus.fire(TinyEarthEvent.TINYEARTH_FRAME, {
+                    tinyearth: that,
+                    frameTime: t
+                })
             }
             requestAnimationFrame(drawFrame);
         }

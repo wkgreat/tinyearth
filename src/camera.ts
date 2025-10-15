@@ -2,7 +2,7 @@ import { glMatrix, mat4, vec3, vec4 } from "gl-matrix";
 import proj4 from "proj4";
 import { type NumArr2, type NumArr3 } from "./defines.js";
 import { TinyEarthEvent } from "./event.js";
-import { mat4_mul, mat4_rotateAroundLine, vec3_array, vec3_normalize, vec3_t4, vec4_t3 } from "./glmatrix_utils.js";
+import { mat4_mul, mat4_rotateAroundLine, vec3_array, vec3_normalize, vec3_scale, vec3_sub, vec3_t4, vec4_t3 } from "./glmatrix_utils.js";
 import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
 import Scene from "./scene.js";
 glMatrix.setMatrixArrayType(Array);
@@ -167,18 +167,26 @@ class Camera {
         const panMatrix = mat4_rotateAroundLine(this.#from, panAxis, ax);
         const tiltMatrix = mat4_rotateAroundLine(this.#from, tiltAxis, ay);
         const m = mat4_mul(panMatrix, tiltMatrix);
-        vec4.transformMat4(this.#to, this.#to, m);
+        const to = vec4.create();
+        vec4.transformMat4(to, this.#to, m);
 
-        // set camera up alwary perpendicular to ground.
-        this.#up = panAxis;
+        const d = Camera.computeDeviateVertical(this.#from, to);
 
-        this._look();
+        if (d > 0) {
+            this.#to = to;
 
-        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
-            camera: this,
-            type: "panTilt"
-        });
+            // set camera up alwary perpendicular to ground.
+            if (d < 1 - 1E-5) {
+                this.#up = panAxis;
+            }
 
+            this._look();
+
+            this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+                camera: this,
+                type: "panTilt"
+            });
+        }
     }
 
     get from() {
@@ -226,6 +234,20 @@ class Camera {
             type: "up"
         });
         this._look();
+    }
+
+    static computeDeviateVertical(from: vec3, to: vec3): number {
+        const viewNormal = vec3_normalize(vec3_sub(to, from));
+        const verticalNormal = vec3_normalize(vec3_scale(from, -1));
+        const d = vec3.dot(viewNormal, verticalNormal);
+        return d;
+    }
+
+    getCameraDeviate(): number {
+        const viewNormal = vec3_normalize(vec3_sub(vec4_t3(this.#to), vec4_t3(this.#from)));
+        const verticalNormal = vec3_normalize(vec3_scale(this.#from, -1));
+        const d = vec3.dot(viewNormal, verticalNormal);
+        return d;
     }
 
     getHeightToSurface() {

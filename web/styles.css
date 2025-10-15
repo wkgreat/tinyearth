@@ -30,23 +30,22 @@ body {
 }
 
 #status-bar {
-
-    background: rgba(1, 255, 200, 0.5);
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.5);
-
+    width: 100%;
     position: fixed;
     left: 0px;
     bottom: 0px;
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
+    gap: 10px;
 }
 
-#status-bar input {
-    vertical-align: middle;
-    background-color: rgba(255, 255, 255, 0.5);
+#status-bar div {
+    border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
 #status-mouse-location-input {

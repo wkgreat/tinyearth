@@ -1,10 +1,10 @@
-import { mat4, vec4 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import proj4 from "proj4";
 import Camera from "./camera.js";
 import type { NumArr3 } from "./defines.js";
 import Frustum, { buildFrustum } from "./frustum.js";
 import { Tile, TileStatus } from "./maptiler.js";
-import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
+import { EARTH_RADIUS, EPSG_3857, EPSG_4326, EPSG_4978 } from "./proj.js";
 import type { xyzObject } from "./sun.js";
 import tileFragSource from "./tile.frag";
 import tileVertSource from "./tile.vert";
@@ -12,7 +12,7 @@ import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
 import { TinyEarthEvent } from "./event.js";
 import type Scene from "./scene.js";
-import { vec3_t4, vec4_affine } from "./glmatrix_utils.js";
+import { vec3_t4, vec4_affine, vec4_t3 } from "./glmatrix_utils.js";
 
 const DefaultTileSize: number = 256;
 
@@ -263,19 +263,15 @@ export class GlobeTileProgram {
             this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_enableNight"), this.tinyearth.night ? 1 : 0);
             const that = this;
             for (let provider of this.tileProviders) {
+                if (provider.isStop()) {
+                    continue;
+                }
                 if (provider.night && !this.tinyearth.night) {
                     continue;
                 }
 
                 provider.frustum = this.tinyearth.scene!.frustum;
                 const level = provider.curlevel;
-
-                // provider.tiletree.fixedLevelProvide(level, provider.frustum, async (node) => {
-                //     if (node && node.tile && node.tile.ready) {
-                //         that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
-                //     }
-                // })
-
                 provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, async (node) => {
                     if (node && node.tile && node.tile.ready) {
                         that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
@@ -573,19 +569,41 @@ export class TileTree {
         return mr;
     }
 
+    #pointOnTile(p: vec3, tile: Tile): boolean {
+
+        const [xmin, ymin, xmax, ymax] = tile.extent(); //xmin, ymin, xmax, ymax
+        const p4326 = proj4(EPSG_4978, EPSG_4326, [p[0], p[1], p[2]]) as NumArr3;
+        const p3857 = proj4(EPSG_4326, EPSG_3857, [p4326[0], p4326[1], p4326[2]]) as NumArr3;
+
+        if (p3857[0] >= xmin && p3857[0] <= xmax && p3857[1] >= ymin && p3857[2] <= ymax) {
+            return true;
+        } else {
+            return false;
+        }
+
+    }
+
     dynamicLevelProvide(level: number, scene: Scene, callback: TileNodeCallback) {
         this.#dynamicLevelProvideRec(this.root, level, scene, callback);
     }
 
     #dynamicLevelProvideRec(node: TileNode, level: number, scene: Scene, callback: TileNodeCallback): TileNodeStatus {
 
-
         if (node.key.z > level) {
             return TileNodeOmitStatus.OMIT;
         }
 
-        if (node.key.z > this.#startRecLevel && ((!node.tile.intersectFrustum(scene.frustum)) || node.tile.tileIsBack(scene.frustum))) {
-            return TileNodeOmitStatus.OMIT;
+        if (node.key.z > this.#startRecLevel) {
+            if (!node.tile.intersectFrustum(scene.frustum)) {
+                return TileNodeOmitStatus.OMIT;
+            }
+
+            const cameraDeviate = scene.camera.getCameraDeviate();
+
+            if (cameraDeviate > 0.5 && node.tile.tileIsBack(scene.frustum)) {
+                return TileNodeOmitStatus.OMIT;
+            }
+
         }
 
         let status: TileNodeStatus = TileNodeOmitStatus.OMIT;

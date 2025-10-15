@@ -11,6 +11,7 @@ import TinyEarth from '../src/tinyearth.js';
 import ContextMenuTool from "../src/tools/context_menu.js";
 import { MousePositionTool } from "../src/tools/mouse_position.js";
 import EarthRotationTool, { EarthRotationToolHelper } from "../src/tools/earth_rotation.js";
+import PerformanceTool from "../src/tools/performace_tool.js";
 
 function main() {
 
@@ -79,7 +80,7 @@ function main() {
         const mousePosTool = new MousePositionTool({
             tinyearth,
             contextMenu,
-            textElementId: "status-mouse-location-input"
+            container: "status-bar"
         });
         mousePosTool.enable();
 
@@ -92,6 +93,9 @@ function main() {
         });
 
         helperContainer.addHelper(earthRotationToolHelper);
+
+        const performTool = new PerformanceTool({ tinyearth: tinyearth, container: "status-bar" });
+        performTool.enable();
 
         tinyearth.draw();
     } else {

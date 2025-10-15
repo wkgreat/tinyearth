@@ -26,6 +26,9 @@ export default abstract class BaseTool {
         this.#tinyearth.addTool(this);
     }
 
+    abstract enable(): void;
+    abstract disable(): void;
+
 }
 
 export function positionAtPixel(scene: Scene, x: number, y: number): Point3D | null {
@@ -55,4 +58,13 @@ export function positionAtPixel(scene: Scene, x: number, y: number): Point3D | n
     } else {
         return crossPoints[0] ?? null;
     }
+}
+
+export function formatNumber(num: number, intLen: number = 3, decLen: number = 2): string {
+
+    let parts = num.toFixed(decLen).split('.');
+
+    parts[0] = parts[0]!.padStart(intLen, '0');
+
+    return parts.join('.');
 }

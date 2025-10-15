@@ -2,7 +2,7 @@ import proj4 from "proj4";
 import type { MouseEventHandler } from "../defines.js";
 import { EPSG_4326, EPSG_4978 } from "../proj.js";
 import TinyEarth from "../tinyearth.js";
-import BaseTool, { positionAtPixel, type BaseToolOptions } from "./tool.js";
+import BaseTool, { formatNumber, positionAtPixel, type BaseToolOptions } from "./tool.js";
 import type ContextMenuTool from "./context_menu.js";
 
 type ValueElement =
@@ -12,8 +12,8 @@ type ValueElement =
     HTMLButtonElement;
 
 interface MousePositionToolOptions extends BaseToolOptions {
+    container?: string
     contextMenu?: ContextMenuTool
-    textElementId?: string
 }
 
 export class MousePositionTool extends BaseTool {
@@ -23,10 +23,12 @@ export class MousePositionTool extends BaseTool {
     mouseX: number = 0;
     mouseY: number = 0;
 
-    textElementId: string = "";
+    #container: string | null = null;
+    #toolDivId: string = `tinyearth-mouse-position-tool-${crypto.randomUUID()}`;
 
     constructor(options: MousePositionToolOptions) {
-        super({ tinyearth: options.tinyearth });
+        super(options);
+        this.#container = options.container ?? null;
         if (options.contextMenu) {
             const option = document.createElement('li');
             option.innerHTML = "复制坐标";
@@ -49,19 +51,13 @@ export class MousePositionTool extends BaseTool {
                 });
             }
         }
-        this.textElementId = options.textElementId ?? "";
-    }
-
-    getTextElement(): ValueElement | null {
-        const elem = document.getElementById(this.textElementId) as ValueElement | null;
-        return elem;
     }
 
     handleMouseMove(): MouseEventHandler {
         const that = this;
         return (event) => {
-            const elem = that.getTextElement();
-            if (elem) {
+            const div = document.getElementById(this.#toolDivId);
+            if (div) {
                 const canvas = that.tinyearth.canvas!;
                 const rect = canvas.getBoundingClientRect();
                 const scaleX = canvas.width / rect.width;
@@ -73,9 +69,9 @@ export class MousePositionTool extends BaseTool {
                 const p = positionAtPixel(that.tinyearth.scene!, x, y);
                 if (p) {
                     const lonLatAlt = proj4(EPSG_4978, EPSG_4326, [p.getX(), p.getY(), p.getZ()]);
-                    elem.value = `${lonLatAlt[0]}, ${lonLatAlt[1]}`;
+                    div.innerHTML = `MousePosition: ${formatNumber(lonLatAlt[0]!, 3, 6)}, ${formatNumber(lonLatAlt[1]!, 3, 6)}`;
                 } else {
-                    elem.value = "";
+                    div.innerHTML = "MousePosition: null";
                 }
             }
 
@@ -83,13 +79,32 @@ export class MousePositionTool extends BaseTool {
     }
 
     enable() {
-        this.handleMouseMoveFunc = this.handleMouseMove();
-        this.tinyearth.canvas.addEventListener('mousemove', this.handleMouseMoveFunc);
+        if (this.#container) {
+            const container = document.getElementById(this.#container);
+
+            if (container) {
+
+                const div = document.createElement('div');
+
+                if (div) {
+                    div.id = this.#toolDivId;
+                    container.appendChild(div);
+                    this.handleMouseMoveFunc = this.handleMouseMove();
+                    this.tinyearth.canvas.addEventListener('mousemove', this.handleMouseMoveFunc);
+                }
+            }
+        }
+
     }
 
     disable() {
-        this.tinyearth.canvas.removeEventListener('mousemove', this.handleMouseMoveFunc as any); // resovle any type
-        this.handleMouseMoveFunc = null;
+        if (this.handleMouseMoveFunc) {
+            this.tinyearth.canvas.removeEventListener('mousemove', this.handleMouseMoveFunc as any); // resovle any type
+            this.handleMouseMoveFunc = null;
+        }
+        const div = document.getElementById(this.#toolDivId);
+        if (div) {
+            div.remove();
+        }
     }
-
 }

@@ -102,33 +102,6 @@ export function buildFrustum(projection: Projection, camera: Camera) {
         far: vec4.subtract(vec4.create(), row(tm, 3), row(tm, 2))
     };
 
-    // SLOW EXTRACTION
-    // const p0 = math_affline(hpvmatrix([-1, -1, -1]), im);
-    // const p1 = math_affline(hpvmatrix([1, -1, -1]), im);
-    // const p2 = math_affline(hpvmatrix([1, 1, -1]), im);
-    // const p3 = math_affline(hpvmatrix([-1, 1, -1]), im);
-    // const p4 = math_affline(hpvmatrix([-1, 1, 1]), im);
-    // const p5 = math_affline(hpvmatrix([-1, -1, 1]), im);
-    // const p6 = math_affline(hpvmatrix([1, -1, 1]), im);
-    // const p7 = math_affline(hpvmatrix([1, 1, 1]), im);
-
-    // const planes = {
-    //     left: Plane.fromThreePoints(p5, p0, p3).params,
-    //     right: Plane.fromThreePoints(p1, p6, p7).params,
-    //     bottom: Plane.fromThreePoints(p6, p5, p0).params,
-    //     top: Plane.fromThreePoints(p4, p3, p2).params,
-    //     near: Plane.fromThreePoints(p3, p0, p1).params,
-    //     far: Plane.fromThreePoints(p7, p6, p5).params
-    // };
-
-    // 归一化
-    // planes.left = math.divide(planes.left, math.norm(vec3Fromvec4(planes.left)));
-    // planes.right = math.divide(planes.right, math.norm(vec3Fromvec4(planes.right)));
-    // planes.bottom = math.divide(planes.bottom, math.norm(vec3Fromvec4(planes.bottom)));
-    // planes.top = math.divide(planes.top, math.norm(vec3Fromvec4(planes.top)));
-    // planes.near = math.divide(planes.near, math.norm(vec3Fromvec4(planes.near)));
-    // planes.far = math.divide(planes.far, math.norm(vec3Fromvec4(planes.far)));
-
     const f = new Frustum(
         planes["left"] || null,
         planes["right"] || null,
