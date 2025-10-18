@@ -102,11 +102,16 @@ export default class TinyEarth {
 
         this.canvas = _canvas;
 
-        _gl = this.canvas.getContext("webgl", { alpha: true });
+        _gl = this.canvas.getContext("webgl2", { alpha: true });
 
         if (_gl === null) {
             throw new Error("webgl context is null");
         }
+
+        console.log("WebGL Version:", _gl.getParameter(_gl.VERSION));
+        console.log("GLSL Version:", _gl.getParameter(_gl.SHADING_LANGUAGE_VERSION));
+        console.log("Renderer:", _gl.getParameter(_gl.RENDERER));
+        console.log("Vendor:", _gl.getParameter(_gl.VENDOR));
 
         this.gl = _gl;
 
@@ -347,7 +352,9 @@ export default class TinyEarth {
                     if (that.skyboxProgram !== null) {
                         that.skyboxProgram.setUniforms({
                             u_invProjViewMtx: invProjViewMtx,
-                            u_worldCameraPos: cameraWorldPos
+                            u_worldCameraPos: cameraWorldPos,
+                            camera: that.scene.camera,
+                            projection: that.scene.projection
                         });
 
                         that.skyboxProgram.render();

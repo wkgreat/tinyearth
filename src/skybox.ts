@@ -1,4 +1,4 @@
-import { glMatrix, mat4, vec3 } from "gl-matrix";
+import { glMatrix, mat4, vec3, vec4 } from "gl-matrix";
 import { checkGLError } from "./debug.js";
 import { vec3_add, vec3_cross, vec3_normalize, vec3_scale, vec3_sub, vec4_t3 } from "./glmatrix_utils.js";
 import Scene from "./scene.js";
@@ -11,6 +11,8 @@ import starsky_pz from "./assets/starsky/pz.png";
 import starsky_nx from "./assets/starsky/nx.png";
 import starsky_ny from "./assets/starsky/ny.png";
 import starsky_nz from "./assets/starsky/nz.png";
+import type Camera from "./camera.js";
+import type Projection from "./projection.js";
 glMatrix.setMatrixArrayType(Array);
 
 export interface CubeMapInfo {
@@ -20,7 +22,9 @@ export interface CubeMapInfo {
 
 export interface SkyboxUniformInfo {
     u_invProjViewMtx: mat4,
-    u_worldCameraPos: vec3
+    u_worldCameraPos: vec3,
+    camera: Camera,
+    projection: Projection
 }
 
 export interface SkyBoxSourceInfo {
@@ -83,30 +87,32 @@ export class SkyBoxProgram {
 
         const cameraFrom = scene.camera.from;
         const cameraTo = scene.camera.to;
+        const cameraUp = scene.camera.up;
         const near = scene.projection.near;
         const fovy = scene.projection.fovy;
         const aspect = scene.projection.aspect;
 
         const forward = vec3_normalize(vec3_sub(vec4_t3(cameraTo), vec4_t3(cameraFrom)));
-        const worldup = vec3.fromValues(0, 0, 1);
+        const worldup = vec3_normalize(cameraUp);
         const right = vec3_normalize(vec3_cross(worldup, forward));
         const up = vec3_normalize(vec3_cross(forward, right));
         const half_height = near * Math.tan(fovy / 2);
         const half_width = aspect * half_height;
 
-        const leftup = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
-        const rightup = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, -half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
+        const leftUp = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
+        const rightUp = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, -half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
         const rightDown = vec3_normalize(vec3_add(vec3_sub(vec3_scale(right, -half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
         const leftDown = vec3_normalize(vec3_add(vec3_sub(vec3_scale(right, half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
 
+        // vertices in clip space
         const vertices = [
 
-            -1, 1, 1, ...leftup, //leftup
-            -1, -1, 1, ...leftDown, //leftdown
+            -1, 1, 1, ...leftUp, //leftup
+            -1, -1, 1, ...leftDown, //leftdown 
             1, -1, 1, ...rightDown, //rightdown
             1, -1, 1, ...rightDown, //rightdown
-            1, 1, 1, ...rightup, //rightup
-            -1, 1, 1, ...leftup //leftup
+            1, 1, 1, ...rightUp, //rightup
+            -1, 1, 1, ...leftUp //leftup
 
         ]
 
@@ -228,6 +234,13 @@ export class SkyBoxProgram {
         this.use();
         this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_invProjViewMtx"), false, info.u_invProjViewMtx);
         this.gl.uniform3fv(this.gl.getUniformLocation(this.program, "u_worldCameraPos"), info.u_worldCameraPos);
+
+        this.gl.uniform4fv(this.gl.getUniformLocation(this.program, "u_camera.from"), info.camera.from);
+        this.gl.uniform4fv(this.gl.getUniformLocation(this.program, "u_camera.to"), info.camera.to);
+        this.gl.uniform4fv(this.gl.getUniformLocation(this.program, "u_camera.up"), info.camera.up);
+        this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_camera.viewmtx"), false, info.camera.viewMatrix);
+
+        this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_projection.projmtx"), false, info.projection.perspectiveMatrix);
     }
 
     setData() {
