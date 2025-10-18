@@ -2,8 +2,8 @@ import { glMatrix, mat4, vec3, vec4 } from "gl-matrix";
 import { checkGLError } from "./debug.js";
 import { vec3_add, vec3_cross, vec3_normalize, vec3_scale, vec3_sub, vec4_t3 } from "./glmatrix_utils.js";
 import Scene from "./scene.js";
-import fragSource from "./skybox.frag";
-import vertSource from "./skybox.vert";
+import fragSource from "./shader/skybox.frag";
+import vertSource from "./shader/skybox.vert";
 import TinyEarth from "./tinyearth.js";
 import starsky_px from "./assets/starsky/px.png";
 import starsky_py from "./assets/starsky/py.png";
@@ -11,8 +11,9 @@ import starsky_pz from "./assets/starsky/pz.png";
 import starsky_nx from "./assets/starsky/nx.png";
 import starsky_ny from "./assets/starsky/ny.png";
 import starsky_nz from "./assets/starsky/nz.png";
-import type Camera from "./camera.js";
+import Camera from "./camera.js";
 import type Projection from "./projection.js";
+import { setCameraUniform } from "./program.js";
 glMatrix.setMatrixArrayType(Array);
 
 export interface CubeMapInfo {
@@ -54,7 +55,7 @@ export class SkyBoxProgram {
 
     program: WebGLProgram | null = null;
 
-    gl: WebGLRenderingContext | null = null;
+    gl: WebGL2RenderingContext | null = null;
 
     #vertices: Float32Array = new Float32Array([
         -1, 1, 1,
@@ -239,6 +240,8 @@ export class SkyBoxProgram {
         this.gl.uniform4fv(this.gl.getUniformLocation(this.program, "u_camera.to"), info.camera.to);
         this.gl.uniform4fv(this.gl.getUniformLocation(this.program, "u_camera.up"), info.camera.up);
         this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_camera.viewmtx"), false, info.camera.viewMatrix);
+
+        setCameraUniform(this.gl, this.program, info.camera);
 
         this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_projection.projmtx"), false, info.projection.perspectiveMatrix);
     }

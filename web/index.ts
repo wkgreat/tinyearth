@@ -23,7 +23,7 @@ function main() {
         // tinyearth
         tinyearth = new TinyEarth({
             canvas: canvas,
-            night: false
+            night: true
         });
 
         // helper container
@@ -58,6 +58,7 @@ function main() {
             maxLevel: 6,
             night: true
         });
+        nightTileProvider.stop();
         const nightProviderHelper = new TileProviderHelper({
             tinyearth,
             provider: nightTileProvider,

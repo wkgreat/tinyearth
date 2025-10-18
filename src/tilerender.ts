@@ -6,13 +6,14 @@ import Frustum, { buildFrustum } from "./frustum.js";
 import { Tile, TileStatus } from "./maptiler.js";
 import { EARTH_RADIUS, EPSG_3857, EPSG_4326, EPSG_4978 } from "./proj.js";
 import type { xyzObject } from "./sun.js";
-import tileFragSource from "./tile.frag";
-import tileVertSource from "./tile.vert";
+import tileFragSource from "./shader/tile.frag";
+import tileVertSource from "./shader/tile.vert";
 import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
 import { TinyEarthEvent } from "./event.js";
 import type Scene from "./scene.js";
 import { vec3_t4, vec4_affine, vec4_t3 } from "./glmatrix_utils.js";
+import { setCameraUniform, setSunUniform } from "./program.js";
 
 const DefaultTileSize: number = 256;
 
@@ -23,7 +24,7 @@ interface GlobeTileProgramBufferInfo {
 
 export class GlobeTileProgram {
 
-    gl: WebGLRenderingContext | null = null;
+    gl: WebGL2RenderingContext | null = null;
 
     tinyearth: TinyEarth;
 
@@ -139,18 +140,22 @@ export class GlobeTileProgram {
         }
     }
 
-    setMaterial(sunPos: xyzObject, camera: Camera) {
+    setMaterial(scene: Scene) {
         if (this.gl && this.program) {
-            const from = camera.from;
             this.gl.useProgram(this.program);
-            this.setUniform3f("light.position", sunPos.x, sunPos.y, sunPos.z);
-            this.setUniform4f("light.color", 1.0, 1.0, 1.0, 1.0);
-            this.setUniform3f("camera.position", from[0], from[1], from[2]);
             this.setUniform4f("material.ambient", 0.1, 0.1, 0.1, 1.0);
             this.setUniform4f("material.diffuse", 1.0, 1.0, 1.0, 1.0);
             this.setUniform4f("material.specular", 1.0, 1.0, 1.0, 1.0);
             this.setUniform4f("material.emission", 0.0, 0.0, 0.0, 1.0);
             this.setUniform1f("material.shininess", 1000);
+        }
+    }
+
+    refreshUniforms(scene: Scene) {
+        if (this.gl && this.program) {
+            this.gl.useProgram(this.program);
+            setCameraUniform(this.gl, this.program, scene.camera);
+            setSunUniform(this.gl, this.program, scene.sun);
         }
     }
 
@@ -257,11 +262,18 @@ export class GlobeTileProgram {
         }
     }
 
-    render(modelMtx: mat4, camera: Camera, projMtx: mat4) {
+    render(scene: Scene) {
         if (this.gl && this.program) {
             this.gl.useProgram(this.program);
+
+            this.refreshUniforms(scene);
+
             this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_enableNight"), this.tinyearth.night ? 1 : 0);
+
             const that = this;
+
+            const modelMtx = mat4.create(); //TODO move to other place
+
             for (let provider of this.tileProviders) {
                 if (provider.isStop()) {
                     continue;
@@ -274,7 +286,7 @@ export class GlobeTileProgram {
                 const level = provider.curlevel;
                 provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, async (node) => {
                     if (node && node.tile && node.tile.ready) {
-                        that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
+                        that.drawTileNode(node, modelMtx, scene.camera, scene.projection.perspectiveMatrix, provider.getOpacity(), provider.night);
                     }
                 })
             }

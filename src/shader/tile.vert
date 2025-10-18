@@ -1,14 +1,15 @@
-attribute vec4 a_position;
-attribute vec2 a_texcoord;
-attribute vec3 a_normal;
+#version 300 es
+in vec4 a_position;
+in vec2 a_texcoord;
+in vec3 a_normal;
 
 uniform mat4 u_modelMtx;
 uniform mat4 u_viewMtx;
 uniform mat4 u_projMtx;
 
-varying vec2 v_texcoord;
-varying vec3 v_normal;
-varying vec4 v_worldPos;
+out vec2 v_texcoord;
+out vec3 v_normal;
+out vec4 v_worldPos;
 
 void main() {
     gl_Position = u_projMtx * u_viewMtx * u_modelMtx * a_position;

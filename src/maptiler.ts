@@ -409,6 +409,8 @@ export class Tile {
     load(): TileStatus {
         if (this.#status === TileStatus.NEW || this.#status === TileStatus.FAILED) {
             this.#status = TileStatus.LOADING;
+
+            //TODO asynd load and toMesh
             loadTileImage(this.url, this.x, this.y, this.z).then(image => {
                 this.image = image;
                 const data = TileMesher.toMesh(this, 4, EPSG_4978);

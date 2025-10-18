@@ -46,7 +46,7 @@ export default class TinyEarth {
 
     canvas: HTMLCanvasElement;
 
-    gl: WebGLRenderingContext;
+    gl: WebGL2RenderingContext;
 
     scene: Scene;
 
@@ -108,12 +108,12 @@ export default class TinyEarth {
             throw new Error("webgl context is null");
         }
 
-        console.log("WebGL Version:", _gl.getParameter(_gl.VERSION));
-        console.log("GLSL Version:", _gl.getParameter(_gl.SHADING_LANGUAGE_VERSION));
-        console.log("Renderer:", _gl.getParameter(_gl.RENDERER));
-        console.log("Vendor:", _gl.getParameter(_gl.VENDOR));
+        this.gl = _gl as WebGL2RenderingContext;
 
-        this.gl = _gl;
+        console.log("WebGL Version:", this.gl.getParameter(this.gl.VERSION));
+        console.log("GLSL Version:", this.gl.getParameter(this.gl.SHADING_LANGUAGE_VERSION));
+        console.log("Renderer:", this.gl.getParameter(this.gl.RENDERER));
+        console.log("Vendor:", this.gl.getParameter(this.gl.VENDOR));
 
         this.canvas.height = this.canvas.clientHeight;
         this.canvas.width = this.canvas.clientWidth;
@@ -186,7 +186,9 @@ export default class TinyEarth {
             this.gl.viewport(0, 0, this.viewWidth, this.viewHeight);
             this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
             this.gl.enable(this.gl.BLEND);
-            this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
+            // this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);s
+            this.gl.blendFunc(this.gl.ONE, this.gl.ONE);
+            // this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE);
         }
     }
 
@@ -312,20 +314,7 @@ export default class TinyEarth {
         }
         this.glInit();
 
-        this.globeTilePorgram.setMaterial(getSunPositionECEF(this.timer.date), this.scene.camera);
-
         let that = this;
-
-        if (this.eventBus !== null) {
-            this.eventBus.addEventListener(TinyEarthEvent.TIMER_TICK, {
-                callback: (timer: Timer) => {
-                    if (timer === that.timer) {
-                        const sunPos = getSunPositionECEF(timer.date);
-                        that.globeTilePorgram!.setUniform3f("light.position", sunPos.x, sunPos.y, sunPos.z);
-                    }
-                }
-            });
-        }
 
         async function drawFrame(t: number) {
             if (that.isStartDraw()) {
@@ -363,11 +352,12 @@ export default class TinyEarth {
                     checkGLError(that.gl, "render");
 
                     if (that.globeTilePorgram !== null) {
+                        that.globeTilePorgram.setMaterial(that.scene);
                         const frustum = buildFrustum(
                             that.scene.projection,
                             that.scene.camera);
                         that.globeTilePorgram.setFrustum(frustum);
-                        that.globeTilePorgram.render(modelMtx, that.scene.camera, projMtx);
+                        that.globeTilePorgram.render(that.scene);
                     }
                 }
 

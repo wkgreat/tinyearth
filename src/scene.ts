@@ -4,6 +4,7 @@ import Frustum, { buildFrustum } from "./frustum.js";
 import Projection from "./projection.js";
 import type TinyEarth from "./tinyearth.js";
 import { TinyEarthEvent } from "./event.js";
+import { Sun } from "./sun.js";
 
 export interface SceneOptions {
 
@@ -34,9 +35,10 @@ export default class Scene {
     #projection: Projection;
     #viewHeight: number = 0;
     #viewWidth: number = 0;
-
     #frustum: Frustum;
     #worldToScreenMatrix: mat4;
+
+    #sun: Sun;
 
     constructor(options: SceneOptions) {
         this.#tinyearth = options.tinyearth;
@@ -46,6 +48,8 @@ export default class Scene {
         this.#viewHeight = options.viewport.height;
         this.#frustum = this.computeFrustum();
         this.#worldToScreenMatrix = this.computeWorldToScreenMatrix();
+
+        this.#sun = new Sun(this);
 
         this.tinyearth.eventBus.addEventListener(TinyEarthEvent.PROJECTION_CHANGE, {
             callback: (info) => {
@@ -64,6 +68,10 @@ export default class Scene {
 
     get tinyearth(): TinyEarth {
         return this.#tinyearth;
+    }
+
+    get sun(): Sun {
+        return this.#sun;
     }
 
     set viewHeight(height: number) {
