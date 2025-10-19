@@ -185,10 +185,11 @@ export default class TinyEarth {
             this.gl.depthFunc(this.gl.LEQUAL);
             this.gl.viewport(0, 0, this.viewWidth, this.viewHeight);
             this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+
+            // default blend mode
             this.gl.enable(this.gl.BLEND);
-            // this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);s
-            this.gl.blendFunc(this.gl.ONE, this.gl.ONE);
-            // this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE);
+            this.gl.pixelStorei(this.gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+            this.gl.blendFunc(this.gl.ONE, this.gl.ONE_MINUS_SRC_ALPHA);
         }
     }
 
