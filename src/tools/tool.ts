@@ -1,5 +1,5 @@
 import { vec4, type mat4 } from "gl-matrix";
-import { Ray, rayCrossSpheriod, Spheriod, type Point3D } from "../geometry";
+import { Ray, rayCrossSpheriod, Spheriod, type Point3D } from "../geom";
 import { mat4_inv, mat4_mul, vec3_normalize, vec3_sub, vec4_affine, vec4_t3 } from "../glmatrix_utils";
 import type Scene from "../scene";
 import { WGS84_SPHERIOD_A, WGS84_SPHERIOD_B } from "../proj";

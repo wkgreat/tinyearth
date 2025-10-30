@@ -2,18 +2,18 @@ import { mat4, vec3, vec4 } from "gl-matrix";
 import proj4 from "proj4";
 import Camera from "./camera.js";
 import type { NumArr3 } from "./defines.js";
-import Frustum, { buildFrustum } from "./frustum.js";
+import { TinyEarthEvent } from "./event.js";
+import Frustum from "./frustum.js";
+import { vec3_t4, vec4_affine } from "./glmatrix_utils.js";
+import { GLSLSource } from "./glsl.js";
 import { Tile, TileStatus } from "./maptiler.js";
+import { Program, type ProgramOptions } from "./program.js";
 import { EARTH_RADIUS, EPSG_3857, EPSG_4326, EPSG_4978 } from "./proj.js";
-import type { xyzObject } from "./sun.js";
+import type Scene from "./scene.js";
 import tileFragSource from "./shader/tile.frag";
 import tileVertSource from "./shader/tile.vert";
 import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
-import { TinyEarthEvent } from "./event.js";
-import type Scene from "./scene.js";
-import { vec3_t4, vec4_affine, vec4_t3 } from "./glmatrix_utils.js";
-import { setCameraUniform, setSunUniform } from "./program.js";
 
 const DefaultTileSize: number = 256;
 
@@ -22,13 +22,9 @@ interface GlobeTileProgramBufferInfo {
     texture?: WebGLTexture
 }
 
-export class GlobeTileProgram {
+interface GlobeTileProgramOptions extends Omit<ProgramOptions, 'vertSource' | 'fragSource'> {}
 
-    gl: WebGL2RenderingContext | null = null;
-
-    tinyearth: TinyEarth;
-
-    program: WebGLProgram | null = null;
+export class GlobeTileProgram extends Program {
 
     buffers: GlobeTileProgramBufferInfo = {};
 
@@ -36,10 +32,15 @@ export class GlobeTileProgram {
 
     tileProviders: TileProvider[] = [];
 
-    constructor(tinyearth: TinyEarth) {
-        this.tinyearth = tinyearth;
-        this.gl = this.tinyearth.gl;
-        this.program = this.createTileProgram();
+    constructor(options: GlobeTileProgramOptions) {
+
+        const vertGLSLSource = new GLSLSource(tileVertSource);
+        const fragGLSLSource = new GLSLSource(tileFragSource, { DEBUG_DEPTH: false });
+
+        super({
+            ...options, vertSource: vertGLSLSource, fragSource: fragGLSLSource
+        });
+
         this.createBuffer();
     }
 
@@ -53,64 +54,6 @@ export class GlobeTileProgram {
 
     removeTileProvider(tileProvider: TileProvider) {
         this.tileProviders = this.tileProviders.filter(p => p !== tileProvider);
-    }
-
-    createTileProgram(): WebGLProgram | null {
-
-        if (this.gl === null) {
-            return null;
-        }
-        /* 创建程序 */
-        const program = this.gl.createProgram();
-
-        let success;
-
-        /* 程序加载着色器 */
-        const vertShader = this.gl.createShader(this.gl.VERTEX_SHADER);
-        if (vertShader === null) {
-            console.error("vertShader is null");
-            return null;
-        }
-        this.gl.shaderSource(vertShader, tileVertSource);
-        this.gl.compileShader(vertShader);
-        this.gl.attachShader(program, vertShader);
-
-        success = this.gl.getShaderParameter(vertShader, this.gl.COMPILE_STATUS);
-        if (!success) {
-            const error = this.gl.getShaderInfoLog(vertShader);
-            console.error('vertShader编译失败: ', error);
-        }
-
-        const fragShader = this.gl.createShader(this.gl.FRAGMENT_SHADER);
-        if (fragShader === null) {
-            console.error("fragShader is null");
-            return null;
-        }
-        this.gl.shaderSource(fragShader, tileFragSource);
-        this.gl.compileShader(fragShader);
-        this.gl.attachShader(program, fragShader);
-
-        success = this.gl.getShaderParameter(fragShader, this.gl.COMPILE_STATUS);
-        if (!success) {
-            const error = this.gl.getShaderInfoLog(fragShader);
-            console.error('fragShader编译失败: ', error);
-        }
-
-        this.gl.linkProgram(program);
-
-        success = this.gl.getProgramParameter(program, this.gl.LINK_STATUS);
-        if (!success) {
-            const error = this.gl.getProgramInfoLog(program);
-            console.error('program 连接失败失败: ', error);
-        }
-
-        if (!program) {
-            console.error("program is null");
-        }
-
-        this.program = program;
-        return program;
-
     }
 
     createBuffer() {
@@ -140,7 +83,7 @@ export class GlobeTileProgram {
         }
     }
 
-    setMaterial(scene: Scene) {
+    setMaterial() {
         if (this.gl && this.program) {
             this.gl.useProgram(this.program);
             this.setUniform4f("material.ambient", 0.1, 0.1, 0.1, 1.0);
@@ -154,8 +97,9 @@ export class GlobeTileProgram {
     refreshUniforms(scene: Scene) {
         if (this.gl && this.program) {
             this.gl.useProgram(this.program);
-            setCameraUniform(this.gl, this.program, scene.camera);
-            setSunUniform(this.gl, this.program, scene.sun);
+            this.setCameraUniform();
+            this.setProjectionUniform();
+            this.setSunUniform();
         }
     }
 
@@ -262,11 +206,15 @@ export class GlobeTileProgram {
         }
     }
 
-    render(scene: Scene) {
+    draw(): void {
+        this.render();
+    }
+
+    render() {
         if (this.gl && this.program) {
             this.gl.useProgram(this.program);
 
-            this.refreshUniforms(scene);
+            this.refreshUniforms(this.tinyearth.scene);
 
             this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_enableNight"), this.tinyearth.night ? 1 : 0);
 
@@ -284,9 +232,9 @@ export class GlobeTileProgram {
 
                 provider.frustum = this.tinyearth.scene!.frustum;
                 const level = provider.curlevel;
-                provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, async (node) => {
+                provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, (node) => {
                     if (node && node.tile && node.tile.ready) {
-                        that.drawTileNode(node, modelMtx, scene.camera, scene.projection.perspectiveMatrix, provider.getOpacity(), provider.night);
+                        that.drawTileNode(node, modelMtx, this.tinyearth.scene.camera, this.tinyearth.scene.projection.perspectiveMatrix, provider.getOpacity(), provider.night);
                     }
                 })
             }
@@ -622,7 +570,7 @@ export class TileTree {
 
         const tileRes = this.getTileResolution(scene, node.tile);
 
-        if ((node.key.z > 3 && tileRes <= 1.0) || node.key.z === level) {
+        if ((node.key.z > 3 && tileRes <= 0.8) || node.key.z === level) {
 
             status = node.tile.load();
             if (status === TileStatus.READY) {

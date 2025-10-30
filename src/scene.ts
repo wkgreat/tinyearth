@@ -1,10 +1,12 @@
 import { mat4, vec3 } from "gl-matrix";
 import Camera from "./camera.js";
-import Frustum, { buildFrustum } from "./frustum.js";
-import Projection from "./projection.js";
-import type TinyEarth from "./tinyearth.js";
 import { TinyEarthEvent } from "./event.js";
+import Frustum, { buildFrustum } from "./frustum.js";
+import type { Layer } from "./layer.js";
+import type { Geometry } from "./geometry.js";
+import Projection from "./projection.js";
 import { Sun } from "./sun.js";
+import type TinyEarth from "./tinyearth.js";
 
 export interface SceneOptions {
 
@@ -39,6 +41,10 @@ export default class Scene {
     #worldToScreenMatrix: mat4;
 
     #sun: Sun;
+
+    #layers: Layer[] = [];
+
+    #geometries: Geometry[] = [];
 
     constructor(options: SceneOptions) {
         this.#tinyearth = options.tinyearth;
@@ -138,6 +144,26 @@ export default class Scene {
 
     get worldToScreenMatrix(): mat4 {
         return this.#worldToScreenMatrix;
+    }
+
+    addLayer(layer: Layer | null) {
+        if (layer) {
+            this.#layers.push(layer);
+        }
+    }
+
+    removeLayer(layer: Layer | null) {
+        this.#layers = this.#layers.filter(a => a !== layer);
+    }
+
+    removeLayerById(id: string) {
+        this.#layers = this.#layers.filter(a => a.id !== id);
+    }
+
+    drawLayers() {
+        for (let layer of this.#layers) {
+            layer.draw();
+        }
     }
 
 };

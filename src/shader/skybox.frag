@@ -1,16 +1,9 @@
 #version 300 es
 precision highp float;
 
-struct Camera {
-    vec4 from;
-    vec4 to;
-    vec4 up;
-    mat4 viewmtx;
-};
+#include "spheriod.glsl"
 
-struct Projection {
-    mat4 projmtx;
-};
+#include "scene.glsl"
 
 uniform Camera u_camera;
 uniform Projection u_projection;
@@ -19,14 +12,6 @@ uniform samplerCube u_skybox;
 in vec3 v_direction;
 
 out vec4 fragColor;
-
-float earth_radius(vec3 dir) {
-    float a = 6378137.0f;   // radius A 
-    float b = 6356752.3f;   // radius B
-    dir = normalize(dir);
-    float r = 1.0f / sqrt((dir.x * dir.x + dir.y * dir.y) / (a * a) + (dir.z * dir.z) / (b * b));
-    return r;
-}
 
 void main() {
 
@@ -47,4 +32,6 @@ void main() {
     skycolor = m > 0.0f && h <= 0.0f ? vec3(0, 0, 0) : skycolor;
 
     fragColor = vec4(skycolor, 1.0f);
+
+    gl_FragDepth = 1.0;
 }

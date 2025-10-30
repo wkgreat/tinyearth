@@ -6,5 +6,8 @@ struct Camera {
 };
 
 struct Projection {
+    float near;
+    float far;
     mat4 projmtx;
+    float logDepthConstant;
 };

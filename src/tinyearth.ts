@@ -1,20 +1,16 @@
-import { glMatrix, mat4 } from "gl-matrix";
-import { checkGLError } from "./debug.js";
-import EventBus, { TinyEarthEvent } from "./event.js";
-import { buildFrustum } from "./frustum.js";
-import { vec4_t3 } from "./glmatrix_utils.js";
-import Scene, { type SceneOptions } from "./scene.js";
-import { defaultSkyBoxSourceInfo, SkyBoxProgram, type SkyBoxSourceInfo } from "./skybox.js";
-import { getSunPositionECEF } from "./sun.js";
-import { GlobeTileProgram, TileProvider } from "./tilerender.js";
-import Timer from "./timer.js";
+import { glMatrix } from "gl-matrix";
 import proj4 from "proj4";
-import { EPSG_4326, EPSG_4978 } from "./proj.js";
 import type { ColorLike } from "./color.js";
 import Color from "./color.js";
+import EventBus, { TinyEarthEvent } from "./event.js";
+import { EPSG_4326, EPSG_4978 } from "./proj.js";
+import Scene, { type SceneOptions } from "./scene.js";
+import { defaultSkyBoxSourceInfo, SkyBoxProgram, type SkyBoxSourceInfo } from "./skybox.js";
+import { GlobeTileProgram, TileProvider } from "./tilerender.js";
 import { TileResources, type TileSourceInfo } from "./tilesource.js";
-import type BaseTool from "./tools/tool.js";
+import Timer from "./timer.js";
 import CameraMouseControlTool from "./tools/camera_mouse_control.js";
+import type BaseTool from "./tools/tool.js";
 glMatrix.setMatrixArrayType(Array);
 
 interface TinyEarthOptions {
@@ -37,7 +33,7 @@ const defaultSceneOptions: Omit<SceneOptions, "viewport" | "tinyearth"> = {
     },
     projection: {
         fovy: Math.PI / 3,
-        near: 1,
+        near: 10,
         far: 1E8
     },
 }
@@ -102,7 +98,7 @@ export default class TinyEarth {
 
         this.canvas = _canvas;
 
-        _gl = this.canvas.getContext("webgl2", { alpha: true });
+        _gl = this.canvas.getContext("webgl2", { alpha: true, depth: true, antialias: false });
 
         if (_gl === null) {
             throw new Error("webgl context is null");
@@ -153,14 +149,14 @@ export default class TinyEarth {
         this.skybox = options.skybox ?? true;
 
         // tile program
-        this.globeTilePorgram = new GlobeTileProgram(this);
+        this.globeTilePorgram = new GlobeTileProgram({ tinyearth: this });
 
         this.#defaultTileProvider = this.getDefaultTileProvider();
 
         this.addTileProvider(this.#defaultTileProvider);
 
         // skybox program
-        this.skyboxProgram = new SkyBoxProgram(this);
+        this.skyboxProgram = new SkyBoxProgram({ tinyearth: this });
 
         this.setSkyboxSource(defaultSkyBoxSourceInfo);
 
@@ -317,49 +313,28 @@ export default class TinyEarth {
 
         let that = this;
 
-        async function drawFrame(t: number) {
+        function drawFrame(t: number) {
             if (that.isStartDraw()) {
 
                 that.timer.tick(t);
 
                 if (that.gl && that.scene) {
                     that.clearColor();
-                    that.gl.clearDepth(1.0);
                     that.gl.clear(that.gl.COLOR_BUFFER_BIT | that.gl.DEPTH_BUFFER_BIT);
                     that.scene.viewWidth = that.viewWidth;
                     that.scene.viewHeight = that.viewHeight;
 
-                    const modelMtx = mat4.create();
-                    const projMtx = that.scene.projection.perspectiveMatrix;
-                    const viewMtx = that.scene.camera.viewMatrix;
-
-                    const invProjViewMtx = mat4.create();
-                    mat4.multiply(invProjViewMtx, projMtx, viewMtx);
-                    mat4.invert(invProjViewMtx, invProjViewMtx);
-                    const cameraWorldPos = vec4_t3(that.scene.camera.from);
-
-
                     if (that.skyboxProgram !== null) {
-                        that.skyboxProgram.setUniforms({
-                            u_invProjViewMtx: invProjViewMtx,
-                            u_worldCameraPos: cameraWorldPos,
-                            camera: that.scene.camera,
-                            projection: that.scene.projection
-                        });
-
                         that.skyboxProgram.render();
                     }
 
-                    checkGLError(that.gl, "render");
-
                     if (that.globeTilePorgram !== null) {
-                        that.globeTilePorgram.setMaterial(that.scene);
-                        const frustum = buildFrustum(
-                            that.scene.projection,
-                            that.scene.camera);
-                        that.globeTilePorgram.setFrustum(frustum);
-                        that.globeTilePorgram.render(that.scene);
+                        that.globeTilePorgram.setMaterial();
+                        that.globeTilePorgram.render();
                     }
+
+                    that.scene.drawLayers();
+
                 }
 
                 that.eventBus.fire(TinyEarthEvent.TINYEARTH_FRAME, {

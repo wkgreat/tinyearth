@@ -1,6 +1,6 @@
 import { glMatrix, mat4 } from "gl-matrix";
-import type Scene from "./scene.js";
 import { TinyEarthEvent } from "./event.js";
+import type Scene from "./scene.js";
 glMatrix.setMatrixArrayType(Array);
 
 class Projection {
@@ -52,6 +52,10 @@ class Projection {
 
     get aspect(): number {
         return this.#aspect;
+    }
+
+    get logDepthConstant(): number {
+        return 1.0 / Math.log2(this.far + 1.0);
     }
 
 };

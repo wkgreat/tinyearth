@@ -1,6 +1,10 @@
 #version 300 es
 precision highp float;
 
+#define __DEFINE_REPLACE__
+
+#include "scene.glsl"
+
 uniform sampler2D u_image;
 uniform float u_opacity;
 uniform bool u_enableNight;
@@ -9,17 +13,11 @@ uniform bool u_isNight;
 in vec4 v_worldPos;
 in vec2 v_texcoord;
 in vec3 v_normal;
+in float v_logz;
 
 struct Sun {
     vec3 position;
     vec4 color;
-};
-
-struct Camera {
-    vec4 from;
-    vec4 to;
-    vec4 up;
-    mat4 viewmtx;
 };
 
 struct Material {
@@ -32,7 +30,8 @@ struct Material {
 
 uniform Material material;
 uniform Sun sun;
-uniform Camera camera;
+uniform Camera u_camera;
+uniform Projection u_projection;
 
 out vec4 fragColor;
 
@@ -63,10 +62,21 @@ vec4 nightSurfaceColor(vec4 texcolor, vec3 location, Sun light, vec3 cameraPosit
     return vec4(color, a);
 }
 
+#ifdef DEBUG_DEPTH
+
+void main() {
+
+    float depth = v_logz / log2(u_projection.far + 1.0);
+
+    fragColor = vec4(mix(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), depth), 1.0);
+}
+
+#else
+
 void main() {
 
     vec3 pos = v_worldPos.xyz;
-    vec3 eye = vec3(camera.from);
+    vec3 eye = vec3(u_camera.from);
     vec4 texcolor = vec4(0, 0, 0, 1);
 
     texcolor = texture(u_image, v_texcoord);
@@ -81,4 +91,8 @@ void main() {
         fragColor = texcolor;
     }
 
+    gl_FragDepth = v_logz / log2(u_projection.far + 1.0);
+
 }
+
+#endif

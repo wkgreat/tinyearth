@@ -287,8 +287,6 @@ class Camera {
         return [fieldx, fieldy];
     }
 
-
-
 };
 
 export default Camera;

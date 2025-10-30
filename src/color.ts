@@ -1,4 +1,4 @@
-import type { NumArr3, NumArr4 } from "./defines";
+import type { NumArr4 } from "./defines";
 
 
 export type ColorLike = Color | string | number[];
@@ -92,6 +92,17 @@ export default class Color {
 
     setAlpha(a: number) {
         this.a = a;
+    }
+
+    mix(c: Color, w: number) {
+        w = Math.max(w, 0.0);
+        w = Math.min(w, 1.0);
+        return new Color(
+            this.r * (1 - w) + c.r * w,
+            this.g * (1 - w) + c.g * w,
+            this.b * (1 - w) + c.b * w,
+            this.a * (1 - w) + c.a * w,
+        );
     }
 
 }
