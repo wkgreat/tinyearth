@@ -1,9 +1,16 @@
 import { glMatrix, vec3, vec4 } from "gl-matrix";
-import proj4 from "proj4";
 import type { NumArr3 } from "./defines.js";
 import { vec3_add, vec3_cross, vec3_scale, vec3_sub } from "./glmatrix_utils.js";
-import { EPSG_4978, type projcode_t } from "./proj.js";
+import SRS, { type projcode_t } from "./proj.js";
 glMatrix.setMatrixArrayType(Array);
+
+export function toRadians(d: number): number {
+    return d * Math.PI / 180;
+}
+
+export function toDegrees(r: number): number {
+    return r * 180 / Math.PI;
+}
 
 /**
  * Point in 3D space.
@@ -12,7 +19,7 @@ export class Point3D {
 
     position: vec3 = vec3.fromValues(0, 0, 0);
 
-    projcode: projcode_t = EPSG_4978;
+    projcode: projcode_t = 4978;
 
     constructor() {}
 
@@ -22,12 +29,12 @@ export class Point3D {
         return p;
     }
 
-    static fromXYZ(x: number, y: number, z: number, proj: projcode_t = EPSG_4978): Point3D {
+    static fromXYZ(x: number, y: number, z: number, proj: projcode_t = SRS.EPSG_4978): Point3D {
         const p = new Point3D();
-        if (proj === EPSG_4978) {
+        if (proj === SRS.EPSG_4978) {
             p.position = vec3.fromValues(x, y, z);
         } else {
-            const a = proj4(proj, EPSG_4978, [x, y, z]) as NumArr3;
+            const a = SRS.transform(proj, SRS.EPSG_4978, [x, y, z]) as NumArr3;
             p.position = vec3.fromValues(a[0], a[1], a[2]);
         }
         return p;
@@ -308,7 +315,31 @@ export class Spheriod {
 
 }
 
-export const SPHERIOD_WGS84 = new Spheriod(6378137.0, 6378137.0, 6356752.314245);
+export class OblateSpheriod extends Spheriod {
+    constructor(a: number, b: number) {
+        super(a, a, b);
+    }
+
+    get majorRadius() {
+        return super.a;
+    }
+
+    get minorRadius() {
+        return super.c;
+    }
+
+    get f() {
+        return (this.majorRadius - this.minorRadius) / this.majorRadius;
+    }
+
+    get e() {
+        return Math.sqrt(1 - Math.pow(this.minorRadius / this.majorRadius, 2));
+    }
+
+    get e2() {
+        return this.f * (2 - this.f);
+    }
+}
 
 /**
  * @param ray

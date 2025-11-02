@@ -3,7 +3,7 @@ import { mat4, vec3, vec4 } from 'gl-matrix';
 import proj4 from 'proj4';
 import Camera from '../src/camera';
 import { buildFrustum } from '../src/frustum';
-import { Plane, planeCrossPlane, Ray, rayCrossTriangle, Triangle } from '../src/geometry';
+import { Plane, planeCrossPlane, Ray, rayCrossTriangle, Triangle } from '../src/math';
 import { mat4_inv, mat4_mul, vec3_add, vec3_normalize, vec3_scale, vec3_sub, vec3_t4, vec3_t4_affine, vec4_t3 } from '../src/glmatrix_utils';
 import { EPSG_4326, EPSG_4978 } from '../src/proj';
 import Projection from '../src/projection';

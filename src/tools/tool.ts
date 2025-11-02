@@ -1,9 +1,9 @@
 import { vec4, type mat4 } from "gl-matrix";
-import { Ray, rayCrossSpheriod, Spheriod, type Point3D } from "../geom";
+import { Ray, rayCrossSpheriod, Spheriod, type Point3D } from "../math";
 import { mat4_inv, mat4_mul, vec3_normalize, vec3_sub, vec4_affine, vec4_t3 } from "../glmatrix_utils";
 import type Scene from "../scene";
-import { WGS84_SPHERIOD_A, WGS84_SPHERIOD_B } from "../proj";
 import type TinyEarth from "../tinyearth";
+import SRS from "../proj";
 
 export interface BaseToolOptions {
     tinyearth: TinyEarth
@@ -51,7 +51,7 @@ export function positionAtPixel(scene: Scene, x: number, y: number): Point3D | n
     const d = vec3_normalize(vec3_sub(wp, vf));
 
     const ray = new Ray(vf, d);
-    const spheriod = new Spheriod(WGS84_SPHERIOD_A, WGS84_SPHERIOD_A, WGS84_SPHERIOD_B);
+    const spheriod = new Spheriod(SRS.SPHERIOD_WGS84.a, SRS.SPHERIOD_WGS84.a, SRS.SPHERIOD_WGS84.c);
     const crossPoints = rayCrossSpheriod(ray, spheriod, false);
     if (crossPoints === null || crossPoints.length === 0) {
         return null;

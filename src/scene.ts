@@ -3,7 +3,6 @@ import Camera from "./camera.js";
 import { TinyEarthEvent } from "./event.js";
 import Frustum, { buildFrustum } from "./frustum.js";
 import type { Layer } from "./layer.js";
-import type { Geometry } from "./geometry.js";
 import Projection from "./projection.js";
 import { Sun } from "./sun.js";
 import type TinyEarth from "./tinyearth.js";
@@ -39,12 +38,8 @@ export default class Scene {
     #viewWidth: number = 0;
     #frustum: Frustum;
     #worldToScreenMatrix: mat4;
-
     #sun: Sun;
-
     #layers: Layer[] = [];
-
-    #geometries: Geometry[] = [];
 
     constructor(options: SceneOptions) {
         this.#tinyearth = options.tinyearth;
@@ -54,17 +49,15 @@ export default class Scene {
         this.#viewHeight = options.viewport.height;
         this.#frustum = this.computeFrustum();
         this.#worldToScreenMatrix = this.computeWorldToScreenMatrix();
-
         this.#sun = new Sun(this);
-
-        this.tinyearth.eventBus.addEventListener(TinyEarthEvent.PROJECTION_CHANGE, {
+        this.#tinyearth.eventBus.addEventListener(TinyEarthEvent.PROJECTION_CHANGE, {
             callback: (info) => {
                 this.computeFrustum();
                 this.computeWorldToScreenMatrix();
             }
         });
 
-        this.tinyearth.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
+        this.#tinyearth.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
             callback: (info) => {
                 this.computeFrustum();
                 this.computeWorldToScreenMatrix();

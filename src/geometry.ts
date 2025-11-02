@@ -1,7 +1,6 @@
 import { vec3 } from "gl-matrix";
-import proj4 from "proj4";
 import type { NumArr3 } from "./defines";
-import { EPSG_4978, type projcode_t } from "./proj";
+import SRS, { type projcode_t } from "./proj";
 
 export class Coordinate {
 
@@ -61,7 +60,7 @@ export class Coordinate {
 
     transform(src: projcode_t, dst: projcode_t, inplace: boolean = true): Coordinate {
 
-        const vs = proj4(src, dst, [this.x, this.y, this.z]) as NumArr3;
+        const vs = SRS.transform(src, dst, [this.x, this.y, this.z]) as NumArr3;
 
         if (inplace) {
             this.x = vs[0];
@@ -82,9 +81,9 @@ export class Coordinate {
 
 export class Geometry {
 
-    #srs: projcode_t = EPSG_4978;
+    #srs: projcode_t = SRS.ECEF;
 
-    constructor(srs: projcode_t = EPSG_4978) {
+    constructor(srs: projcode_t = SRS.ECEF) {
         this.#srs = srs;
     }
 
@@ -101,7 +100,7 @@ export class Point extends Geometry {
 
     #coordinate: [Coordinate];
 
-    constructor(coordinate: Coordinate, srs: projcode_t = EPSG_4978, copy: boolean = true) {
+    constructor(coordinate: Coordinate, srs: projcode_t = SRS.ECEF, copy: boolean = true) {
         super(srs);
         if (copy) {
             this.#coordinate = [coordinate.clone()];
@@ -136,30 +135,3 @@ export class Point extends Geometry {
 
     }
 }
-
-// export class PointMesh extends Mesh {
-
-//     points: Point[] = [];
-
-//     constructor(points: Point[]) {
-//         super();
-//         this.points = points;
-//     }
-
-//     draw(program: PointProgram) {
-//         program.draw(this.points);
-//     }
-// }
-
-// export function pointsToLayer(tinyearth: TinyEarth, points: Point[]): Layer | null {
-
-//     const program = new PointProgram({
-//         tinyearth
-//     });
-
-//     const mesh = new PointMesh(points);
-
-//     const layer = new Layer(program, mesh);
-
-//     return layer;
-// }

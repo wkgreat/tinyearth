@@ -1,9 +1,8 @@
 import { glMatrix } from "gl-matrix";
-import proj4 from "proj4";
 import type { ColorLike } from "./color.js";
 import Color from "./color.js";
 import EventBus, { TinyEarthEvent } from "./event.js";
-import { EPSG_4326, EPSG_4978 } from "./proj.js";
+import SRS from "./proj.js";
 import Scene, { type SceneOptions } from "./scene.js";
 import { defaultSkyBoxSourceInfo, SkyBoxProgram, type SkyBoxSourceInfo } from "./skybox.js";
 import { GlobeTileProgram, TileProvider } from "./tilerender.js";
@@ -15,13 +14,13 @@ glMatrix.setMatrixArrayType(Array);
 
 interface TinyEarthOptions {
     canvas: HTMLCanvasElement | string;
-    scene?: Omit<SceneOptions, "viewport">
+    scene?: Omit<SceneOptions, "viewport" | "tinyearth">
     night?: boolean
     skybox?: boolean
     bgcolor?: ColorLike
 }
 
-const cameraFrom = proj4(EPSG_4326, EPSG_4978, [118.778869, 32.043823, 1E7]);
+const cameraFrom = SRS.transform(SRS.WGS84, SRS.ECEF, [118.778869, 32.043823, 1E7]);
 const cameraTo = [0, 0, 0];
 const cameraUp = [0, 0, 1];
 

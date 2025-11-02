@@ -1,5 +1,4 @@
 import { mat4, vec3, vec4 } from "gl-matrix";
-import proj4 from "proj4";
 import Camera from "./camera.js";
 import type { NumArr3 } from "./defines.js";
 import { TinyEarthEvent } from "./event.js";
@@ -8,7 +7,7 @@ import { vec3_t4, vec4_affine } from "./glmatrix_utils.js";
 import { GLSLSource } from "./glsl.js";
 import { Tile, TileStatus } from "./maptiler.js";
 import { Program, type ProgramOptions } from "./program.js";
-import { EARTH_RADIUS, EPSG_3857, EPSG_4326, EPSG_4978 } from "./proj.js";
+import SRS from "./proj.js";
 import type Scene from "./scene.js";
 import tileFragSource from "./shader/tile.frag";
 import tileVertSource from "./shader/tile.vert";
@@ -231,12 +230,14 @@ export class GlobeTileProgram extends Program {
                 }
 
                 provider.frustum = this.tinyearth.scene!.frustum;
-                const level = provider.curlevel;
+                const level = provider.source.maxLevel;
                 provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, (node) => {
                     if (node && node.tile && node.tile.ready) {
                         that.drawTileNode(node, modelMtx, this.tinyearth.scene.camera, this.tinyearth.scene.projection.perspectiveMatrix, provider.getOpacity(), provider.night);
                     }
-                })
+                });
+
+                // console.log(provider.tiletree.provideCount);
             }
         }
     }
@@ -329,6 +330,8 @@ export class TileTree {
     source: TileSourceInfo;
     #startRecLevel: number = 2;
     frustum: Frustum | null = null;
+
+    provideCount: number = 0;
 
     constructor(source: TileSourceInfo) {
         this.source = source;
@@ -450,6 +453,7 @@ export class TileTree {
     }
 
     fixedLevelProvide(level: number, frustum: Frustum, callback: TileNodeCallback) {
+        this.provideCount = 0;
         this.#fixedLevelProvideRec(this.root, level, frustum, callback);
     }
 
@@ -470,6 +474,7 @@ export class TileTree {
 
             status = node.tile.load();
             if (status === TileStatus.READY) {
+                this.provideCount++;
                 callback(node);
             }
 
@@ -487,6 +492,7 @@ export class TileTree {
             if (this.#needInternalNodeRender(childrenStatus)) {
                 status = node.tile.load();
                 if (status === TileStatus.READY) {
+                    this.provideCount++;
                     callback(node);
                 }
             } else {
@@ -509,10 +515,10 @@ export class TileTree {
         const corners = tile.getTileCorner();
         const m = scene.worldToScreenMatrix;
 
-        let p0 = vec3_t4(corners[0]);
-        let p1 = vec3_t4(corners[1]);
-        let p2 = vec3_t4(corners[2]);
-        let p3 = vec3_t4(corners[3]);
+        let p0 = vec3_t4(corners[0]); // lowerleft
+        let p1 = vec3_t4(corners[1]); // upperleft
+        let p2 = vec3_t4(corners[2]); // upperright
+        let p3 = vec3_t4(corners[3]); // lowerright
 
         p0 = vec4_affine(p0, m);
         p1 = vec4_affine(p1, m);
@@ -520,11 +526,11 @@ export class TileTree {
         p3 = vec4_affine(p3, m);
 
         const r0 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
-        const r1 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
-        const r2 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
-        const r3 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
+        const r1 = this.#vec4_dist2d(p1, p2) / DefaultTileSize;
+        const r2 = this.#vec4_dist2d(p2, p3) / DefaultTileSize;
+        const r3 = this.#vec4_dist2d(p3, p0) / DefaultTileSize;
 
-        const mr = (r0 + r1 + r2 + r3) / 4.0;
+        const mr = Math.max(Math.max(Math.max(r0, r1), r2), r3);
 
         return mr;
     }
@@ -532,8 +538,8 @@ export class TileTree {
     #pointOnTile(p: vec3, tile: Tile): boolean {
 
         const [xmin, ymin, xmax, ymax] = tile.extent(); //xmin, ymin, xmax, ymax
-        const p4326 = proj4(EPSG_4978, EPSG_4326, [p[0], p[1], p[2]]) as NumArr3;
-        const p3857 = proj4(EPSG_4326, EPSG_3857, [p4326[0], p4326[1], p4326[2]]) as NumArr3;
+        const p4326 = SRS.transform(SRS.ECEF, SRS.WGS84, [p[0], p[1], p[2]]) as NumArr3;
+        const p3857 = SRS.transform(SRS.WGS84, SRS.WEB, [p4326[0], p4326[1], p4326[2]]) as NumArr3;
 
         if (p3857[0] >= xmin && p3857[0] <= xmax && p3857[1] >= ymin && p3857[2] <= ymax) {
             return true;
@@ -544,6 +550,7 @@ export class TileTree {
     }
 
     dynamicLevelProvide(level: number, scene: Scene, callback: TileNodeCallback) {
+        this.provideCount = 0;
         this.#dynamicLevelProvideRec(this.root, level, scene, callback);
     }
 
@@ -570,10 +577,11 @@ export class TileTree {
 
         const tileRes = this.getTileResolution(scene, node.tile);
 
-        if ((node.key.z > 3 && tileRes <= 0.8) || node.key.z === level) {
+        if ((node.key.z > 3 && tileRes <= 1.0) || node.key.z === level) {
 
             status = node.tile.load();
             if (status === TileStatus.READY) {
+                this.provideCount++;
                 callback(node);
             }
 
@@ -591,6 +599,7 @@ export class TileTree {
             if (this.#needInternalNodeRender(childrenStatus)) {
                 status = node.tile.load();
                 if (status === TileStatus.READY) {
+                    this.provideCount++;
                     callback(node);
                 }
             } else {
@@ -605,8 +614,6 @@ export class TileTree {
     #needInternalNodeRender(status: TileNodeStatus[]): boolean {
         return !status.every(s => s === TileStatus.READY || s === TileNodeOmitStatus.OMIT);
     }
-
-
 
     vaccum() {
         //TODO 定期清理不用的tile
@@ -724,9 +731,9 @@ export class TileProvider {
     tileLevelWithCamera(camera: Camera) {
         const tileSize = 256;
         const from = camera.from
-        let pos: NumArr3 = proj4(EPSG_4978, EPSG_4326, [from[0], from[1], from[2]]);
+        let pos: NumArr3 = SRS.transform(SRS.ECEF, SRS.WGS84, [from[0], from[1], from[2]]);
         let height = pos[2];
-        const initialResolution = 2 * Math.PI * EARTH_RADIUS / tileSize;
+        const initialResolution = 2 * Math.PI * SRS.SPHERIOD_WGS84.a / tileSize;
         const groundResolution = height * 2 / tileSize;
         const zoom = Math.log2(initialResolution / groundResolution) + 1;
         return Math.min(Math.max(Math.ceil(zoom), this.source.minLevel), this.source.maxLevel);

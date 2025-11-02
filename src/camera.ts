@@ -1,10 +1,9 @@
 import { glMatrix, mat4, vec3, vec4 } from "gl-matrix";
-import proj4 from "proj4";
 import { type NumArr2, type NumArr3 } from "./defines.js";
 import { TinyEarthEvent } from "./event.js";
 import { mat4_mul, mat4_rotateAroundLine, vec3_array, vec3_normalize, vec3_scale, vec3_sub, vec3_t4, vec4_t3 } from "./glmatrix_utils.js";
-import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
 import Scene from "./scene.js";
+import SRS from "./proj.js";
 glMatrix.setMatrixArrayType(Array);
 
 export type CameraEventCallback = (camera: Camera, info: any) => void;
@@ -59,8 +58,8 @@ class Camera {
         const lx = -dx * rx;
         const ly = -dy * ry;
 
-        const ax = Math.atan(lx / EARTH_RADIUS);
-        const ay = Math.atan(ly / EARTH_RADIUS);
+        const ax = Math.atan(lx / SRS.SPHERIOD_WGS84.a);
+        const ay = Math.atan(ly / SRS.SPHERIOD_WGS84.a);
 
         const viewFrom4 = vec4.transformMat4(vec4.create(), this.#from, this.#viewMtx);
         const viewTo4 = vec4.transformMat4(vec4.create(), this.#to, this.#viewMtx);
@@ -108,9 +107,9 @@ class Camera {
 
         //TODO 考虑地球为椭球体
         const d = vec4.create();
-        const fromLonLatAlt: NumArr3 = proj4(EPSG_4978, EPSG_4326, [this.#from[0], this.#from[1], this.#from[2]]);
+        const fromLonLatAlt: NumArr3 = SRS.transform(SRS.ECEF, SRS.WGS84, [this.#from[0], this.#from[1], this.#from[2]]);
         const toLonLatAlt: NumArr3 = [fromLonLatAlt[0], fromLonLatAlt[1], 1];
-        const to = proj4(EPSG_4326, EPSG_4978, toLonLatAlt);
+        const to = SRS.transform(SRS.WGS84, SRS.ECEF, toLonLatAlt);
         const toVec4 = vec4.fromValues(to[0], to[1], to[2], 1);
         vec4.sub(d, toVec4, this.#from);
         const factor = Math.sign(f) * 0.1;
@@ -118,7 +117,7 @@ class Camera {
         vec4.add(this.#from, this.#from, d);
         this._look();
 
-        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+        this.#scene.tinyearth?.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
             camera: this,
             type: "zoom"
         });
@@ -251,7 +250,7 @@ class Camera {
     }
 
     getHeightToSurface() {
-        const from = proj4(EPSG_4978, EPSG_4326, vec3_array(vec4_t3(this.#from)));
+        const from = SRS.transform(SRS.ECEF, SRS.WGS84, vec3_array(vec4_t3(this.#from)));
         return from[2];
     }
 
@@ -281,7 +280,7 @@ class Camera {
         const half_fox = projection.fovx / 2.0;
         const vlength = height * Math.tan(half_foy);
         const hlength = height * Math.tan(half_fox);
-        const radius = EARTH_RADIUS;
+        const radius = SRS.SPHERIOD_WGS84.a;
         const fieldx = Math.atan(hlength / radius) * 2;
         const fieldy = Math.atan(vlength / radius) * 2;
         return [fieldx, fieldy];

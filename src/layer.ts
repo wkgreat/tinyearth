@@ -2,7 +2,7 @@ import type { ColorLike } from "./color";
 import Color from "./color";
 import type { Entity, GeometryEntity, PointEntity } from "./entity";
 import { PointProgram, type Program } from "./program";
-import { EPSG_4978 } from "./proj";
+import SRS from "./proj";
 import type { GeometryStyle, PointStyle, Style, StyleBoolMapFunction, StyleColorMapFunction, StyleNumberMapFunction } from "./style";
 import type TinyEarth from "./tinyearth";
 import { GLAttribute } from "./webgl";
@@ -206,7 +206,7 @@ export class PointLayer extends GeometryLayer {
         const count = this.entities.length;
 
         const positionArray = this.entities.flatMap(e => {
-            const p = e.point.srs !== EPSG_4978 ? e.point.transform(EPSG_4978, false) : e.point;
+            const p = e.point.srs !== SRS.ECEF ? e.point.transform(SRS.ECEF, false) : e.point;
             return [p.x, p.y, p.z];
         });
         const sizeArray = this.getNumberArray(this.style.size, count);

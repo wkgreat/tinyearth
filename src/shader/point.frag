@@ -16,9 +16,9 @@ uniform Projection u_projection;
 
 out vec4 fragColor;
 
-bool isStroke(float size, float strokewidth, float radius) {
+float isStroke(float size, float strokewidth, float radius) {
     float r = 0.5 - strokewidth / size / 2.0;
-    return radius >= r;
+    return step(r,radius);
 }
 
 
@@ -46,13 +46,9 @@ void main() {
         discard;
     }
 
-    bool stroke = isStroke(v_size, v_strokewidth, radius);
+    float stroke = isStroke(v_size, v_strokewidth, radius);
 
-    if(stroke) {
-        fragColor = v_strokecolor;
-    } else {
-        fragColor = v_color;
-    }
+    fragColor = mix(v_color, v_strokecolor, stroke);
 
     gl_FragDepth = v_logz / log2(u_projection.far + 1.0);
 

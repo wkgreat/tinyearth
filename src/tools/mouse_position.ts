@@ -1,9 +1,8 @@
 import proj4 from "proj4";
 import type { MouseEventHandler } from "../defines.js";
-import { EPSG_4326, EPSG_4978 } from "../proj.js";
-import TinyEarth from "../tinyearth.js";
-import BaseTool, { formatNumber, positionAtPixel, type BaseToolOptions } from "./tool.js";
 import type ContextMenuTool from "./context_menu.js";
+import BaseTool, { formatNumber, positionAtPixel, type BaseToolOptions } from "./tool.js";
+import SRS from "../proj.js";
 
 type ValueElement =
     HTMLInputElement |
@@ -40,7 +39,7 @@ export class MousePositionTool extends BaseTool {
                     const p = positionAtPixel(that.tinyearth.scene!, this.mouseX, this.mouseY);
                     let text = "";
                     if (p) {
-                        const lonLatAlt = proj4(EPSG_4978, EPSG_4326, [p.getX(), p.getY(), p.getZ()]);
+                        const lonLatAlt = SRS.transform(SRS.ECEF, SRS.WGS84, [p.getX(), p.getY(), p.getZ()]);
                         text = `${lonLatAlt[0]}, ${lonLatAlt[1]}`;
                     } else {
                         text = "";
@@ -68,7 +67,7 @@ export class MousePositionTool extends BaseTool {
                 that.mouseY = y;
                 const p = positionAtPixel(that.tinyearth.scene!, x, y);
                 if (p) {
-                    const lonLatAlt = proj4(EPSG_4978, EPSG_4326, [p.getX(), p.getY(), p.getZ()]);
+                    const lonLatAlt = SRS.transform(SRS.ECEF, SRS.WGS84, [p.getX(), p.getY(), p.getZ()]);
                     div.innerHTML = `MousePosition: ${formatNumber(lonLatAlt[0]!, 3, 6)}, ${formatNumber(lonLatAlt[1]!, 3, 6)}`;
                 } else {
                     div.innerHTML = "MousePosition: null";

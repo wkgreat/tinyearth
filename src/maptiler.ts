@@ -1,10 +1,9 @@
 import { glMatrix, vec3, vec4 } from "gl-matrix";
-import proj4 from "proj4";
-import type { Extent, Interval, NumArr2, NumArr3 } from "./defines.js";
+import type { Extent, Interval, NumArr3 } from "./defines.js";
 import Frustum from "./frustum.js";
-import { Plane, pointOutSidePlane } from "./geom.js";
-import { vec3_add, vec3_dot, vec3_normalize, vec3_scale, vec3_sub, vec3_t4 } from "./glmatrix_utils.js";
-import { EPSG_3857, EPSG_4326, EPSG_4978, type projcode_t } from "./proj.js";
+import { vec3_add, vec3_dot, vec3_fromarray, vec3_normalize, vec3_scale, vec3_sub, vec3_t4 } from "./glmatrix_utils.js";
+import { Plane, pointOutSidePlane } from "./math.js";
+import SRS, { type projcode_t } from "./proj.js";
 import type { TileProvider } from "./tilerender.js";
 import type { TileURL } from "./tilesource.js";
 import { loadTileImage } from "./tileutils.js";
@@ -52,6 +51,8 @@ export class Tile {
     normals: [vec3, vec3, vec3, vec3] | null = null;
 
     corners: [vec3, vec3, vec3, vec3] | null = null;
+
+    subdivisionLevel: number = 3;
 
     constructor(url: TileURL, x: number = 0, y: number = 0, z: number = 0) {
         this.setUrl(url, x, y, z);
@@ -131,10 +132,9 @@ export class Tile {
 
     center() {
         const ext = this.extent();
-        let p = [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2];
-        p = proj4(EPSG_3857, EPSG_4326, p) as number[];
-        p = proj4(EPSG_4326, EPSG_4978, [...p, 0]) as number[];
-        return vec3.fromValues(p[0] as number, p[1] as number, p[2] as number);
+        let p: NumArr3 = [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2, 0];
+        p = SRS.transform(SRS.WEB, SRS.ECEF, p);
+        return vec3_fromarray(p);
     }
 
     centerNormal() {
@@ -143,27 +143,21 @@ export class Tile {
 
     getNormals(): [vec3, vec3, vec3, vec3] {
         if (!this.normals) {
-            // console.log("CALC");
+
             const ext = this.extent();
-            let p0 = [ext[0], ext[1]];
-            let p1 = [ext[0], ext[3]];
-            let p2 = [ext[2], ext[3]];
-            let p3 = [ext[2], ext[1]];
-            p0 = proj4(EPSG_3857, EPSG_4326, p0) as number[];
-            p1 = proj4(EPSG_3857, EPSG_4326, p1) as number[];
-            p2 = proj4(EPSG_3857, EPSG_4326, p2) as number[];
-            p3 = proj4(EPSG_3857, EPSG_4326, p3) as number[];
+            let p0: NumArr3 = [ext[0], ext[1], 0];
+            let p1: NumArr3 = [ext[0], ext[3], 0];
+            let p2: NumArr3 = [ext[2], ext[3], 0];
+            let p3: NumArr3 = [ext[2], ext[1], 0];
+            p0 = SRS.transform(SRS.WEB, SRS.ECEF, p0);
+            p1 = SRS.transform(SRS.WEB, SRS.ECEF, p1);
+            p2 = SRS.transform(SRS.WEB, SRS.ECEF, p2);
+            p3 = SRS.transform(SRS.WEB, SRS.ECEF, p3);
 
-            p0 = proj4(EPSG_4326, EPSG_4978, [...p0, 0]) as number[];
-            p1 = proj4(EPSG_4326, EPSG_4978, [...p1, 0]) as number[];
-            p2 = proj4(EPSG_4326, EPSG_4978, [...p2, 0]) as number[];
-            p3 = proj4(EPSG_4326, EPSG_4978, [...p3, 0]) as number[];
-
-            // TODO resolve undefined type
-            const v0 = vec3_normalize(vec3.fromValues(p0[0]!, p0[1]!, p0[2]!));
-            const v1 = vec3_normalize(vec3.fromValues(p1[0]!, p1[1]!, p1[2]!));
-            const v2 = vec3_normalize(vec3.fromValues(p2[0]!, p2[1]!, p2[2]!));
-            const v3 = vec3_normalize(vec3.fromValues(p3[0]!, p3[1]!, p3[2]!));
+            const v0 = vec3_normalize(vec3_fromarray(p0));
+            const v1 = vec3_normalize(vec3_fromarray(p1));
+            const v2 = vec3_normalize(vec3_fromarray(p2));
+            const v3 = vec3_normalize(vec3_fromarray(p3));
 
             this.normals = [v0, v1, v2, v3];
         }
@@ -174,25 +168,22 @@ export class Tile {
 
         if (!this.corners) {
             const ext = this.extent(); // xmin, ymin, xmax, ymax
-            let p0 = [ext[0], ext[1]] as NumArr2; // lowerleft
-            let p1 = [ext[0], ext[3]] as NumArr2; // upperleft
-            let p2 = [ext[2], ext[3]] as NumArr2; // upperright
-            let p3 = [ext[2], ext[1]] as NumArr2; // lowerright
-            p0 = proj4(EPSG_3857, EPSG_4326, p0) as NumArr2;
-            p1 = proj4(EPSG_3857, EPSG_4326, p1) as NumArr2;
-            p2 = proj4(EPSG_3857, EPSG_4326, p2) as NumArr2;
-            p3 = proj4(EPSG_3857, EPSG_4326, p3) as NumArr2;
+            let p0: NumArr3 = [ext[0], ext[1], 0]; // lowerleft
+            let p1: NumArr3 = [ext[0], ext[3], 0]; // upperleft
+            let p2: NumArr3 = [ext[2], ext[3], 0]; // upperright
+            let p3: NumArr3 = [ext[2], ext[1], 0]; // lowerright
 
-            const v0 = proj4(EPSG_4326, EPSG_4978, [p0[0], p0[1], 0]) as NumArr3;
-            const v1 = proj4(EPSG_4326, EPSG_4978, [p1[0], p1[1], 0]) as NumArr3;
-            const v2 = proj4(EPSG_4326, EPSG_4978, [p2[0], p2[1], 0]) as NumArr3;
-            const v3 = proj4(EPSG_4326, EPSG_4978, [p3[0], p3[1], 0]) as NumArr3;
+            p0 = SRS.transform(SRS.WEB, SRS.ECEF, p0);
+            p1 = SRS.transform(SRS.WEB, SRS.ECEF, p1);
+            p2 = SRS.transform(SRS.WEB, SRS.ECEF, p2);
+            p3 = SRS.transform(SRS.WEB, SRS.ECEF, p3);
 
             this.corners = [
-                vec3.fromValues(v0[0], v0[1], v0[2]),
-                vec3.fromValues(v1[0], v1[1], v1[2]),
-                vec3.fromValues(v2[0], v2[1], v2[2]),
-                vec3.fromValues(v3[0], v3[1], v3[2])]
+                vec3.fromValues(p0[0], p0[1], p0[2]), // lowerleft
+                vec3.fromValues(p1[0], p1[1], p1[2]), // upperleft
+                vec3.fromValues(p2[0], p2[1], p2[2]), // upperright
+                vec3.fromValues(p3[0], p3[1], p3[2])  // lowerright
+            ]
         }
         return this.corners as [vec3, vec3, vec3, vec3];
 
@@ -252,72 +243,24 @@ export class Tile {
 
             return !tileNotBack;
         }
-
-
-
-        // if (this.z <= 5) {
-        //     const viewpoint = frustum.getViewpoint() as vec3;
-        //     const targetpoint = frustum.getTargetpoint() as vec3;
-        //     const view = vec3_normalize(vec3_sub(targetpoint, viewpoint));
-        //     const np0 = vec3_normalize(n0);
-        //     const np1 = vec3_normalize(n1);
-        //     const np2 = vec3_normalize(n2);
-        //     const np3 = vec3_normalize(n3);
-
-        //     const d0 = vec3.dot(np0, view);
-        //     const d1 = vec3.dot(np1, view);
-        //     const d2 = vec3.dot(np2, view);
-        //     const d3 = vec3.dot(np3, view);
-
-        //     return d0 >= 0 && d1 >= 0 && d2 >= 0 && d3 >= 0;
-        // } else {
-        //     const viewpoint = frustum.getViewpoint() as vec3;
-        //     const targetpoint = frustum.getTargetpoint() as vec3;
-        //     const backview = vec3_normalize(vec3_sub(viewpoint, targetpoint));
-        //     const backviewpoint = vec3_add(viewpoint, vec3_scale(backview, 1E5));
-        //     const sp0 = vec3_normalize(n0);
-        //     const sp1 = vec3_normalize(n1);
-        //     const sp2 = vec3_normalize(n2);
-        //     const sp3 = vec3_normalize(n3);
-
-        //     const vp0 = vec3_sub(backviewpoint, n0);
-        //     const vp1 = vec3_sub(backviewpoint, n1);
-        //     const vp2 = vec3_sub(backviewpoint, n2);
-        //     const vp3 = vec3_sub(backviewpoint, n3);
-
-        //     const d0 = vec3.dot(sp0, vp0);
-        //     const d1 = vec3.dot(sp1, vp1);
-        //     const d2 = vec3.dot(sp2, vp2);
-        //     const d3 = vec3.dot(sp3, vp3);
-
-        //     const cp = vec3_add(n0, vec3_add(n1, vec3_add(n2, n3)));
-        //     const cv0 = vec3_normalize(cp)
-        //     const cv1 = vec3_normalize(vec3_sub(backviewpoint, cp));
-        //     const cd = vec3.dot(cv0, cv1);
-
-        //     return !(d0 >= 0 || d1 >= 0 || d2 >= 0 || d3 >= 0 || cd >= 0);
-        // }
-
-
-
     }
 
     intersectwithFrustumECEF(frustum: Frustum): boolean {
 
         const ext = this.extent();
-        let p0 = [ext[0], ext[1]];
-        let p1 = [ext[0], ext[3]];
-        let p2 = [ext[2], ext[1]];
-        let p3 = [ext[2], ext[3]];
-        p0 = proj4(EPSG_3857, EPSG_4326, p0);
-        p1 = proj4(EPSG_3857, EPSG_4326, p1);
-        p2 = proj4(EPSG_3857, EPSG_4326, p2);
-        p3 = proj4(EPSG_3857, EPSG_4326, p3);
+        let p0: NumArr3 = [ext[0], ext[1], 0];
+        let p1: NumArr3 = [ext[0], ext[3], 0];
+        let p2: NumArr3 = [ext[2], ext[1], 0];
+        let p3: NumArr3 = [ext[2], ext[3], 0];
+        p0 = SRS.transform(SRS.WEB, SRS.WGS84, p0);
+        p1 = SRS.transform(SRS.WEB, SRS.WGS84, p1);
+        p2 = SRS.transform(SRS.WEB, SRS.WGS84, p2);
+        p3 = SRS.transform(SRS.WEB, SRS.WGS84, p3);
 
-        p0 = proj4(EPSG_4326, EPSG_4978, [...p0, 0]);
-        p1 = proj4(EPSG_4326, EPSG_4978, [...p1, 0]);
-        p2 = proj4(EPSG_4326, EPSG_4978, [...p2, 0]);
-        p3 = proj4(EPSG_4326, EPSG_4978, [...p3, 0]);
+        p0 = SRS.transform(SRS.WGS84, SRS.ECEF, p0);
+        p1 = SRS.transform(SRS.WGS84, SRS.ECEF, p1);
+        p2 = SRS.transform(SRS.WGS84, SRS.ECEF, p2);
+        p3 = SRS.transform(SRS.WGS84, SRS.ECEF, p3);
 
         const vp0 = vec4.fromValues(p0[0]!, p0[1]!, p0[2]!, 1);
         const vp1 = vec4.fromValues(p1[0]!, p1[1]!, p1[2]!, 1);
@@ -375,33 +318,6 @@ export class Tile {
             }
         }
 
-        // //tile拆成两个三角形
-        // const triangle0 = new Triangle(points[0], points[1], points[2]);
-        // const triangle1 = new Triangle(points[0], points[2], points[3]);
-        // //视锥体边是否穿过三角形
-        // const r0 = planeCrossPlane(leftPlane, bottomPlane);
-        // const r1 = planeCrossPlane(bottomPlane, rightPlane);
-        // const r2 = planeCrossPlane(rightPlane, topPlane);
-        // const r3 = planeCrossPlane(leftPlane, topPlane);
-        // const ray0 = r0.ray;
-        // const ray1 = r1.ray;
-        // const ray2 = r2.ray;
-        // const ray3 = r3.ray;
-
-        // if (rayCrossTriangle(ray0, triangle0).cross
-        //     || rayCrossTriangle(ray1, triangle0).cross
-        //     || rayCrossTriangle(ray2, triangle0).cross
-        //     || rayCrossTriangle(ray3, triangle0).cross) {
-        //     return true;
-        // }
-
-        // if (rayCrossTriangle(ray0, triangle1).cross
-        //     || rayCrossTriangle(ray1, triangle1).cross
-        //     || rayCrossTriangle(ray2, triangle1).cross
-        //     || rayCrossTriangle(ray3, triangle1).cross) {
-        //     return true;
-        // }
-
         return true;
 
     }
@@ -413,7 +329,7 @@ export class Tile {
             //TODO asynd load and toMesh
             loadTileImage(this.url, this.x, this.y, this.z).then(image => {
                 this.image = image;
-                const data = TileMesher.toMesh(this, 4, EPSG_4978);
+                const data = TileMesher.toMesh(this, this.subdivisionLevel, SRS.ECEF);
                 this.mesh = data.vertices;
                 this.#status = TileStatus.READY;
             }).catch(e => {
@@ -458,23 +374,23 @@ export class TileMesher {
     static toMeshRec(posExt: Extent, texExt: Extent, curlevel: number, level: number, targetProj: projcode_t, vertices: number[]) {
 
         if (curlevel == level) {
-            let p: NumArr3 = proj4(EPSG_3857, targetProj, [posExt[0], posExt[1], 0]);
+            let p: NumArr3 = SRS.transform(SRS.WEB, targetProj, [posExt[0], posExt[1], 0]);
             let n: NumArr3 = this.normalize(p[0], p[1], p[2]);
             vertices.push(p[0], p[1], p[2], texExt[0], texExt[1], n[0], n[1], n[2]);
-            p = proj4(EPSG_3857, targetProj, [posExt[2], posExt[3], 0]);
+            p = SRS.transform(SRS.WEB, targetProj, [posExt[2], posExt[3], 0]);
             n = this.normalize(p[0], p[1], p[2]);
             vertices.push(p[0], p[1], p[2], texExt[2], texExt[3], n[0], n[1], n[2]);
-            p = proj4(EPSG_3857, targetProj, [posExt[0], posExt[3], 0]);
+            p = SRS.transform(SRS.WEB, targetProj, [posExt[0], posExt[3], 0]);
             n = this.normalize(p[0], p[1], p[2]);
             vertices.push(p[0], p[1], p[2], texExt[0], texExt[3], n[0], n[1], n[2]);
 
-            p = proj4(EPSG_3857, targetProj, [posExt[0], posExt[1], 0]);
+            p = SRS.transform(SRS.WEB, targetProj, [posExt[0], posExt[1], 0]);
             n = this.normalize(p[0], p[1], p[2]);
             vertices.push(p[0], p[1], p[2], texExt[0], texExt[1], n[0], n[1], n[2]);
-            p = proj4(EPSG_3857, targetProj, [posExt[2], posExt[1], 0]);
+            p = SRS.transform(SRS.WEB, targetProj, [posExt[2], posExt[1], 0]);
             n = this.normalize(p[0], p[1], p[2]);
             vertices.push(p[0], p[1], p[2], texExt[2], texExt[1], n[0], n[1], n[2]);
-            p = proj4(EPSG_3857, targetProj, [posExt[2], posExt[3], 0]);
+            p = SRS.transform(SRS.WEB, targetProj, [posExt[2], posExt[3], 0]);
             n = this.normalize(p[0], p[1], p[2]);
             vertices.push(p[0], p[1], p[2], texExt[2], texExt[3], n[0], n[1], n[2]);
 

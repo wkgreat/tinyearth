@@ -7,6 +7,10 @@ export function vec3_array(v: vec3): NumArr3 {
     return [v[0], v[1], v[2]];
 }
 
+export function vec3_fromarray(a: NumArr3): vec3 {
+    return vec3.fromValues(a[0], a[1], a[2]);
+}
+
 export function vec3_scale(v1: vec3, a: number): vec3 {
     return vec3.scale(vec3.create(), v1, a);
 }

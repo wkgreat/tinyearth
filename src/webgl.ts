@@ -66,8 +66,6 @@ export class GLAttribute {
         this.gl.bindBuffer(this.buffer.type, this.buffer.buffer);
         // TODO create different typed array by numType
         this.gl.bufferData(this.buffer.type, new Float32Array(array), this.gl.STATIC_DRAW);
-        console.log(`fillData: ${this.name}`);
-        console.log(array);
     }
 
     modifyData() {
@@ -77,7 +75,6 @@ export class GLAttribute {
     activate(program: WebGLProgram) {
         if (this.gl) {
             const location = this.gl.getAttribLocation(program, this.name);
-            console.log(`attribute: ${this.name}, location: ${location}`);
             if (location >= 0) {
                 this.gl.bindBuffer(this.buffer.type, this.buffer.buffer);
                 this.gl.vertexAttribPointer(location, this.elemSize, this.numType, this.normalized, this.stride, this.offset);
