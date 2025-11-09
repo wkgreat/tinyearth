@@ -1,9 +1,9 @@
 import type { ColorLike } from "./color";
 import Color from "./color";
-import type { Entity, GeometryEntity, PointEntity } from "./entity";
-import { PointProgram, type Program } from "./program";
+import type { Entity, GeometryEntity, LineStringEntity, PointEntity } from "./entity";
+import { LineStringProgram, PointProgram, type Program } from "./program";
 import SRS from "./proj";
-import type { GeometryStyle, PointStyle, Style, StyleBoolMapFunction, StyleColorMapFunction, StyleNumberMapFunction } from "./style";
+import type { GeometryStyle, LineStringStyle, PointStyle, Style, StyleBoolMapFunction, StyleColorMapFunction, StyleNumberMapFunction } from "./style";
 import type TinyEarth from "./tinyearth";
 import { GLAttribute } from "./webgl";
 
@@ -11,7 +11,8 @@ export interface LayerOptions {
     tinyearth: TinyEarth;
     id?: string
     entities: Entity[]
-    style: Style
+    style: Style,
+    clampToGround?: boolean
 }
 
 export abstract class Layer {
@@ -21,12 +22,22 @@ export abstract class Layer {
     entities: Entity[];
     style: Style;
     program: Program | null = null;
+    clampToGround: boolean;
+
+    protected attributes: { [k: string]: GLAttribute } = {};
 
     constructor(options: LayerOptions) {
         this.tinyearth = options.tinyearth;
         this.id = options.id ?? crypto.randomUUID();
         this.entities = options.entities;
         this.style = options.style;
+        this.clampToGround = options.clampToGround ?? false;
+
+        this.program = this.createProgram();
+        this.createAttributes();
+        this.fillAttributes();
+        this.createTextures();
+        this.fillTextures();
     }
 
     abstract createProgram(): Program;
@@ -49,6 +60,10 @@ export abstract class Layer {
 
     abstract refreshUniforms(): void;
 
+    abstract beforeDraw(): void;
+
+    abstract afterDraw(): void;
+
     draw() {
         if (this.program === null || this.program.program === null) {
             return;
@@ -57,24 +72,24 @@ export abstract class Layer {
         this.activateAttributes();
         this.activateTextures();
         this.refreshUniforms();
+        this.beforeDraw();
         this.program.draw();
+        this.afterDraw();
     }
 
-    getColorArray(color: ColorLike | StyleColorMapFunction, count: number): number[] {
+    getColorArray(color: ColorLike | StyleColorMapFunction, count: number): number[][] {
+        let colors: number[][] = [];
         if (typeof color === 'function') {
-            return this.entities.flatMap(e => {
+            colors = this.entities.map(e => {
                 const c = Color.build(color(e));
                 return c !== null ? [c.r, c.g, c.b, c.a] : [0, 0, 0, 0];
             })
         } else {
             let c = Color.build(color);
             c = c === null ? new Color(0, 0, 0, 0) : c;
-            const arr = [];
-            for (let i = 0; i < count; ++i) {
-                arr.push(c.r, c.g, c.b, c.a);
-            }
-            return arr;
+            colors = Array(count).fill(c.toArray());
         }
+        return colors;
     }
 
     getNumberArray(num: number | StyleNumberMapFunction, count: number): number[] {
@@ -118,39 +133,22 @@ export interface PointLayerOptions extends GeometryLayerOptions {
     style: PointStyle;
 }
 
-export interface AttributeInfo {
-    name: string,
-    elemSize: number
-    numType: number,
-    normalized: boolean,
-    stride: number,
-    offset: number
-}
-
 export class PointLayer extends GeometryLayer {
 
     override entities: PointEntity[];
     override style: PointStyle;
-    override program: PointProgram | null = null;
-
-    attributes: { [k: string]: GLAttribute } = {};
 
     constructor(options: PointLayerOptions) {
         super(options);
         this.entities = options.entities;
         this.style = options.style;
-        this.program = this.createProgram();
-        this.createAttributes();
-        this.fillAttributes();
-        this.createTextures();
-        this.fillTextures();
     }
 
     override createProgram(): PointProgram {
-        this.program = new PointProgram({ tinyearth: this.tinyearth });
-        this.program.setFirst(0);
-        this.program.setCount(this.entities.length);
-        return this.program;
+        const program = new PointProgram({ tinyearth: this.tinyearth });
+        program.setFirst(0);
+        program.setCount(this.entities.length);
+        return program;
     }
 
     override createAttributes() {
@@ -203,6 +201,10 @@ export class PointLayer extends GeometryLayer {
     }
     override fillAttributes(): void {
 
+        if (this.program === null) {
+            return;
+        }
+
         const count = this.entities.length;
 
         const positionArray = this.entities.flatMap(e => {
@@ -210,9 +212,9 @@ export class PointLayer extends GeometryLayer {
             return [p.x, p.y, p.z];
         });
         const sizeArray = this.getNumberArray(this.style.size, count);
-        const colorArray = this.getColorArray(this.style.color, count);
+        const colorArray = this.getColorArray(this.style.color, count).flatMap(c => c);
         const strokeArray = this.getBoolArray(this.style.stoke, count);
-        const strokeColorArray = this.getColorArray(this.style.strokeColor, count);
+        const strokeColorArray = this.getColorArray(this.style.strokeColor, count).flatMap(c => c);
         const strokeWidthArray = this.getNumberArray(this.style.strokeWidth, count);
 
         this.attributes["position"]?.fillData(positionArray);
@@ -222,8 +224,8 @@ export class PointLayer extends GeometryLayer {
         this.attributes["strokeColor"]?.fillData(strokeColorArray);
         this.attributes["strokeWidth"]?.fillData(strokeWidthArray);
 
-        this.program?.setFirst(0);
-        this.program?.setCount(this.entities.length);
+        (this.program as PointProgram).setFirst(0);
+        (this.program as PointProgram).setCount(this.entities.length);
 
     }
     override refreshAttributes(): void {
@@ -251,13 +253,209 @@ export class PointLayer extends GeometryLayer {
     override refreshUniforms(): void {
         if (this.program && this.program.program) {
             this.program.setCameraUniform();
-            this.program.setProjectionUniform();;
+            this.program.setProjectionUniform();
+            this.program.setClampToGround(this.clampToGround);
+        }
+    }
+
+    override beforeDraw(): void {}
+
+    override afterDraw(): void {}
+
+}
+
+export interface LineStringLayerOptions extends GeometryLayerOptions {
+    entities: LineStringEntity[];
+    style: LineStringStyle;
+}
+
+export class LineStringLayer extends GeometryLayer {
+
+    override entities: LineStringEntity[];
+    override style: LineStringStyle;
+
+    constructor(options: LineStringLayerOptions) {
+        super(options);
+        this.entities = options.entities;
+        this.style = options.style;
+    }
+
+    override createProgram(): LineStringProgram {
+        const program = new LineStringProgram({
+            tinyearth: this.tinyearth
+        });
+        program.setFirst(0);
+        program.setCount(0);
+        return program;
+    }
+
+    override createAttributes(): void {
+        if (this.program === null) {
+            return;
+        }
+        this.attributes["position"] = new GLAttribute({
+            gl: this.program.gl,
+            name: "a_position",
+            elemSize: 3
+        });
+
+        this.attributes["entityid"] = new GLAttribute({
+            gl: this.program.gl,
+            name: "a_entityid",
+            elemSize: 1
+        });
+
+        this.attributes["color"] = new GLAttribute({
+            gl: this.program.gl,
+            name: "a_color",
+            elemSize: 4
+        });
+
+        this.attributes["lastpos"] = new GLAttribute({
+            gl: this.program.gl,
+            name: "a_lastpos",
+            elemSize: 3
+        })
+
+        this.attributes["nextpos"] = new GLAttribute({
+            gl: this.program.gl,
+            name: "a_nextpos",
+            elemSize: 3
+        })
+
+        this.attributes["side"] = new GLAttribute({
+            gl: this.program.gl,
+            name: "a_side",
+            elemSize: 1
+        })
+
+        this.attributes["linewidth"] = new GLAttribute({
+            gl: this.program.gl,
+            name: "a_linewidth",
+            elemSize: 1
+        })
+    }
+
+    override fillAttributes(): void {
+
+        if (this.program === null) {
+            return;
         }
 
-    }
+        //TODO: split to n segments
+        const entityColors = this.getColorArray(this.style.color, this.entities.length);
 
-    createTexture(): void {
+        const entityLinewidths = this.getNumberArray(this.style.lineWidth, this.entities.length);
+
+        //TODO as param
+        const entitySegs = this.getNumberArray(this.style.lineNumSegs, this.entities.length);
+
+        const lineData = this.entities.map((e: LineStringEntity, i: number) => {
+
+            const line = e.lineString.transform(SRS.ECEF, false);
+            const lineLength = line.length;
+            const step = lineLength / entitySegs[i]!;
+            const denseLine = line.dense(step, true);
+            const size = denseLine.size;
+
+            const entityids = Array(size).fill(i);
+            const poslist = denseLine.toArray(3);
+            const colors = Array(size).fill(entityColors[i]);
+            const linewidths = Array(size).fill(entityLinewidths[i]);
+            const lastposlist = [poslist[0] as number[], ...poslist.slice(0, poslist.length - 1)];
+            const nextposlist = [...poslist.slice(1, poslist.length), poslist[poslist.length - 1] as number[]];
+
+            const doubleEntityids = entityids.flatMap(e => [e, e]);
+            const doublePosList = poslist.flatMap(p => [p, p]);
+            const doubleColors = colors.flatMap(c => [c, c]);
+            const doubleLinewidths = linewidths.flatMap(w => [w, w]);
+            const doubleLastposlist = lastposlist.flatMap(p => [p, p]);
+            const doubleNextposlist = nextposlist.flatMap(p => [p, p]);
+            const doubleSides = poslist.flatMap(p => [1, -1]);
+
+
+            return {
+                entityids: doubleEntityids,
+                poslist: doublePosList,
+                colors: doubleColors,
+                linewidths: doubleLinewidths,
+                lastposlist: doubleLastposlist,
+                nextposlist: doubleNextposlist,
+                sides: doubleSides
+            };
+        });
+
+        const positions = lineData.flatMap(line => line.poslist.flatMap(p => p));
+        const entityids = lineData.flatMap(line => line.entityids);
+        const colors = lineData.flatMap(line => line.colors.flatMap(c => c));
+        const linewidths = lineData.flatMap(line => line.linewidths.flatMap(w => w));
+        const lastpos = lineData.flatMap(line => line.lastposlist.flatMap(p => p));
+        const nextpos = lineData.flatMap(line => line.nextposlist.flatMap(p => p));
+        const sides = lineData.flatMap(line => line.sides);
+
+        this.attributes["position"]?.fillData(positions);
+        this.attributes["entityid"]?.fillData(entityids);
+        this.attributes["color"]?.fillData(colors);
+        this.attributes["linewidth"]?.fillData(linewidths);
+        this.attributes["lastpos"]?.fillData(lastpos);
+        this.attributes["nextpos"]?.fillData(nextpos);
+        this.attributes["side"]?.fillData(sides);
+
+        (this.program as LineStringProgram).setFirst(0);
+        (this.program as LineStringProgram).setCount(positions.length / 3);
+
+    }
+    override refreshAttributes(): void {
         return;
     }
+    override activateAttributes(): void {
+        if (this.program && this.program.program) {
+            for (const k in this.attributes) {
+                this.attributes[k]?.activate(this.program.program);
+            }
+        }
+    }
+    override createTextures(): void {
+        return;
+    }
+    override fillTextures(): void {
+        return;
+    }
+    override refreshTextures(): void {
+        return;
+    }
+    override activateTextures(): void {
 
+        if (this.program) {
+            const gl = this.program.gl;
+
+            const depthTexture = this.tinyearth.getGroundFrameBuffer()?.depthTexture;
+
+            if (depthTexture) {
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, depthTexture);
+                gl.uniform1i(gl.getUniformLocation(this.program.program!, "u_groundDepthTexture"), 0);
+            }
+        }
+
+        return;
+    }
+    override refreshUniforms(): void {
+        if (this.program && this.program.program) {
+            this.program.setCameraUniform();
+            this.program.setProjectionUniform();
+            this.program.setSceneUniform();
+            this.program.setClampToGround(this.clampToGround);
+            this.program.setModelMatrixUniform(this.entities[0]?.matrix);
+            this.program.gl.uniform2f(this.program.gl.getUniformLocation(this.program.program!, "u_resolution"),
+                this.tinyearth.viewWidth,
+                this.tinyearth.viewHeight);
+        }
+    }
+
+    override beforeDraw(): void {
+        this.program?.gl.lineWidth(1.0);
+    }
+
+    override afterDraw(): void {}
 }

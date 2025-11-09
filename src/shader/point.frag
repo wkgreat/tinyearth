@@ -12,8 +12,6 @@ in vec4 v_strokecolor;
 
 in float v_logz;
 
-uniform Projection u_projection;
-
 out vec4 fragColor;
 
 float isStroke(float size, float strokewidth, float radius) {

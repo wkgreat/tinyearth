@@ -32,7 +32,6 @@ export class GeometryStyle extends Style {
         this.strokeWidth = options.strokeWidth ?? 0;
         this.strokeColor = options.strokeColor ?? new Color(0, 0, 0, 0);
     }
-
 }
 
 interface PointStyleOptions extends GeometryStyleOptions {
@@ -46,5 +45,20 @@ export class PointStyle extends GeometryStyle {
     constructor(options: PointStyleOptions) {
         super(options);
         this.size = options.size;
+    }
+}
+
+export interface LineStringStyleOptions extends GeometryStyleOptions {
+    lineWidth?: number | StyleNumberMapFunction;
+    lineNumSegs?: number | StyleNumberMapFunction;
+}
+
+export class LineStringStyle extends GeometryStyle {
+    lineWidth: number | StyleNumberMapFunction = 1;
+    lineNumSegs: number | StyleNumberMapFunction;
+    constructor(options: LineStringStyleOptions) {
+        super(options);
+        this.lineWidth = options.lineWidth ?? 1;
+        this.lineNumSegs = options.lineNumSegs ?? 10;
     }
 }

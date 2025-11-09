@@ -1,6 +1,6 @@
-import { glMatrix, vec3, vec4 } from "gl-matrix";
+import { glMatrix, mat3, vec3, vec4 } from "gl-matrix";
 import type { NumArr3 } from "./defines.js";
-import { vec3_add, vec3_cross, vec3_scale, vec3_sub } from "./glmatrix_utils.js";
+import { vec3_add, vec3_cross, vec3_mul, vec3_normalize, vec3_scale, vec3_sub } from "./glmatrix_utils.js";
 import SRS, { type projcode_t } from "./proj.js";
 glMatrix.setMatrixArrayType(Array);
 
@@ -293,12 +293,22 @@ export function rayCrossSphere(ray: Ray, sphere: Sphere, all: boolean = false): 
     }
 }
 
+/**
+ * origin-centered axis-aligned Spheriod
+*/
 export class Spheriod {
 
     params: vec3 = vec3.fromValues(1, 1, 1);
 
+    matrix: mat3;
+
     constructor(a: number, b: number, c: number) {
         this.params = vec3.fromValues(a, b, c);
+        this.matrix = mat3.fromValues(
+            1.0 / (a * a), 0.0, 0.0,
+            0.0, 1.0 / (b * b), 0.0,
+            0.0, 0.0, 1.0 / (c * c)
+        );
     }
 
     get a() {
@@ -311,6 +321,22 @@ export class Spheriod {
 
     get c() {
         return this.params[2];
+    }
+
+    get m() {
+        return this.matrix;
+    }
+
+    radius(d: vec3) {
+        const n = vec3_normalize(d);
+        const denom = vec3.dot(n, vec3_mul(n, this.m));
+        return 1.0 / Math.sqrt(denom);
+    }
+
+    clampToSurface(p: vec3, elevation: number = 0) {
+        const n = vec3_normalize(p);
+        const t = this.radius(n);
+        return vec3_add(vec3_scale(n, t), vec3_scale(n, elevation));
     }
 
 }

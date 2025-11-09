@@ -1,7 +1,10 @@
 import { GLSLSource } from "./glsl";
 import pointFragSource from './shader/point.frag';
 import pointVertSource from './shader/point.vert';
+import lineStringFragSource from './shader/wideLineString.frag';
+import lineStringVertSource from './shader/wideLineString.vert';
 import type TinyEarth from "./tinyearth";
+import { mat4, vec2 } from "gl-matrix";
 
 export interface ProgramOptions {
     tinyearth: TinyEarth,
@@ -100,6 +103,13 @@ export abstract class Program {
         return this.#program;
     }
 
+    refreshAllUniforms() {
+        this.setCameraUniform();
+        this.setProjectionUniform();
+        this.setSunUniform();
+        this.setSceneUniform();
+    }
+
     setCameraUniform() {
         if (this.program) {
             const u_camera_from = this.gl.getUniformLocation(this.program, "u_camera.from");
@@ -128,16 +138,51 @@ export abstract class Program {
         }
     }
 
+    setSceneUniform() {
+        if (this.program) {
+            const u_viewport = this.gl.getUniformLocation(this.program, "u_scene.viewport");
+            if (u_viewport) {
+                const v = vec2.fromValues(this.tinyearth.scene.viewWidth, this.tinyearth.scene.viewHeight);
+                this.gl.uniform2fv(u_viewport, v);
+            }
+
+            const u_viewportmatrix = this.gl.getUniformLocation(this.program, "u_scene.viewportmtx");
+            if (u_viewportmatrix) {
+                const m = this.tinyearth.scene.viewportMatrix;
+                this.gl.uniformMatrix4fv(u_viewportmatrix, false, m);
+            }
+
+        }
+    }
+
     setSunUniform() {
         if (this.program) {
             const position = this.tinyearth.scene.sun.position;
-            const positionLoc = this.gl.getUniformLocation(this.program, "sun.position");
+            const positionLoc = this.gl.getUniformLocation(this.program, "u_sun.position");
             if (positionLoc) {
                 this.gl.uniform3f(positionLoc, position[0], position[1], position[2]);
             }
-            const colorLoc = this.gl.getUniformLocation(this.program, "sun.color");
+            const colorLoc = this.gl.getUniformLocation(this.program, "u_sun.color");
             if (colorLoc) {
                 this.gl.uniform4f(colorLoc, 1.0, 1.0, 1.0, 1.0);
+            }
+        }
+    }
+
+    setClampToGround(b: boolean) {
+        if (this.program) {
+            const loc = this.gl.getUniformLocation(this.program, "u_clampToGround");
+            if (loc) {
+                this.gl.uniform1i(loc, b ? 1 : 0);
+            }
+        }
+    }
+
+    setModelMatrixUniform(m: mat4 = mat4.create()) {
+        if (this.program) {
+            const loc = this.gl.getUniformLocation(this.program, "u_model.modelmtx");
+            if (loc) {
+                this.gl.uniformMatrix4fv(loc, false, m);
             }
         }
     }
@@ -173,6 +218,37 @@ export class PointProgram extends Program {
     draw() {
         this.use();
         this.gl.drawArrays(this.gl.POINTS, this.#first, this.#count);
+    }
+
+}
+
+export interface LineStringProgramOptions extends Omit<ProgramOptions, 'vertSource' | 'fragSource'> {}
+
+export class LineStringProgram extends Program {
+
+    #first: number = 0;
+    #count: number = 0;
+
+    constructor(options: PointProgramOptions) {
+        super({
+            ...options,
+            vertSource: new GLSLSource(lineStringVertSource),
+            fragSource: new GLSLSource(lineStringFragSource)
+        });
+
+    }
+
+    setFirst(first: number) {
+        this.#first = first;
+    }
+
+    setCount(count: number) {
+        this.#count = count;
+    }
+
+    draw(): void {
+        this.use();
+        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, this.#first, this.#count);
     }
 
 }

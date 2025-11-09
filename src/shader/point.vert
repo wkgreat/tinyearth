@@ -11,9 +11,6 @@ in int a_stroke;
 in float a_strokewidth;
 in vec4 a_strokecolor;
 
-uniform Camera u_camera;
-uniform Projection u_projection;
-
 out float v_size;
 out vec4 v_color;
 out float v_strokewidth;

@@ -1,17 +1,18 @@
 import { vec3 } from "gl-matrix";
 import type { NumArr3 } from "./defines";
+import { vec3_add, vec3_length, vec3_scale, vec3_sub } from "./glmatrix_utils";
 import SRS, { type projcode_t } from "./proj";
 
 export class Coordinate {
 
     #values: vec3;
-    #m: number | null;
-    #t: number | null;
+    #m: number;
+    #t: number;
 
     constructor(x: number, y: number, z: number, m?: number | null, t?: number | null) {
         this.#values = vec3.fromValues(x, y, z);
-        this.#m = m ?? null;
-        this.#t = t ?? null;
+        this.#m = m ?? 0;
+        this.#t = t ?? 0;
     }
 
     set x(x: number) {
@@ -38,27 +39,23 @@ export class Coordinate {
         return this.#values[2];
     }
 
-    get hasM(): boolean {
-        return !!this.#m;
-    }
-
-    get hasT(): boolean {
-        return !!this.#t;
-    }
-
-    get m(): number | null {
+    get m(): number {
         return this.#m;
     }
 
-    get t(): number | null {
+    get t(): number {
         return this.#t;
+    }
+
+    get v(): vec3 {
+        return this.#values;
     }
 
     clone(): Coordinate {
         return new Coordinate(this.x, this.y, this.z, this.m, this.t);
     }
 
-    transform(src: projcode_t, dst: projcode_t, inplace: boolean = true): Coordinate {
+    transform(src: projcode_t, dst: projcode_t, inplace: boolean = false): Coordinate {
 
         const vs = SRS.transform(src, dst, [this.x, this.y, this.z]) as NumArr3;
 
@@ -75,6 +72,30 @@ export class Coordinate {
             return nc;
         }
 
+    }
+
+    toArrray(n: number = 3): number[] {
+        const arr: number[] = [this.x, this.y, this.z, this.m, this.t];
+        return arr.slice(0, n);
+    }
+
+    distance(c: Coordinate): number {
+        return vec3_length(vec3_sub(c.v, this.v));
+    }
+
+    mix(c: Coordinate, w: number): Coordinate {
+        const v0 = this.v;
+        const v1 = c.v;
+        const m0 = this.m;
+        const m1 = c.m;
+        const t0 = this.t;
+        const t1 = c.t;
+
+        const v = vec3_add(vec3_scale(v0, 1 - w), vec3_scale(v1, w));
+        const m = (1 - w) * m0 + w * m1;
+        const t = (1 - w) * t0 + w * t1;
+
+        return new Coordinate(v[0], v[1], v[2], m, t);
     }
 
 }
@@ -134,4 +155,97 @@ export class Point extends Geometry {
         }
 
     }
+}
+
+
+export class LineString extends Geometry {
+
+    #coordinates: Coordinate[] = []
+
+    constructor(coordinates: Coordinate[], srs: projcode_t = SRS.ECEF, copy: boolean = true) {
+        super(srs);
+
+        if (copy) {
+            this.#coordinates = coordinates.map(c => c.clone());
+        } else {
+            this.#coordinates = coordinates;
+        }
+    }
+
+    transform(dst: projcode_t, inplace: boolean = true): LineString {
+
+        if (inplace) {
+            this.#coordinates.forEach(c => c.transform(this.srs, dst, true));
+            this.srs = dst;
+            return this;
+        } else {
+            const cs = this.#coordinates.map(c => c.transform(this.srs, dst, false));
+            return new LineString(cs, dst, false);
+        }
+
+    }
+
+    get size() {
+        return this.#coordinates.length;
+    }
+
+    getCoordinateN(n: number): Coordinate | undefined {
+        return this.#coordinates[n];
+    }
+
+    setCoordinateN(n: number, c: Coordinate) {
+        if (n >= this.size) {
+            return;
+        }
+        this.#coordinates[n] = c;
+    }
+
+    map(fn: (c: Coordinate) => any) {
+        return this.#coordinates.map(fn);
+    }
+
+    forEach(fn: (c: Coordinate) => void): void {
+        this.#coordinates.forEach(fn);
+    }
+
+    toArray(n: number = 3): number[][] {
+        return this.#coordinates.map(c => c.toArrray(n));
+    }
+
+    dense(step: number, inplace: boolean = false): LineString {
+
+        let a = 0;
+        const cs: Coordinate[] = [];
+        for (let i = 0; i < this.size - 1; ++i) {
+            const c0 = this.getCoordinateN(i) as Coordinate;
+            const c1 = this.getCoordinateN(i + 1) as Coordinate;
+            const d = c0.distance(c1);
+            const r = step / d;
+            let w = r;
+            cs.push(c0);
+            while (w < 1) {
+                cs.push(c0.mix(c1, w));
+                w += r;
+            }
+        }
+        cs.push(this.getCoordinateN(this.size - 1) as Coordinate);
+        if (inplace) {
+            this.#coordinates = cs;
+            return this;
+        } else {
+            return new LineString(cs, this.srs, true);
+        }
+
+    }
+
+    get length() {
+        let sum = 0;
+        for (let i = 0; i < this.size - 1; ++i) {
+            const c0 = this.#coordinates[i] as Coordinate;
+            const c1 = this.#coordinates[i + 1] as Coordinate;
+            sum += c0.distance(c1);
+        }
+        return sum;
+    }
+
 }

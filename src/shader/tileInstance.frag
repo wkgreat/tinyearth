@@ -1,11 +1,12 @@
 #version 300 es
 precision highp float;
+precision mediump sampler2DArray;
 
 #define __DEFINE_REPLACE__
 
 #include "scene.glsl"
 
-uniform sampler2D u_image;
+uniform sampler2DArray uTexArray;
 uniform float u_opacity;
 uniform bool u_enableNight;
 uniform bool u_isNight;
@@ -14,6 +15,13 @@ in vec4 v_worldPos;
 in vec2 v_texcoord;
 in vec3 v_normal;
 in float v_logz;
+
+flat in int v_texindex;
+
+struct Sun {
+    vec3 position;
+    vec4 color;
+};
 
 struct Material {
     vec4 ambient; //ka
@@ -24,6 +32,7 @@ struct Material {
 };
 
 uniform Material material;
+uniform Sun sun;
 
 out vec4 fragColor;
 
@@ -71,13 +80,13 @@ void main() {
     vec3 eye = vec3(u_camera.from);
     vec4 texcolor = vec4(0, 0, 0, 1);
 
-    texcolor = texture(u_image, v_texcoord);
+    texcolor = texture(uTexArray, vec3(v_texcoord, v_texindex));
 
     if(u_enableNight) {
         if(u_isNight) {
-            fragColor = nightSurfaceColor(texcolor, pos, u_sun, eye);
+            fragColor = nightSurfaceColor(texcolor, pos, sun, eye);
         } else {
-            fragColor = surfanceColor(texcolor, pos, u_sun, eye);
+            fragColor = surfanceColor(texcolor, pos, sun, eye);
         }
     } else {
         fragColor = texcolor;

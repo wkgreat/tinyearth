@@ -211,13 +211,13 @@ export class SkyBoxProgram extends Program {
             return;
         }
         this.use();
-        checkGLError(this.gl, "use");
+        checkGLError(this.gl, "use", this.tinyearth.glErrorCheck);
         // const a_position = this.gl.getAttribLocation(this.program, "a_position");
         this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.#texutre);
-        checkGLError(this.gl, "bindTexture");
+        checkGLError(this.gl, "bindTexture", this.tinyearth.glErrorCheck);
 
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.#buffer);
-        checkGLError(this.gl, "bindBuffer");
+        checkGLError(this.gl, "bindBuffer", this.tinyearth.glErrorCheck);
 
         this.setCameraUniform();
 
@@ -227,7 +227,7 @@ export class SkyBoxProgram extends Program {
 
         this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 
-        checkGLError(this.gl, "drawArrays");
+        checkGLError(this.gl, "drawArrays", this.tinyearth.glErrorCheck);
     }
 
 }

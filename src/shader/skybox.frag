@@ -5,8 +5,6 @@ precision highp float;
 
 #include "scene.glsl"
 
-uniform Camera u_camera;
-uniform Projection u_projection;
 uniform samplerCube u_skybox;
 
 in vec3 v_direction;

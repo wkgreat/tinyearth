@@ -34,6 +34,10 @@ export default class SRS {
 
     static transform(src: projcode_t, dst: projcode_t, p: NumArr3): NumArr3 {
 
+        if (src === dst) {
+            return [...p];
+        }
+
         if (src === 3857 && dst === 4326) {
             return SRS.transform_3857_4326(p);
         }

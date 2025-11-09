@@ -7,10 +7,6 @@ in vec4 a_position;
 in vec2 a_texcoord;
 in vec3 a_normal;
 
-uniform Projection u_projection;
-uniform Camera u_camera;
-uniform mat4 u_modelMtx;
-
 out vec2 v_texcoord;
 out vec3 v_normal;
 out vec4 v_worldPos;
@@ -18,11 +14,11 @@ out float v_logz;
 
 void main() {
 
-    vec4 viewPos = u_camera.viewmtx * u_modelMtx * a_position;
+    vec4 viewPos = u_camera.viewmtx * a_position;
 
     gl_Position = u_projection.projmtx * viewPos;
 
-    v_worldPos = u_modelMtx * a_position;
+    v_worldPos = a_position;
 
     v_texcoord = a_texcoord;
     

@@ -1,3 +1,5 @@
+import type { NumArr4 } from "./defines";
+import type TinyEarth from "./tinyearth";
 
 export interface GLBufferOptions {
     gl: WebGL2RenderingContext;
@@ -142,6 +144,190 @@ export class GLTexture2D {
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
         const uSampler = this.gl.getUniformLocation(program, this.name);
         this.gl.uniform1i(uSampler, this.unit - this.gl.TEXTURE0);
+    }
+
+}
+
+export interface GLFrameBufferOptions {
+    tinyearth: TinyEarth,
+    width: number,
+    height: number,
+    enableColor?: boolean
+    enableDepth?: boolean
+    enableStencil?: boolean
+}
+
+export class GLFrameBuffer {
+
+    #tinyearth: TinyEarth;
+    #gl: WebGL2RenderingContext;
+    #width: number;
+    #height: number;
+    #enableColor: boolean;
+    #enableDepth: boolean;
+    #enableStencil: boolean;
+    #mask: number = 0;
+
+    #fbo: WebGLFramebuffer | null = null;
+    #colorTexture: WebGLTexture | null = null;
+    #depthTexture: WebGLTexture | null = null;
+
+    constructor(options: GLFrameBufferOptions) {
+        this.#tinyearth = options.tinyearth;
+        this.#gl = this.#tinyearth.gl;
+        this.#width = options.width;
+        this.#height = options.height;
+        this.#enableColor = options.enableColor ?? true;
+        this.#enableDepth = options.enableDepth ?? true;
+        this.#enableStencil = options.enableStencil ?? true;
+
+        if (!(this.#enableColor || this.#enableDepth || this.#enableStencil)) {
+            console.error("GLFrameBuffer: color/depth/atenci at least one component need enabled!");
+        }
+
+        if (this.#enableColor) {
+            this.#colorTexture = GLFrameBuffer.createFrameColorTexture(this.#gl, this.#width, this.#height);
+        }
+
+        if (this.#enableDepth || this.#enableStencil) {
+            this.#depthTexture = GLFrameBuffer.createFrameDepthTexture(this.#gl, this.#width, this.#height);
+        }
+
+        this.#mask = 0;
+        if (this.#enableColor) {
+            this.#mask |= this.#gl.COLOR_BUFFER_BIT;
+        }
+        if (this.#enableDepth) {
+            this.#mask |= this.#gl.DEPTH_BUFFER_BIT;
+        }
+        if (this.#enableStencil) {
+            this.#mask |= this.#gl.DEPTH_BUFFER_BIT;
+        }
+
+        this.#fbo = GLFrameBuffer.createFrameBufferWithTexture(this.#gl, this.#colorTexture, this.#depthTexture);
+    }
+
+    get fbo(): WebGLFramebuffer | null {
+        return this.#fbo;
+    }
+
+    get colorTexture(): WebGLTexture | null {
+        return this.#colorTexture;
+    }
+
+    get depthTexture(): WebGLTexture | null {
+        return this.#depthTexture;
+    }
+
+    clear(options?: {
+        color?: NumArr4,
+        depth?: number,
+        stencil?: number
+    }) {
+        const opts = options ?? {};
+        const color = opts.color ?? [0.0, 0.0, 0.0, 1.0];
+        const depth = opts.depth ?? 1.0;
+        const stencil = opts.stencil ?? 0.0;
+        this.#gl.bindFramebuffer(this.#gl.FRAMEBUFFER, this.#fbo);
+        this.#gl.viewport(0, 0, this.#width, this.#height);
+        this.#gl.clearColor(...color);
+        this.#gl.clearDepth(depth);
+        this.#gl.clearStencil(stencil);
+        this.#gl.clear(this.#mask);
+    }
+
+    static bindGLFrameBuffer(gl: WebGL2RenderingContext, fb: GLFrameBuffer | null) {
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb ? fb.fbo : null);
+
+    }
+
+    tap() {
+        this.biltFrom(this.#tinyearth.frameBuffer);
+    }
+
+    biltFrom(src: GLFrameBuffer | null) {
+
+
+        this.#gl.bindFramebuffer(this.#gl.READ_FRAMEBUFFER, src ? src.fbo : null);
+        this.#gl.bindFramebuffer(this.#gl.DRAW_FRAMEBUFFER, this.#fbo);
+
+        this.#gl.blitFramebuffer(
+            0, 0, this.#width, this.#height,
+            0, 0, this.#width, this.#height,
+            this.#mask,
+            this.#gl.NEAREST
+        );
+
+        this.#gl.bindFramebuffer(this.#gl.READ_FRAMEBUFFER, null);
+        this.#gl.bindFramebuffer(this.#gl.DRAW_FRAMEBUFFER, null);
+
+    }
+
+    destroy() {
+        if (this.#colorTexture) {
+            this.#gl.deleteTexture(this.#colorTexture);
+            this.#colorTexture = null;
+        }
+        if (this.#depthTexture) {
+            this.#gl.deleteTexture(this.#depthTexture);
+            this.#depthTexture = null;
+        }
+        this.#gl.deleteFramebuffer(this.#fbo);
+    }
+
+    private static createFrameDepthTexture(gl: WebGL2RenderingContext, width: number, height: number): WebGLTexture {
+
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+
+        gl.texImage2D(
+            gl.TEXTURE_2D, 0, gl.DEPTH24_STENCIL8, width, height,
+            0, gl.DEPTH_STENCIL, gl.UNSIGNED_INT_24_8, null
+        );
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        return texture;
+
+    }
+
+    private static createFrameColorTexture(gl: WebGL2RenderingContext, width: number, height: number) {
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(
+            gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0,
+            gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        return texture;
+    }
+
+    private static createFrameBufferWithTexture(gl: WebGL2RenderingContext, colorTexture: WebGLTexture | null, depthTexture: WebGLTexture | null) {
+
+        const fbo = gl.createFramebuffer();
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+
+        if (colorTexture) {
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorTexture, 0);
+            gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+            if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+                console.error('FBO incomplete!');
+            }
+        }
+
+        if (depthTexture) {
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, depthTexture, 0);
+        }
+
+        return fbo;
+
     }
 
 }

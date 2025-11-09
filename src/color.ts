@@ -105,6 +105,18 @@ export default class Color {
         );
     }
 
+    toArray(): NumArr4 {
+        return [this.r, this.g, this.b, this.a];
+    }
+
+    static random(): Color {
+        return new Color(Math.random(), Math.random(), Math.random(), 1.0);
+    }
+
+}
+
+export class ColorRamp {
+    //TODO
 }
 
 function extractRGBA(colorString: string): NumArr4 | null {
@@ -179,24 +191,3 @@ function extractRGBA(colorString: string): NumArr4 | null {
     // --- 3. 格式不匹配 ---
     return null;
 }
-
-// export function color01Hex2RGB(hex: string) {
-//     // 去掉开头的 #
-//     hex = hex.replace(/^#/, '');
-
-//     // 解析出 r、g、b
-//     const r = parseInt(hex.substring(0, 2), 16);
-//     const g = parseInt(hex.substring(2, 4), 16);
-//     const b = parseInt(hex.substring(4, 6), 16);
-
-//     return [r / 255.0, g / 255.0, b / 255.0];
-// }
-// export function color01RGB2Hex(rgb: NumArr3) {
-//     return (
-//         '#' +
-//         rgb.map(value => {
-//             const hex = (parseInt((value * 255).toString())).toString(16);  // 转成16进制
-//             return hex.length === 1 ? '0' + hex : hex; // 补0，比如 'a' 变成 '0a'
-//         }).join('')
-//     );
-// }

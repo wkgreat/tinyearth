@@ -105,15 +105,15 @@ export default class Scene {
      * 获取视口变换矩阵（包含Y轴反转）
     */
     get viewportMatrix(): mat4 {
-        const m = mat4.create();
-        const w = this.#viewWidth;
-        const h = this.#viewHeight;
-        mat4.set(
-            m,
-            w / 2, 0, 0, 0,
-            0, -h / 2, 0, 0,
+        const x = 0;
+        const y = 0;
+        const w2 = this.#viewWidth / 2;
+        const h2 = this.#viewHeight / 2;
+        const m = mat4.fromValues(
+            w2, 0, 0, 0,
+            0, h2, 0, 0,
             0, 0, 0.5, 0,
-            w / 2, h / 2, 0.5, 1
+            x + w2, y + h2, 0.5, 1
         );
         return m;
     }

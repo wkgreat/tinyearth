@@ -354,6 +354,81 @@ export class Tile {
 
 export class TileMesher {
 
+    static toRootMeshVertex(): Float32Array {
+
+        const vertices: number[] = [];
+        const posExt: Extent = [XLIMIT[0], YLIMIT[1], XLIMIT[1], YLIMIT[1]];
+        const texExt: Extent = [0, 0, 1, 1];
+        this.toRootMeshVertexRec(posExt, texExt, 0, 4, vertices);
+        return new Float32Array(vertices);
+    }
+
+    static toRootMeshVertexRec(posExt: Extent, texExt: Extent, curlevel: number, level: number, vertices: number[]) {
+
+        if (curlevel == level) {
+
+            vertices.push(posExt[0], posExt[1], texExt[0], texExt[1]);
+            vertices.push(posExt[2], posExt[3], texExt[2], texExt[3]);
+            vertices.push(posExt[0], posExt[3], texExt[0], texExt[3]);
+            vertices.push(posExt[0], posExt[1], texExt[0], texExt[1]);
+            vertices.push(posExt[2], posExt[1], texExt[2], texExt[1]);
+            vertices.push(posExt[2], posExt[3], texExt[2], texExt[3]);
+
+        } else if (curlevel < level) {
+            const newPosExt: Extent = [0, 0, 0, 0];
+            const newTexExt: Extent = [0, 0, 0, 0];
+
+            newPosExt[0] = posExt[0];
+            newPosExt[1] = posExt[1];
+            newPosExt[2] = (posExt[0] + posExt[2]) / 2;
+            newPosExt[3] = (posExt[1] + posExt[3]) / 2;
+
+            newTexExt[0] = texExt[0];
+            newTexExt[1] = texExt[1];
+            newTexExt[2] = (texExt[0] + texExt[2]) / 2;
+            newTexExt[3] = (texExt[1] + texExt[3]) / 2;
+
+            this.toRootMeshVertexRec(newPosExt, newTexExt, curlevel + 1, level, vertices);
+
+            newPosExt[0] = (posExt[0] + posExt[2]) / 2;
+            newPosExt[1] = posExt[1];
+            newPosExt[2] = posExt[2];
+            newPosExt[3] = (posExt[1] + posExt[3]) / 2;
+
+            newTexExt[0] = (texExt[0] + texExt[2]) / 2;
+            newTexExt[1] = texExt[1];
+            newTexExt[2] = texExt[2];
+            newTexExt[3] = (texExt[1] + texExt[3]) / 2;
+
+            this.toRootMeshVertexRec(newPosExt, newTexExt, curlevel + 1, level, vertices);
+
+            newPosExt[0] = posExt[0];
+            newPosExt[1] = (posExt[1] + posExt[3]) / 2;
+            newPosExt[2] = (posExt[0] + posExt[2]) / 2;
+            newPosExt[3] = posExt[3];
+
+            newTexExt[0] = texExt[0];
+            newTexExt[1] = (texExt[1] + texExt[3]) / 2;
+            newTexExt[2] = (texExt[0] + texExt[2]) / 2;
+            newTexExt[3] = texExt[3];
+
+            this.toRootMeshVertexRec(newPosExt, newTexExt, curlevel + 1, level, vertices);
+
+            newPosExt[0] = (posExt[0] + posExt[2]) / 2;
+            newPosExt[1] = (posExt[1] + posExt[3]) / 2;
+            newPosExt[2] = posExt[2];
+            newPosExt[3] = posExt[3];
+
+            newTexExt[0] = (texExt[0] + texExt[2]) / 2;
+            newTexExt[1] = (texExt[1] + texExt[3]) / 2;
+            newTexExt[2] = texExt[2];
+            newTexExt[3] = texExt[3];
+
+            this.toRootMeshVertexRec(newPosExt, newTexExt, curlevel + 1, level, vertices);
+
+        }
+    }
+
     static toMesh(tile: Tile, level: number, targetProj: projcode_t) {
         const vertices: number[] = [];
         const posExt: Extent = tile.extent();

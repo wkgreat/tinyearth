@@ -5,14 +5,19 @@ import { TinyEarthEvent } from "./event.js";
 import Frustum from "./frustum.js";
 import { vec3_t4, vec4_affine } from "./glmatrix_utils.js";
 import { GLSLSource } from "./glsl.js";
-import { Tile, TileStatus } from "./maptiler.js";
+import { Tile, TileMesher, TileStatus } from "./maptiler.js";
 import { Program, type ProgramOptions } from "./program.js";
 import SRS from "./proj.js";
 import type Scene from "./scene.js";
-import tileFragSource from "./shader/tile.frag";
-import tileVertSource from "./shader/tile.vert";
+
+import staticTileFragSource from "./shader/tile.frag";
+import staticTileVertSource from "./shader/tile.vert";
+import instanceTileFragSource from './shader/tileInstance.frag';
+import instanceTileVertSource from './shader/tileInstance.vert';
+
 import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
+import { checkGLError } from "./debug.js";
 
 const DefaultTileSize: number = 256;
 
@@ -21,7 +26,18 @@ interface GlobeTileProgramBufferInfo {
     texture?: WebGLTexture
 }
 
-interface GlobeTileProgramOptions extends Omit<ProgramOptions, 'vertSource' | 'fragSource'> {}
+export enum RenderMethod {
+    STATIC,
+    DYNAMIC,
+    INSTANCE
+}
+
+interface GlobeTileProgramOptions extends Omit<ProgramOptions, 'vertSource' | 'fragSource'> {
+    advance?: {
+        renderMethod?: RenderMethod
+        depthTest?: boolean
+    }
+}
 
 export class GlobeTileProgram extends Program {
 
@@ -31,14 +47,35 @@ export class GlobeTileProgram extends Program {
 
     tileProviders: TileProvider[] = [];
 
+    advance = {
+        renderMethod: RenderMethod.STATIC,
+        depthTest: false
+    }
+
     constructor(options: GlobeTileProgramOptions) {
 
-        const vertGLSLSource = new GLSLSource(tileVertSource);
-        const fragGLSLSource = new GLSLSource(tileFragSource, { DEBUG_DEPTH: false });
+        const advance = options.advance ?? {};
+        const renderMethod = advance.renderMethod ?? RenderMethod.STATIC;
+        const depthTest = advance.depthTest ?? false;
+
+        let vertGLSLSource: GLSLSource;
+        let fragGLSLSource: GLSLSource;
+
+        //TODO dynamic draw
+        if (renderMethod === RenderMethod.STATIC || renderMethod === RenderMethod.DYNAMIC) {
+            vertGLSLSource = new GLSLSource(staticTileVertSource);
+            fragGLSLSource = new GLSLSource(staticTileFragSource, { DEBUG_DEPTH: depthTest });
+        } else {
+            vertGLSLSource = new GLSLSource(instanceTileVertSource);
+            fragGLSLSource = new GLSLSource(instanceTileFragSource, { DEBUG_DEPTH: depthTest });
+        }
 
         super({
             ...options, vertSource: vertGLSLSource, fragSource: fragGLSLSource
         });
+
+        this.advance.renderMethod = renderMethod;
+        this.advance.depthTest = depthTest;
 
         this.createBuffer();
     }
@@ -194,14 +231,141 @@ export class GlobeTileProgram extends Program {
             this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_normal"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, (3 + 2) * 4); // 设置属性指针
             this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_normal")); // 激活属性
 
-            this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_modelMtx"), false, modelMtx);
-            this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_viewMtx"), false, camera.viewMatrix);
-            this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_projMtx"), false, projMtx);
+            this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
+            this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
+
+            this.gl.drawArrays(this.gl.TRIANGLES, 0, this.numElements / 8);
+        }
+    }
+
+    drawTileNodesDynamic(nodes: TileNode[], opacity: number = 1.0, isNight: boolean = false) {
+
+        if (!this.program) { return; }
+
+        this.gl.useProgram(this.program);
+
+        //TODO move buffer to global
+        let buffer: WebGLBuffer | null = null;
+
+        for (const node of nodes) {
+
+            if (buffer === null) {
+                buffer = this.gl.createBuffer();
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+                this.gl.bufferData(this.gl.ARRAY_BUFFER, node.tile.mesh!, this.gl.DYNAMIC_DRAW);
+            } else {
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+                this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, node.tile.mesh!);
+            }
+
+            this.numElements = node.tile.mesh!.length;
+
+            if (node.texture) {
+                this.gl.bindTexture(this.gl.TEXTURE_2D, node.texture);
+            } else {
+                node.texture = this.createTextureAndSetData(node.tile.image!);
+            }
+
+            this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_position"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, 0); // 设置属性指针
+            this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_position")); // 激活属性
+
+            this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_texcoord"), 2, this.gl.FLOAT, false, (3 + 2 + 3) * 4, 3 * 4); // 设置属性指针
+            this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_texcoord")); // 激活属性
+
+            this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_normal"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, (3 + 2) * 4); // 设置属性指针
+            this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_normal")); // 激活属性
 
             this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
             this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
 
             this.gl.drawArrays(this.gl.TRIANGLES, 0, this.numElements / 8);
+
+        }
+
+    }
+
+    //TODO fixit
+    drawTileNodeInstance(nodes: TileNode[], opacity: number = 1.0, isNight: boolean = false) {
+
+        if (this.program && this.program) {
+
+            nodes = nodes.filter(node => node.tile && node.tile.ready);
+
+            if (nodes.length > 0) {
+
+                const vao = this.gl.createVertexArray();
+                this.gl.bindVertexArray(vao);
+
+                // TODO only set once
+                const vertexBuffer = this.gl.createBuffer();
+                const vertexData = TileMesher.toRootMeshVertex();
+
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuffer);
+                this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.STATIC_DRAW);
+
+                this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_position"), 2, this.gl.FLOAT, false, (2 + 2) * 4, 0);
+                this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_position"));
+
+                this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_texcoord"), 2, this.gl.FLOAT, false, (2 + 2) * 4, 2 * 4);
+                this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_texcoord"));
+
+                // TODO user int buffer
+                const tilekeyArray = nodes.flatMap(node => [node.key.x, node.key.y, node.key.z]);
+                // console.log(`tilekeyArray length: ${tilekeyArray.length}`);
+                const tilekeyData = new Float32Array(tilekeyArray);
+                const tilekeyBuffer = this.gl.createBuffer();
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, tilekeyBuffer);
+                this.gl.bufferData(this.gl.ARRAY_BUFFER, tilekeyData, this.gl.STATIC_DRAW);
+                this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_tilekey"), 3, this.gl.FLOAT, false, 0, 0);
+                this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_tilekey"));
+                this.gl.vertexAttribDivisor(this.gl.getAttribLocation(this.program, "a_tilekey"), 1); // instance data
+                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
+
+                //texture
+                const texArray = this.gl.createTexture();
+                this.gl.bindTexture(this.gl.TEXTURE_2D_ARRAY, texArray);
+                this.gl.texStorage3D(
+                    this.gl.TEXTURE_2D_ARRAY,   //target
+                    1,                          //levels mipmap 层级数量（最小 mipmap 数量为 1）
+                    this.gl.RGBA8,              //internalformat
+                    256,                        //width
+                    256,                        //height
+                    nodes.length                //depth 对于 3D 纹理：深度（z 方向像素数）;对于 2D 纹理数组：层数（layer count）
+                );
+                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
+                for (let i = 0; i < nodes.length; i++) {
+                    this.gl.texSubImage3D(
+                        this.gl.TEXTURE_2D_ARRAY,   //target
+                        0,                          //level
+                        0,                          //xoffset
+                        0,                          //yoffset
+                        i,                          //zoffset
+                        256,                        //width
+                        256,                        //height
+                        1,                          //depth
+                        this.gl.RGBA,               //format
+                        this.gl.UNSIGNED_BYTE,      //type
+                        nodes[i]?.tile.image as HTMLImageElement //pixels
+                    );
+                }
+
+                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
+
+                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+                this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
+
+                this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
+                this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
+
+                this.gl.bindVertexArray(vao);
+                this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, vertexData.length / 4, nodes.length);
+
+                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
+
+            }
         }
     }
 
@@ -231,13 +395,20 @@ export class GlobeTileProgram extends Program {
 
                 provider.frustum = this.tinyearth.scene!.frustum;
                 const level = provider.source.maxLevel;
-                provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, (node) => {
-                    if (node && node.tile && node.tile.ready) {
+
+                let nodes = provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, (node) => {});
+                nodes = nodes.filter(node => node.tile && node.tile.ready);
+                nodes.sort((a, b) => a.key.z - b.key.z);
+
+                if (this.advance.renderMethod === RenderMethod.INSTANCE) {
+                    this.drawTileNodeInstance(nodes, provider.getOpacity(), provider.night);
+                } else if (this.advance.renderMethod === RenderMethod.DYNAMIC) {
+                    this.drawTileNodesDynamic(nodes, provider.opacity, provider.night);
+                } else {
+                    for (let node of nodes) {
                         that.drawTileNode(node, modelMtx, this.tinyearth.scene.camera, this.tinyearth.scene.projection.perspectiveMatrix, provider.getOpacity(), provider.night);
                     }
-                });
-
-                // console.log(provider.tiletree.provideCount);
+                }
             }
         }
     }
@@ -549,12 +720,14 @@ export class TileTree {
 
     }
 
-    dynamicLevelProvide(level: number, scene: Scene, callback: TileNodeCallback) {
+    dynamicLevelProvide(level: number, scene: Scene, callback: TileNodeCallback): TileNode[] {
         this.provideCount = 0;
-        this.#dynamicLevelProvideRec(this.root, level, scene, callback);
+        const nodes: TileNode[] = [];
+        this.#dynamicLevelProvideRec(this.root, level, scene, nodes, callback);
+        return nodes;
     }
 
-    #dynamicLevelProvideRec(node: TileNode, level: number, scene: Scene, callback: TileNodeCallback): TileNodeStatus {
+    #dynamicLevelProvideRec(node: TileNode, level: number, scene: Scene, nodes: TileNode[], callback: TileNodeCallback): TileNodeStatus {
 
         if (node.key.z > level) {
             return TileNodeOmitStatus.OMIT;
@@ -582,6 +755,7 @@ export class TileTree {
             status = node.tile.load();
             if (status === TileStatus.READY) {
                 this.provideCount++;
+                nodes.push(node);
                 callback(node);
             }
 
@@ -594,12 +768,13 @@ export class TileTree {
                 node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1 | 1, node.key.y << 1 | 1));
             }
 
-            const childrenStatus = node.children.map(child => this.#dynamicLevelProvideRec(child, level, scene, callback));
+            const childrenStatus = node.children.map(child => this.#dynamicLevelProvideRec(child, level, scene, nodes, callback));
 
             if (this.#needInternalNodeRender(childrenStatus)) {
                 status = node.tile.load();
                 if (status === TileStatus.READY) {
                     this.provideCount++;
+                    nodes.push(node);
                     callback(node);
                 }
             } else {
