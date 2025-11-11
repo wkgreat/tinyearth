@@ -1,4 +1,4 @@
-import { glMatrix, mat4, vec3, vec4 } from "gl-matrix";
+import { glMatrix, mat3, mat4, vec3, vec4 } from "gl-matrix";
 import type { NumArr3, NumArr4 } from "./defines.js";
 glMatrix.setMatrixArrayType(Array);
 
@@ -7,12 +7,24 @@ export function vec3_array(v: vec3): NumArr3 {
     return [v[0], v[1], v[2]];
 }
 
+export function vec3_fromarray(a: NumArr3): vec3 {
+    return vec3.fromValues(a[0], a[1], a[2]);
+}
+
 export function vec3_scale(v1: vec3, a: number): vec3 {
     return vec3.scale(vec3.create(), v1, a);
 }
 
 export function vec3_add(v1: vec3, v2: vec3): vec3 {
     return vec3.add(vec3.create(), v1, v2);
+}
+
+export function vec3_dot(v1: vec3, v2: vec3): number {
+    return vec3.dot(v1, v2);
+}
+
+export function vec3_length(v: vec3): number {
+    return vec3.length(v);
 }
 
 export function vec3_normalize(v: vec3): vec3 {
@@ -33,6 +45,10 @@ export function vec3_div(v1: vec3, v2: vec3): vec3 {
 
 export function vec3_t4(v: vec3, d: number = 1): vec4 {
     return vec4.fromValues(v[0], v[1], v[2], d);
+}
+
+export function vec3_mul(v: vec3, m: mat3): vec3 {
+    return vec3.transformMat3(vec3.create(), v, m);
 }
 
 export function vec3_t4_affine(v: vec3, m: mat4): vec4 {

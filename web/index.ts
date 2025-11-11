@@ -1,16 +1,24 @@
 import '../src/tinyearth.css';
 import './styles.css';
 
+import Color from '../src/color.js';
+import { Entity, LineStringEntity, PointEntity } from '../src/entity.js';
+import { Coordinate, LineString, Point } from '../src/geometry.js';
+import CameraHelper from "../src/helpers/camera_helper.js";
 import { TinyEarthHelperContainer } from "../src/helpers/helper.js";
 import TileProviderHelper from '../src/helpers/tileprovider_helper.js';
-import TinyEarthHelper from "../src/helpers/tinyearth_helper.js";
-import CameraHelper from "../src/helpers/camera_helper.js";
 import TimerHelper from '../src/helpers/timer_helper.js';
+import TinyEarthHelper from "../src/helpers/tinyearth_helper.js";
+import { LineStringLayer, PointLayer } from '../src/layer.js';
+import SRS from '../src/proj.js';
+import { LineStringStyle, PointStyle } from '../src/style.js';
 import { TileResources } from '../src/tilesource.js';
 import TinyEarth from '../src/tinyearth.js';
 import ContextMenuTool from "../src/tools/context_menu.js";
-import { MousePositionTool } from "../src/tools/mouse_position.js";
 import EarthRotationTool, { EarthRotationToolHelper } from "../src/tools/earth_rotation.js";
+import { MousePositionTool } from "../src/tools/mouse_position.js";
+import PerformanceTool from "../src/tools/performace_tool.js";
+import { randomFloat, randomLatitude, randomLongitude } from '../src/utils/random.js';
 
 function main() {
 
@@ -57,6 +65,7 @@ function main() {
             maxLevel: 6,
             night: true
         });
+        nightTileProvider.stop();
         const nightProviderHelper = new TileProviderHelper({
             tinyearth,
             provider: nightTileProvider,
@@ -79,7 +88,7 @@ function main() {
         const mousePosTool = new MousePositionTool({
             tinyearth,
             contextMenu,
-            textElementId: "status-mouse-location-input"
+            container: "status-bar"
         });
         mousePosTool.enable();
 
@@ -93,7 +102,48 @@ function main() {
 
         helperContainer.addHelper(earthRotationToolHelper);
 
+        const performTool = new PerformanceTool({ tinyearth: tinyearth, container: "status-bar" });
+        performTool.enable();
+
+        // add entities
+        const pointEntities: PointEntity[] = []
+        for (let i = 0; i < 100; i++) {
+
+            const point = new Point(new Coordinate(randomLongitude(), randomLatitude(), 0.0), SRS.WGS84);
+            const entity = new PointEntity({
+                point: point,
+                properties: {
+                    "weight": randomFloat(0, 100)
+                }
+            })
+            pointEntities.push(entity);
+        }
+
+        const leftColor = new Color(0.0, 1.0, 0.0, 1.0);
+        const rightColor = new Color(1.0, 0.0, 0.0, 1.0);
+
+        const pointLayer = new PointLayer({
+            tinyearth,
+            entities: pointEntities,
+            style: new PointStyle({
+                color: (e: Entity) => {
+                    const entity = e as PointEntity;
+                    let w = entity.getProperty("weight") as number;
+                    w = 1 - w / 100;
+                    return leftColor.mix(rightColor, w);
+                },
+                size: 10,
+                stoke: true,
+                strokeColor: new Color(1.0, 0.0, 0.0, 1.0),
+                strokeWidth: 2
+            }),
+            clampToGround: true
+        });
+
+        tinyearth.scene.addLayer(pointLayer);
+
         tinyearth.draw();
+
     } else {
         console.log("tinyearth canvas is null");
     }

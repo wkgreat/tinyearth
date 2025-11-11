@@ -1,16 +1,19 @@
 import { glMatrix, mat4, vec3 } from "gl-matrix";
-import { checkGLError } from "./debug.js";
-import { vec3_add, vec3_cross, vec3_normalize, vec3_scale, vec3_sub, vec4_t3 } from "./glmatrix_utils.js";
-import Scene from "./scene.js";
-import fragSource from "./skybox.frag";
-import vertSource from "./skybox.vert";
-import TinyEarth from "./tinyearth.js";
-import starsky_px from "./assets/starsky/px.png";
-import starsky_py from "./assets/starsky/py.png";
-import starsky_pz from "./assets/starsky/pz.png";
 import starsky_nx from "./assets/starsky/nx.png";
 import starsky_ny from "./assets/starsky/ny.png";
 import starsky_nz from "./assets/starsky/nz.png";
+import starsky_px from "./assets/starsky/px.png";
+import starsky_py from "./assets/starsky/py.png";
+import starsky_pz from "./assets/starsky/pz.png";
+import Camera from "./camera.js";
+import { checkGLError } from "./debug.js";
+import { vec3_add, vec3_cross, vec3_normalize, vec3_scale, vec3_sub, vec4_t3 } from "./glmatrix_utils.js";
+import { GLSLSource } from "./glsl.js";
+import { Program, type ProgramOptions } from "./program.js";
+import type Projection from "./projection.js";
+import Scene from "./scene.js";
+import fragSource from "./shader/skybox.frag";
+import vertSource from "./shader/skybox.vert";
 glMatrix.setMatrixArrayType(Array);
 
 export interface CubeMapInfo {
@@ -20,7 +23,9 @@ export interface CubeMapInfo {
 
 export interface SkyboxUniformInfo {
     u_invProjViewMtx: mat4,
-    u_worldCameraPos: vec3
+    u_worldCameraPos: vec3,
+    camera: Camera,
+    projection: Projection
 }
 
 export interface SkyBoxSourceInfo {
@@ -43,14 +48,9 @@ export const defaultSkyBoxSourceInfo = {
     negz: starsky_nz,
 }
 
-export class SkyBoxProgram {
+export interface SkyBoxProgramOptions extends Omit<ProgramOptions, 'vertSource' | 'fragSource'> {}
 
-
-    tinyearth: TinyEarth;
-
-    program: WebGLProgram | null = null;
-
-    gl: WebGLRenderingContext | null = null;
+export class SkyBoxProgram extends Program {
 
     #vertices: Float32Array = new Float32Array([
         -1, 1, 1,
@@ -67,13 +67,17 @@ export class SkyBoxProgram {
     /** @type {WebGLTexture} */
     #texutre: WebGLTexture | null = null;
 
-    /**
-     * @param {TinyEarth} tinyearth 
-    */
-    constructor(tinyearth: TinyEarth) {
-        this.tinyearth = tinyearth;
-        this.gl = tinyearth.gl;
-        this.program = this.createProgram();
+    constructor(options: SkyBoxProgramOptions) {
+
+        const vertGLSLSource = new GLSLSource(vertSource);
+        const fragGLSLSource = new GLSLSource(fragSource);
+
+        super({
+            ...options,
+            vertSource: vertGLSLSource,
+            fragSource: fragGLSLSource
+        })
+
     }
 
     /**
@@ -83,95 +87,38 @@ export class SkyBoxProgram {
 
         const cameraFrom = scene.camera.from;
         const cameraTo = scene.camera.to;
+        const cameraUp = scene.camera.up;
         const near = scene.projection.near;
         const fovy = scene.projection.fovy;
         const aspect = scene.projection.aspect;
 
         const forward = vec3_normalize(vec3_sub(vec4_t3(cameraTo), vec4_t3(cameraFrom)));
-        const worldup = vec3.fromValues(0, 0, 1);
+        const worldup = vec3_normalize(cameraUp);
         const right = vec3_normalize(vec3_cross(worldup, forward));
         const up = vec3_normalize(vec3_cross(forward, right));
         const half_height = near * Math.tan(fovy / 2);
         const half_width = aspect * half_height;
 
-        const leftup = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
-        const rightup = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, -half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
+        const leftUp = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
+        const rightUp = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, -half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
         const rightDown = vec3_normalize(vec3_add(vec3_sub(vec3_scale(right, -half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
         const leftDown = vec3_normalize(vec3_add(vec3_sub(vec3_scale(right, half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
 
+        // vertices in clip space
         const vertices = [
 
-            -1, 1, 1, ...leftup, //leftup
-            -1, -1, 1, ...leftDown, //leftdown
+            -1, 1, 1, ...leftUp, //leftup
+            -1, -1, 1, ...leftDown, //leftdown 
             1, -1, 1, ...rightDown, //rightdown
             1, -1, 1, ...rightDown, //rightdown
-            1, 1, 1, ...rightup, //rightup
-            -1, 1, 1, ...leftup //leftup
+            1, 1, 1, ...rightUp, //rightup
+            -1, 1, 1, ...leftUp //leftup
 
         ]
 
         return new Float32Array(vertices);
 
 
-    }
-
-    createProgram() {
-
-        if (this.gl === null) {
-            return null;
-        }
-        /* 创建程序 */
-        const program = this.gl.createProgram();
-
-        let success;
-
-        /* 程序加载着色器 */
-        const vertShader = this.gl.createShader(this.gl.VERTEX_SHADER);
-
-        if (vertShader === null) {
-            console.error("vertShader is null");
-            return null;
-        }
-
-        this.gl.shaderSource(vertShader, vertSource);
-        this.gl.compileShader(vertShader);
-        this.gl.attachShader(program, vertShader);
-
-        success = this.gl.getShaderParameter(vertShader, this.gl.COMPILE_STATUS);
-        if (!success) {
-            const error = this.gl.getShaderInfoLog(vertShader);
-            console.error('vertShader编译失败: ', error);
-        }
-
-        const fragShader = this.gl.createShader(this.gl.FRAGMENT_SHADER);
-        if (fragShader === null) {
-            console.error("fragShader is null");
-            return null;
-        }
-        this.gl.shaderSource(fragShader, fragSource);
-        this.gl.compileShader(fragShader);
-        this.gl.attachShader(program, fragShader);
-
-        success = this.gl.getShaderParameter(fragShader, this.gl.COMPILE_STATUS);
-        if (!success) {
-            const error = this.gl.getShaderInfoLog(fragShader);
-            console.error('fragShader编译失败: ', error);
-        }
-
-        this.gl.linkProgram(program);
-
-        success = this.gl.getProgramParameter(program, this.gl.LINK_STATUS);
-        if (!success) {
-            const error = this.gl.getProgramInfoLog(program);
-            console.error('program 连接失败失败: ', error);
-        }
-
-        if (!program) {
-            console.error("program is null");
-        }
-
-        this.program = program;
-        return program;
     }
 
     use() {
@@ -226,8 +173,9 @@ export class SkyBoxProgram {
             return;
         }
         this.use();
-        this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_invProjViewMtx"), false, info.u_invProjViewMtx);
-        this.gl.uniform3fv(this.gl.getUniformLocation(this.program, "u_worldCameraPos"), info.u_worldCameraPos);
+        this.setCameraUniform();
+        this.setProjectionUniform();
+        this.setSunUniform();
     }
 
     setData() {
@@ -254,26 +202,32 @@ export class SkyBoxProgram {
         this.gl.enableVertexAttribArray(a_direction); // 激活属性
     }
 
+    draw(): void {
+        this.render();
+    }
 
     render() {
         if (this.gl === null || !this.tinyearth.skybox) {
             return;
         }
         this.use();
-        checkGLError(this.gl, "use");
+        checkGLError(this.gl, "use", this.tinyearth.glErrorCheck);
         // const a_position = this.gl.getAttribLocation(this.program, "a_position");
         this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.#texutre);
-        checkGLError(this.gl, "bindTexture");
+        checkGLError(this.gl, "bindTexture", this.tinyearth.glErrorCheck);
 
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.#buffer);
-        checkGLError(this.gl, "bindBuffer");
+        checkGLError(this.gl, "bindBuffer", this.tinyearth.glErrorCheck);
+
+        this.setCameraUniform();
+
+        this.setProjectionUniform();
 
         this.setData();
 
-        // this.gl.vertexAttribPointer(a_position, 3, this.gl.FLOAT, false, 0, 0); // 设置属性指针
-        // this.gl.enableVertexAttribArray(a_position); // 激活属性
         this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
-        checkGLError(this.gl, "drawArrays");
+
+        checkGLError(this.gl, "drawArrays", this.tinyearth.glErrorCheck);
     }
 
 }

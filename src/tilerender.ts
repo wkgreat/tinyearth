@@ -1,18 +1,23 @@
-import { mat4, vec4 } from "gl-matrix";
-import proj4 from "proj4";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import Camera from "./camera.js";
 import type { NumArr3 } from "./defines.js";
-import Frustum, { buildFrustum } from "./frustum.js";
-import { Tile, TileStatus } from "./maptiler.js";
-import { EARTH_RADIUS, EPSG_4326, EPSG_4978 } from "./proj.js";
-import type { xyzObject } from "./sun.js";
-import tileFragSource from "./tile.frag";
-import tileVertSource from "./tile.vert";
+import { TinyEarthEvent } from "./event.js";
+import Frustum from "./frustum.js";
+import { vec3_t4, vec4_affine } from "./glmatrix_utils.js";
+import { GLSLSource } from "./glsl.js";
+import { Tile, TileMesher, TileStatus } from "./maptiler.js";
+import { Program, type ProgramOptions } from "./program.js";
+import SRS from "./proj.js";
+import type Scene from "./scene.js";
+
+import staticTileFragSource from "./shader/tile.frag";
+import staticTileVertSource from "./shader/tile.vert";
+import instanceTileFragSource from './shader/tileInstance.frag';
+import instanceTileVertSource from './shader/tileInstance.vert';
+
 import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
-import { TinyEarthEvent } from "./event.js";
-import type Scene from "./scene.js";
-import { vec3_t4, vec4_affine } from "./glmatrix_utils.js";
+import { checkGLError } from "./debug.js";
 
 const DefaultTileSize: number = 256;
 
@@ -21,13 +26,20 @@ interface GlobeTileProgramBufferInfo {
     texture?: WebGLTexture
 }
 
-export class GlobeTileProgram {
+export enum RenderMethod {
+    STATIC,
+    DYNAMIC,
+    INSTANCE
+}
 
-    gl: WebGLRenderingContext | null = null;
+interface GlobeTileProgramOptions extends Omit<ProgramOptions, 'vertSource' | 'fragSource'> {
+    advance?: {
+        renderMethod?: RenderMethod
+        depthTest?: boolean
+    }
+}
 
-    tinyearth: TinyEarth;
-
-    program: WebGLProgram | null = null;
+export class GlobeTileProgram extends Program {
 
     buffers: GlobeTileProgramBufferInfo = {};
 
@@ -35,10 +47,36 @@ export class GlobeTileProgram {
 
     tileProviders: TileProvider[] = [];
 
-    constructor(tinyearth: TinyEarth) {
-        this.tinyearth = tinyearth;
-        this.gl = this.tinyearth.gl;
-        this.program = this.createTileProgram();
+    advance = {
+        renderMethod: RenderMethod.STATIC,
+        depthTest: false
+    }
+
+    constructor(options: GlobeTileProgramOptions) {
+
+        const advance = options.advance ?? {};
+        const renderMethod = advance.renderMethod ?? RenderMethod.STATIC;
+        const depthTest = advance.depthTest ?? false;
+
+        let vertGLSLSource: GLSLSource;
+        let fragGLSLSource: GLSLSource;
+
+        //TODO dynamic draw
+        if (renderMethod === RenderMethod.STATIC || renderMethod === RenderMethod.DYNAMIC) {
+            vertGLSLSource = new GLSLSource(staticTileVertSource);
+            fragGLSLSource = new GLSLSource(staticTileFragSource, { DEBUG_DEPTH: depthTest });
+        } else {
+            vertGLSLSource = new GLSLSource(instanceTileVertSource);
+            fragGLSLSource = new GLSLSource(instanceTileFragSource, { DEBUG_DEPTH: depthTest });
+        }
+
+        super({
+            ...options, vertSource: vertGLSLSource, fragSource: fragGLSLSource
+        });
+
+        this.advance.renderMethod = renderMethod;
+        this.advance.depthTest = depthTest;
+
         this.createBuffer();
     }
 
@@ -52,64 +90,6 @@ export class GlobeTileProgram {
 
     removeTileProvider(tileProvider: TileProvider) {
         this.tileProviders = this.tileProviders.filter(p => p !== tileProvider);
-    }
-
-    createTileProgram(): WebGLProgram | null {
-
-        if (this.gl === null) {
-            return null;
-        }
-        /* 创建程序 */
-        const program = this.gl.createProgram();
-
-        let success;
-
-        /* 程序加载着色器 */
-        const vertShader = this.gl.createShader(this.gl.VERTEX_SHADER);
-        if (vertShader === null) {
-            console.error("vertShader is null");
-            return null;
-        }
-        this.gl.shaderSource(vertShader, tileVertSource);
-        this.gl.compileShader(vertShader);
-        this.gl.attachShader(program, vertShader);
-
-        success = this.gl.getShaderParameter(vertShader, this.gl.COMPILE_STATUS);
-        if (!success) {
-            const error = this.gl.getShaderInfoLog(vertShader);
-            console.error('vertShader编译失败: ', error);
-        }
-
-        const fragShader = this.gl.createShader(this.gl.FRAGMENT_SHADER);
-        if (fragShader === null) {
-            console.error("fragShader is null");
-            return null;
-        }
-        this.gl.shaderSource(fragShader, tileFragSource);
-        this.gl.compileShader(fragShader);
-        this.gl.attachShader(program, fragShader);
-
-        success = this.gl.getShaderParameter(fragShader, this.gl.COMPILE_STATUS);
-        if (!success) {
-            const error = this.gl.getShaderInfoLog(fragShader);
-            console.error('fragShader编译失败: ', error);
-        }
-
-        this.gl.linkProgram(program);
-
-        success = this.gl.getProgramParameter(program, this.gl.LINK_STATUS);
-        if (!success) {
-            const error = this.gl.getProgramInfoLog(program);
-            console.error('program 连接失败失败: ', error);
-        }
-
-        if (!program) {
-            console.error("program is null");
-        }
-
-        this.program = program;
-        return program;
-
     }
 
     createBuffer() {
@@ -139,18 +119,21 @@ export class GlobeTileProgram {
         }
     }
 
-    setMaterial(sunPos: xyzObject, camera: Camera) {
+    setMaterial() {
         if (this.gl && this.program) {
-            const from = camera.from;
             this.gl.useProgram(this.program);
-            this.setUniform3f("light.position", sunPos.x, sunPos.y, sunPos.z);
-            this.setUniform4f("light.color", 1.0, 1.0, 1.0, 1.0);
-            this.setUniform3f("camera.position", from[0], from[1], from[2]);
             this.setUniform4f("material.ambient", 0.1, 0.1, 0.1, 1.0);
             this.setUniform4f("material.diffuse", 1.0, 1.0, 1.0, 1.0);
             this.setUniform4f("material.specular", 1.0, 1.0, 1.0, 1.0);
             this.setUniform4f("material.emission", 0.0, 0.0, 0.0, 1.0);
             this.setUniform1f("material.shininess", 1000);
+        }
+    }
+
+    refreshUniforms(scene: Scene) {
+        if (this.gl && this.program) {
+            this.gl.useProgram(this.program);
+            this.refreshAllUniforms();
         }
     }
 
@@ -246,10 +229,6 @@ export class GlobeTileProgram {
             this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_normal"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, (3 + 2) * 4); // 设置属性指针
             this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_normal")); // 激活属性
 
-            this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_modelMtx"), false, modelMtx);
-            this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_viewMtx"), false, camera.viewMatrix);
-            this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "u_projMtx"), false, projMtx);
-
             this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
             this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
 
@@ -257,30 +236,177 @@ export class GlobeTileProgram {
         }
     }
 
-    render(modelMtx: mat4, camera: Camera, projMtx: mat4) {
+    drawTileNodesDynamic(nodes: TileNode[], opacity: number = 1.0, isNight: boolean = false) {
+
+        if (!this.program) { return; }
+
+        this.gl.useProgram(this.program);
+
+        //TODO move buffer to global
+        let buffer: WebGLBuffer | null = null;
+
+        for (const node of nodes) {
+
+            if (buffer === null) {
+                buffer = this.gl.createBuffer();
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+                this.gl.bufferData(this.gl.ARRAY_BUFFER, node.tile.mesh!, this.gl.DYNAMIC_DRAW);
+            } else {
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+                this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, node.tile.mesh!);
+            }
+
+            this.numElements = node.tile.mesh!.length;
+
+            if (node.texture) {
+                this.gl.bindTexture(this.gl.TEXTURE_2D, node.texture);
+            } else {
+                node.texture = this.createTextureAndSetData(node.tile.image!);
+            }
+
+            this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_position"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, 0); // 设置属性指针
+            this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_position")); // 激活属性
+
+            this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_texcoord"), 2, this.gl.FLOAT, false, (3 + 2 + 3) * 4, 3 * 4); // 设置属性指针
+            this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_texcoord")); // 激活属性
+
+            this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_normal"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, (3 + 2) * 4); // 设置属性指针
+            this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_normal")); // 激活属性
+
+            this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
+            this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
+
+            this.gl.drawArrays(this.gl.TRIANGLES, 0, this.numElements / 8);
+
+        }
+
+    }
+
+    //TODO fixit
+    drawTileNodeInstance(nodes: TileNode[], opacity: number = 1.0, isNight: boolean = false) {
+
+        if (this.program && this.program) {
+
+            nodes = nodes.filter(node => node.tile && node.tile.ready);
+
+            if (nodes.length > 0) {
+
+                const vao = this.gl.createVertexArray();
+                this.gl.bindVertexArray(vao);
+
+                // TODO only set once
+                const vertexBuffer = this.gl.createBuffer();
+                const vertexData = TileMesher.toRootMeshVertex();
+
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuffer);
+                this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexData, this.gl.STATIC_DRAW);
+
+                this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_position"), 2, this.gl.FLOAT, false, (2 + 2) * 4, 0);
+                this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_position"));
+
+                this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_texcoord"), 2, this.gl.FLOAT, false, (2 + 2) * 4, 2 * 4);
+                this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_texcoord"));
+
+                // TODO user int buffer
+                const tilekeyArray = nodes.flatMap(node => [node.key.x, node.key.y, node.key.z]);
+                // console.log(`tilekeyArray length: ${tilekeyArray.length}`);
+                const tilekeyData = new Float32Array(tilekeyArray);
+                const tilekeyBuffer = this.gl.createBuffer();
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, tilekeyBuffer);
+                this.gl.bufferData(this.gl.ARRAY_BUFFER, tilekeyData, this.gl.STATIC_DRAW);
+                this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_tilekey"), 3, this.gl.FLOAT, false, 0, 0);
+                this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_tilekey"));
+                this.gl.vertexAttribDivisor(this.gl.getAttribLocation(this.program, "a_tilekey"), 1); // instance data
+                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
+
+                //texture
+                const texArray = this.gl.createTexture();
+                this.gl.bindTexture(this.gl.TEXTURE_2D_ARRAY, texArray);
+                this.gl.texStorage3D(
+                    this.gl.TEXTURE_2D_ARRAY,   //target
+                    1,                          //levels mipmap 层级数量（最小 mipmap 数量为 1）
+                    this.gl.RGBA8,              //internalformat
+                    256,                        //width
+                    256,                        //height
+                    nodes.length                //depth 对于 3D 纹理：深度（z 方向像素数）;对于 2D 纹理数组：层数（layer count）
+                );
+                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
+                for (let i = 0; i < nodes.length; i++) {
+                    this.gl.texSubImage3D(
+                        this.gl.TEXTURE_2D_ARRAY,   //target
+                        0,                          //level
+                        0,                          //xoffset
+                        0,                          //yoffset
+                        i,                          //zoffset
+                        256,                        //width
+                        256,                        //height
+                        1,                          //depth
+                        this.gl.RGBA,               //format
+                        this.gl.UNSIGNED_BYTE,      //type
+                        nodes[i]?.tile.image as HTMLImageElement //pixels
+                    );
+                }
+
+                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
+
+                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+                this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
+
+                this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
+                this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
+
+                this.gl.bindVertexArray(vao);
+                this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, vertexData.length / 4, nodes.length);
+
+                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
+
+            }
+        }
+    }
+
+    draw(): void {
+        this.render();
+    }
+
+    render() {
         if (this.gl && this.program) {
             this.gl.useProgram(this.program);
+
+            this.refreshUniforms(this.tinyearth.scene);
+
             this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_enableNight"), this.tinyearth.night ? 1 : 0);
+
             const that = this;
+
+            const modelMtx = mat4.create(); //TODO move to other place
+
             for (let provider of this.tileProviders) {
+                if (provider.isStop()) {
+                    continue;
+                }
                 if (provider.night && !this.tinyearth.night) {
                     continue;
                 }
 
                 provider.frustum = this.tinyearth.scene!.frustum;
-                const level = provider.curlevel;
+                const level = provider.source.maxLevel;
 
-                // provider.tiletree.fixedLevelProvide(level, provider.frustum, async (node) => {
-                //     if (node && node.tile && node.tile.ready) {
-                //         that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
-                //     }
-                // })
+                let nodes = provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, (node) => {});
+                nodes = nodes.filter(node => node.tile && node.tile.ready);
+                nodes.sort((a, b) => a.key.z - b.key.z);
 
-                provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, async (node) => {
-                    if (node && node.tile && node.tile.ready) {
-                        that.drawTileNode(node, modelMtx, camera, projMtx, provider.getOpacity(), provider.night);
+                if (this.advance.renderMethod === RenderMethod.INSTANCE) {
+                    this.drawTileNodeInstance(nodes, provider.getOpacity(), provider.night);
+                } else if (this.advance.renderMethod === RenderMethod.DYNAMIC) {
+                    this.drawTileNodesDynamic(nodes, provider.opacity, provider.night);
+                } else {
+                    for (let node of nodes) {
+                        that.drawTileNode(node, modelMtx, this.tinyearth.scene.camera, this.tinyearth.scene.projection.perspectiveMatrix, provider.getOpacity(), provider.night);
                     }
-                })
+                }
             }
         }
     }
@@ -373,6 +499,8 @@ export class TileTree {
     source: TileSourceInfo;
     #startRecLevel: number = 2;
     frustum: Frustum | null = null;
+
+    provideCount: number = 0;
 
     constructor(source: TileSourceInfo) {
         this.source = source;
@@ -494,6 +622,7 @@ export class TileTree {
     }
 
     fixedLevelProvide(level: number, frustum: Frustum, callback: TileNodeCallback) {
+        this.provideCount = 0;
         this.#fixedLevelProvideRec(this.root, level, frustum, callback);
     }
 
@@ -514,6 +643,7 @@ export class TileTree {
 
             status = node.tile.load();
             if (status === TileStatus.READY) {
+                this.provideCount++;
                 callback(node);
             }
 
@@ -531,6 +661,7 @@ export class TileTree {
             if (this.#needInternalNodeRender(childrenStatus)) {
                 status = node.tile.load();
                 if (status === TileStatus.READY) {
+                    this.provideCount++;
                     callback(node);
                 }
             } else {
@@ -553,10 +684,10 @@ export class TileTree {
         const corners = tile.getTileCorner();
         const m = scene.worldToScreenMatrix;
 
-        let p0 = vec3_t4(corners[0]);
-        let p1 = vec3_t4(corners[1]);
-        let p2 = vec3_t4(corners[2]);
-        let p3 = vec3_t4(corners[3]);
+        let p0 = vec3_t4(corners[0]); // lowerleft
+        let p1 = vec3_t4(corners[1]); // upperleft
+        let p2 = vec3_t4(corners[2]); // upperright
+        let p3 = vec3_t4(corners[3]); // lowerright
 
         p0 = vec4_affine(p0, m);
         p1 = vec4_affine(p1, m);
@@ -564,28 +695,53 @@ export class TileTree {
         p3 = vec4_affine(p3, m);
 
         const r0 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
-        const r1 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
-        const r2 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
-        const r3 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
+        const r1 = this.#vec4_dist2d(p1, p2) / DefaultTileSize;
+        const r2 = this.#vec4_dist2d(p2, p3) / DefaultTileSize;
+        const r3 = this.#vec4_dist2d(p3, p0) / DefaultTileSize;
 
-        const mr = (r0 + r1 + r2 + r3) / 4.0;
+        const mr = Math.max(Math.max(Math.max(r0, r1), r2), r3);
 
         return mr;
     }
 
-    dynamicLevelProvide(level: number, scene: Scene, callback: TileNodeCallback) {
-        this.#dynamicLevelProvideRec(this.root, level, scene, callback);
+    #pointOnTile(p: vec3, tile: Tile): boolean {
+
+        const [xmin, ymin, xmax, ymax] = tile.extent(); //xmin, ymin, xmax, ymax
+        const p4326 = SRS.transform(SRS.ECEF, SRS.WGS84, [p[0], p[1], p[2]]) as NumArr3;
+        const p3857 = SRS.transform(SRS.WGS84, SRS.WEB, [p4326[0], p4326[1], p4326[2]]) as NumArr3;
+
+        if (p3857[0] >= xmin && p3857[0] <= xmax && p3857[1] >= ymin && p3857[2] <= ymax) {
+            return true;
+        } else {
+            return false;
+        }
+
     }
 
-    #dynamicLevelProvideRec(node: TileNode, level: number, scene: Scene, callback: TileNodeCallback): TileNodeStatus {
+    dynamicLevelProvide(level: number, scene: Scene, callback: TileNodeCallback): TileNode[] {
+        this.provideCount = 0;
+        const nodes: TileNode[] = [];
+        this.#dynamicLevelProvideRec(this.root, level, scene, nodes, callback);
+        return nodes;
+    }
 
+    #dynamicLevelProvideRec(node: TileNode, level: number, scene: Scene, nodes: TileNode[], callback: TileNodeCallback): TileNodeStatus {
 
         if (node.key.z > level) {
             return TileNodeOmitStatus.OMIT;
         }
 
-        if (node.key.z > this.#startRecLevel && ((!node.tile.intersectFrustum(scene.frustum)) || node.tile.tileIsBack(scene.frustum))) {
-            return TileNodeOmitStatus.OMIT;
+        if (node.key.z > this.#startRecLevel) {
+            if (!node.tile.intersectFrustum(scene.frustum)) {
+                return TileNodeOmitStatus.OMIT;
+            }
+
+            const cameraDeviate = scene.camera.getCameraDeviate();
+
+            if (cameraDeviate > 0.5 && node.tile.tileIsBack(scene.frustum)) {
+                return TileNodeOmitStatus.OMIT;
+            }
+
         }
 
         let status: TileNodeStatus = TileNodeOmitStatus.OMIT;
@@ -596,6 +752,8 @@ export class TileTree {
 
             status = node.tile.load();
             if (status === TileStatus.READY) {
+                this.provideCount++;
+                nodes.push(node);
                 callback(node);
             }
 
@@ -608,11 +766,13 @@ export class TileTree {
                 node.children.push(new TileNode(this.source.url, node.key.z + 1, node.key.x << 1 | 1, node.key.y << 1 | 1));
             }
 
-            const childrenStatus = node.children.map(child => this.#dynamicLevelProvideRec(child, level, scene, callback));
+            const childrenStatus = node.children.map(child => this.#dynamicLevelProvideRec(child, level, scene, nodes, callback));
 
             if (this.#needInternalNodeRender(childrenStatus)) {
                 status = node.tile.load();
                 if (status === TileStatus.READY) {
+                    this.provideCount++;
+                    nodes.push(node);
                     callback(node);
                 }
             } else {
@@ -627,8 +787,6 @@ export class TileTree {
     #needInternalNodeRender(status: TileNodeStatus[]): boolean {
         return !status.every(s => s === TileStatus.READY || s === TileNodeOmitStatus.OMIT);
     }
-
-
 
     vaccum() {
         //TODO 定期清理不用的tile
@@ -746,9 +904,9 @@ export class TileProvider {
     tileLevelWithCamera(camera: Camera) {
         const tileSize = 256;
         const from = camera.from
-        let pos: NumArr3 = proj4(EPSG_4978, EPSG_4326, [from[0], from[1], from[2]]);
+        let pos: NumArr3 = SRS.transform(SRS.ECEF, SRS.WGS84, [from[0], from[1], from[2]]);
         let height = pos[2];
-        const initialResolution = 2 * Math.PI * EARTH_RADIUS / tileSize;
+        const initialResolution = 2 * Math.PI * SRS.SPHERIOD_WGS84.a / tileSize;
         const groundResolution = height * 2 / tileSize;
         const zoom = Math.log2(initialResolution / groundResolution) + 1;
         return Math.min(Math.max(Math.ceil(zoom), this.source.minLevel), this.source.maxLevel);

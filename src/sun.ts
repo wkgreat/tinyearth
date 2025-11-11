@@ -1,3 +1,6 @@
+import type { NumArr3 } from "./defines";
+import type Scene from "./scene";
+
 function toRadians(deg: number): number {
     return deg * Math.PI / 180;
 }
@@ -63,12 +66,20 @@ export function getSunPositionECEF(date: Date = new Date()): xyzObject {
 
 export class Sun {
 
-    position: xyzObject = { x: 0, y: 0, z: 0 };
+    #scene: Scene;
 
-    constructor() {}
+    constructor(scene: Scene) {
+        this.#scene = scene;
+    }
 
-    refreshSunPosition(date: Date) {
-        this.position = getSunPositionECEF(date);
+    get position(): NumArr3 {
+        const p = Sun.getPositionAtTime(this.#scene.tinyearth.timer.currentDate);
+        return p;
+    }
+
+    static getPositionAtTime(date: Date): NumArr3 {
+        const p = getSunPositionECEF(date);
+        return [p.x, p.y, p.z];
     }
 
 }

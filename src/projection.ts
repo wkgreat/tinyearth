@@ -1,6 +1,6 @@
 import { glMatrix, mat4 } from "gl-matrix";
-import type Scene from "./scene.js";
 import { TinyEarthEvent } from "./event.js";
+import type Scene from "./scene.js";
 glMatrix.setMatrixArrayType(Array);
 
 class Projection {
