@@ -3,6 +3,8 @@ precision highp float;
 
 #include "scene.glsl"
 
+#include "spheriod.glsl"
+
 in vec4 a_position;
 
 in vec4 a_color;
@@ -11,15 +13,25 @@ in int a_stroke;
 in float a_strokewidth;
 in vec4 a_strokecolor;
 
+uniform bool u_clampToGround;
+
 out float v_size;
 out vec4 v_color;
 out float v_strokewidth;
 out vec4 v_strokecolor;
-out float v_logz;
+out float v_viewz;
 
 void main() {
 
-    vec4 viewpos = u_camera.viewmtx * a_position;
+    vec4 position;
+
+    if(u_clampToGround) {
+        position = vec4(clamp_to_ground(a_position.xyz, SPHERIOD_WGS84, 0.0),1.0);
+    } else {
+        position = a_position;
+    }
+
+    vec4 viewpos = u_camera.viewmtx * position;
 
     gl_Position = u_projection.projmtx * viewpos;
     gl_PointSize = a_size;
@@ -29,7 +41,7 @@ void main() {
     v_strokewidth = a_strokewidth;
     v_strokecolor = a_strokecolor;
     
-    float z = -viewpos.z;
-    v_logz = log2(max(1.0, z + 1.0));
+    v_viewz = viewpos.z;
+
     
 }

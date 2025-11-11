@@ -1,9 +1,13 @@
 import scene_glsl from './shader/scene.glsl';
 import spheriod_glsl from './shader/spheriod.glsl';
+import depth_glsl from './shader/depth.glsl'
+import color_glsl from './shader/color.glsl';
 
 const glslCache: { [k: string]: string } = {
     "scene.glsl": scene_glsl,
-    "spheriod.glsl": spheriod_glsl
+    "spheriod.glsl": spheriod_glsl,
+    "depth.glsl": depth_glsl,
+    "color.glsl": color_glsl
 }
 
 export interface GLSLDefines {

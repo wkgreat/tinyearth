@@ -129,12 +129,10 @@ export abstract class Program {
             const u_projection_near = this.gl.getUniformLocation(this.program, "u_projection.near");
             const u_projection_far = this.gl.getUniformLocation(this.program, "u_projection.far");
             const u_projection_projmtx = this.gl.getUniformLocation(this.program, "u_projection.projmtx");
-            const u_projection_logDepthConstant = this.gl.getUniformLocation(this.program, "u_projection.logDepthConstant");
 
             this.gl.uniform1f(u_projection_near, this.tinyearth.scene.projection.near);
             this.gl.uniform1f(u_projection_far, this.tinyearth.scene.projection.far);
             this.gl.uniformMatrix4fv(u_projection_projmtx, false, this.tinyearth.scene.projection.perspectiveMatrix);
-            this.gl.uniform1f(u_projection_logDepthConstant, this.tinyearth.scene.projection.logDepthConstant);
         }
     }
 
@@ -150,6 +148,11 @@ export abstract class Program {
             if (u_viewportmatrix) {
                 const m = this.tinyearth.scene.viewportMatrix;
                 this.gl.uniformMatrix4fv(u_viewportmatrix, false, m);
+            }
+
+            const u_logDepthC = this.gl.getUniformLocation(this.program, "u_scene.logDepthC");
+            if (u_logDepthC) {
+                this.gl.uniform1f(u_logDepthC, this.tinyearth.scene.getLogDepthC());
             }
 
         }
@@ -249,6 +252,8 @@ export class LineStringProgram extends Program {
     draw(): void {
         this.use();
         this.gl.drawArrays(this.gl.TRIANGLE_STRIP, this.#first, this.#count);
+        // this.gl.drawArrays(this.gl.LINE_STRIP, this.#first, this.#count);
+        // this.gl.drawArrays(this.gl.POINTS, this.#first, this.#count);
     }
 
 }

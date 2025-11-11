@@ -217,8 +217,6 @@ export default class TinyEarth {
         if (this.gl !== null) {
             this.clearColor();
 
-            this.gl.disable(this.gl.CULL_FACE);
-
             this.gl.clearDepth(1.0);
             this.gl.enable(this.gl.DEPTH_TEST);
             this.gl.enable(this.gl.CULL_FACE);

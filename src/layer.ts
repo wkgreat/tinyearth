@@ -252,8 +252,7 @@ export class PointLayer extends GeometryLayer {
     }
     override refreshUniforms(): void {
         if (this.program && this.program.program) {
-            this.program.setCameraUniform();
-            this.program.setProjectionUniform();
+            this.program.refreshAllUniforms();
             this.program.setClampToGround(this.clampToGround);
         }
     }
@@ -334,6 +333,12 @@ export class LineStringLayer extends GeometryLayer {
             name: "a_linewidth",
             elemSize: 1
         })
+
+        this.attributes["normlen"] = new GLAttribute({
+            gl: this.program.gl,
+            name: "a_normlen",
+            elemSize: 1
+        })
     }
 
     override fillAttributes(): void {
@@ -357,6 +362,8 @@ export class LineStringLayer extends GeometryLayer {
             const step = lineLength / entitySegs[i]!;
             const denseLine = line.dense(step, true);
             const size = denseLine.size;
+            const mileage = denseLine.mileage();
+            const normlen = mileage.map(m => m / lineLength);
 
             const entityids = Array(size).fill(i);
             const poslist = denseLine.toArray(3);
@@ -372,6 +379,7 @@ export class LineStringLayer extends GeometryLayer {
             const doubleLastposlist = lastposlist.flatMap(p => [p, p]);
             const doubleNextposlist = nextposlist.flatMap(p => [p, p]);
             const doubleSides = poslist.flatMap(p => [1, -1]);
+            const doublenormlens = normlen.flatMap(m => [m, m]);
 
 
             return {
@@ -381,7 +389,8 @@ export class LineStringLayer extends GeometryLayer {
                 linewidths: doubleLinewidths,
                 lastposlist: doubleLastposlist,
                 nextposlist: doubleNextposlist,
-                sides: doubleSides
+                sides: doubleSides,
+                normlen: doublenormlens
             };
         });
 
@@ -392,6 +401,7 @@ export class LineStringLayer extends GeometryLayer {
         const lastpos = lineData.flatMap(line => line.lastposlist.flatMap(p => p));
         const nextpos = lineData.flatMap(line => line.nextposlist.flatMap(p => p));
         const sides = lineData.flatMap(line => line.sides);
+        const normlen = lineData.flatMap(line => line.normlen);
 
         this.attributes["position"]?.fillData(positions);
         this.attributes["entityid"]?.fillData(entityids);
@@ -400,6 +410,7 @@ export class LineStringLayer extends GeometryLayer {
         this.attributes["lastpos"]?.fillData(lastpos);
         this.attributes["nextpos"]?.fillData(nextpos);
         this.attributes["side"]?.fillData(sides);
+        this.attributes["normlen"]?.fillData(normlen);
 
         (this.program as LineStringProgram).setFirst(0);
         (this.program as LineStringProgram).setCount(positions.length / 3);
@@ -425,31 +436,13 @@ export class LineStringLayer extends GeometryLayer {
         return;
     }
     override activateTextures(): void {
-
-        if (this.program) {
-            const gl = this.program.gl;
-
-            const depthTexture = this.tinyearth.getGroundFrameBuffer()?.depthTexture;
-
-            if (depthTexture) {
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, depthTexture);
-                gl.uniform1i(gl.getUniformLocation(this.program.program!, "u_groundDepthTexture"), 0);
-            }
-        }
-
         return;
     }
     override refreshUniforms(): void {
         if (this.program && this.program.program) {
-            this.program.setCameraUniform();
-            this.program.setProjectionUniform();
-            this.program.setSceneUniform();
+            this.program.refreshAllUniforms();
             this.program.setClampToGround(this.clampToGround);
             this.program.setModelMatrixUniform(this.entities[0]?.matrix);
-            this.program.gl.uniform2f(this.program.gl.getUniformLocation(this.program.program!, "u_resolution"),
-                this.tinyearth.viewWidth,
-                this.tinyearth.viewHeight);
         }
     }
 

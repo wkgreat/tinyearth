@@ -41,6 +41,8 @@ export default class Scene {
     #sun: Sun;
     #layers: Layer[] = [];
 
+    #logdepthC: number = 5.0;
+
     constructor(options: SceneOptions) {
         this.#tinyearth = options.tinyearth;
         this.#camera = new Camera(this, options.camera.from, options.camera.to, options.camera.up);
@@ -63,6 +65,7 @@ export default class Scene {
                 this.computeWorldToScreenMatrix();
             }
         });
+        this.#logdepthC = 5.0;
     }
 
     get tinyearth(): TinyEarth {
@@ -99,6 +102,22 @@ export default class Scene {
 
     get projection(): Projection {
         return this.#projection;
+    }
+
+    // set logDepthC(c: number) {
+    //     this.#logdepthC = c;
+    // }
+
+    // get logdepthC(): number {
+    //     return this.#logdepthC;
+    // }
+
+    setLogDepthC(c: number) {
+        this.#logdepthC = c;
+    }
+
+    getLogDepthC(): number {
+        return this.#logdepthC;
     }
 
     /**

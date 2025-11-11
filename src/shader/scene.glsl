@@ -9,7 +9,6 @@ struct Projection {
     float near;
     float far;
     mat4 projmtx;
-    float logDepthConstant;
 };
 
 struct Sun {
@@ -24,6 +23,7 @@ struct Model {
 struct Scene {
     vec2 viewport;
     mat4 viewportmtx;
+    float logDepthC;
 };
 
 uniform Camera u_camera;

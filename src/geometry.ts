@@ -238,6 +238,17 @@ export class LineString extends Geometry {
 
     }
 
+    mileage(): number[] {
+        const ms: number[] = [];
+        let acc: number = 0;
+        ms.push(acc);
+        for (let i = 1; i < this.size; ++i) {
+            acc += this.#coordinates[i]!.distance(this.#coordinates[i - 1]!);
+            ms.push(acc);
+        }
+        return ms;
+    }
+
     get length() {
         let sum = 0;
         for (let i = 0; i < this.size - 1; ++i) {

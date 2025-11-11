@@ -54,10 +54,6 @@ class Projection {
         return this.#aspect;
     }
 
-    get logDepthConstant(): number {
-        return 1.0 / Math.log2(this.far + 1.0);
-    }
-
 };
 
 export default Projection;

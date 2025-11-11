@@ -32,7 +32,7 @@ async function loadMockTileImage(url: string, x: number, y: number, z: number): 
             ctx.fillStyle = "#484848ff";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            ctx.strokeStyle = "red"
+            ctx.strokeStyle = "#000000ff";
             ctx.lineWidth = 4;
             ctx.strokeRect(0, 0, canvas.width, canvas.height);
 

@@ -3,7 +3,11 @@ precision highp float;
 
 #define __DEFINE_REPLACE__
 
+#include "depth.glsl"
+
 #include "scene.glsl"
+
+#include "color.glsl"
 
 uniform sampler2D u_image;
 uniform float u_opacity;
@@ -13,7 +17,7 @@ uniform bool u_isNight;
 in vec4 v_worldPos;
 in vec2 v_texcoord;
 in vec3 v_normal;
-in float v_logz;
+in float v_viewz;
 
 struct Material {
     vec4 ambient; //ka
@@ -54,17 +58,6 @@ vec4 nightSurfaceColor(vec4 texcolor, vec3 location, Sun light, vec3 cameraPosit
     return vec4(color, a);
 }
 
-#ifdef DEBUG_DEPTH
-
-void main() {
-
-    float depth = v_logz / log2(u_projection.far + 1.0);
-
-    fragColor = vec4(mix(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), depth), 1.0);
-}
-
-#else
-
 void main() {
 
     vec3 pos = v_worldPos.xyz;
@@ -83,8 +76,6 @@ void main() {
         fragColor = texcolor;
     }
 
-    gl_FragDepth = v_logz / log2(u_projection.far + 1.0);
+    gl_FragDepth = frag_depth_log(u_scene.logDepthC, u_projection.far, v_viewz);
 
 }
-
-#endif

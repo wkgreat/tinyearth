@@ -133,9 +133,7 @@ export class GlobeTileProgram extends Program {
     refreshUniforms(scene: Scene) {
         if (this.gl && this.program) {
             this.gl.useProgram(this.program);
-            this.setCameraUniform();
-            this.setProjectionUniform();
-            this.setSunUniform();
+            this.refreshAllUniforms();
         }
     }
 

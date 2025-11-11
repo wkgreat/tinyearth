@@ -1,12 +1,17 @@
 import '../src/tinyearth.css';
 import './styles.css';
 
+import Color from '../src/color.js';
+import { Entity, LineStringEntity, PointEntity } from '../src/entity.js';
+import { Coordinate, LineString, Point } from '../src/geometry.js';
 import CameraHelper from "../src/helpers/camera_helper.js";
 import { TinyEarthHelperContainer } from "../src/helpers/helper.js";
 import TileProviderHelper from '../src/helpers/tileprovider_helper.js';
 import TimerHelper from '../src/helpers/timer_helper.js';
 import TinyEarthHelper from "../src/helpers/tinyearth_helper.js";
-import { Coordinate, LineString, Point } from '../src/geometry.js';
+import { LineStringLayer, PointLayer } from '../src/layer.js';
+import SRS from '../src/proj.js';
+import { LineStringStyle, PointStyle } from '../src/style.js';
 import { TileResources } from '../src/tilesource.js';
 import TinyEarth from '../src/tinyearth.js';
 import ContextMenuTool from "../src/tools/context_menu.js";
@@ -14,11 +19,6 @@ import EarthRotationTool, { EarthRotationToolHelper } from "../src/tools/earth_r
 import { MousePositionTool } from "../src/tools/mouse_position.js";
 import PerformanceTool from "../src/tools/performace_tool.js";
 import { randomFloat, randomLatitude, randomLongitude } from '../src/utils/random.js';
-import { LineStringLayer, PointLayer } from '../src/layer.js';
-import { LineStringStyle, PointStyle } from '../src/style.js';
-import Color from '../src/color.js';
-import { Entity, LineStringEntity, PointEntity } from '../src/entity.js';
-import SRS from '../src/proj.js';
 
 function main() {
 
@@ -109,7 +109,7 @@ function main() {
         const pointEntities: PointEntity[] = []
         for (let i = 0; i < 100; i++) {
 
-            const point = new Point(new Coordinate(randomLongitude(), randomLatitude(), 1000), SRS.WGS84);
+            const point = new Point(new Coordinate(randomLongitude(), randomLatitude(), 0.0), SRS.WGS84);
             const entity = new PointEntity({
                 point: point,
                 properties: {
@@ -136,39 +136,11 @@ function main() {
                 stoke: true,
                 strokeColor: new Color(1.0, 0.0, 0.0, 1.0),
                 strokeWidth: 2
-            })
-        });
-
-        tinyearth.scene.addLayer(pointLayer);
-
-        const line0 = new LineString([
-            new Coordinate(100, 30, 0),
-            new Coordinate(110, 40, 0),
-            new Coordinate(150, 70, 0),
-            new Coordinate(150, 50, 0),
-        ], SRS.WGS84, false);
-
-        const lineStringEntities: LineStringEntity[] = [
-            new LineStringEntity({
-                lineString: line0
-            })
-        ];
-
-        const lineStringLayer = new LineStringLayer({
-            tinyearth,
-            entities: lineStringEntities,
-            style: new LineStringStyle({
-                color: new Color(1.0, 0.0, 0.0, 1.0),
-                lineWidth: 2,
-                stoke: true,
-                strokeColor: new Color(1.0, 0.0, 0.0, 1.0),
-                strokeWidth: 2,
-                lineNumSegs: 100
             }),
             clampToGround: true
         });
 
-        tinyearth.scene.addLayer(lineStringLayer);
+        tinyearth.scene.addLayer(pointLayer);
 
         tinyearth.draw();
 
