@@ -1,10 +1,10 @@
 import { GLSLSource } from "./glsl";
+import { MAT4, VEC2, type mat4 } from "./matrix";
 import pointFragSource from './shader/point.frag';
 import pointVertSource from './shader/point.vert';
 import lineStringFragSource from './shader/wideLineString.frag';
 import lineStringVertSource from './shader/wideLineString.vert';
 import type TinyEarth from "./tinyearth";
-import { mat4, vec2 } from "gl-matrix";
 
 export interface ProgramOptions {
     tinyearth: TinyEarth,
@@ -140,7 +140,7 @@ export abstract class Program {
         if (this.program) {
             const u_viewport = this.gl.getUniformLocation(this.program, "u_scene.viewport");
             if (u_viewport) {
-                const v = vec2.fromValues(this.tinyearth.scene.viewWidth, this.tinyearth.scene.viewHeight);
+                const v = VEC2.fromValues(this.tinyearth.scene.viewWidth, this.tinyearth.scene.viewHeight);
                 this.gl.uniform2fv(u_viewport, v);
             }
 
@@ -181,7 +181,7 @@ export abstract class Program {
         }
     }
 
-    setModelMatrixUniform(m: mat4 = mat4.create()) {
+    setModelMatrixUniform(m: mat4 = MAT4.create()) {
         if (this.program) {
             const loc = this.gl.getUniformLocation(this.program, "u_model.modelmtx");
             if (loc) {

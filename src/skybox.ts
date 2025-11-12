@@ -1,4 +1,3 @@
-import { glMatrix, mat4, vec3 } from "gl-matrix";
 import starsky_nx from "./assets/starsky/nx.png";
 import starsky_ny from "./assets/starsky/ny.png";
 import starsky_nz from "./assets/starsky/nz.png";
@@ -7,14 +6,13 @@ import starsky_py from "./assets/starsky/py.png";
 import starsky_pz from "./assets/starsky/pz.png";
 import Camera from "./camera.js";
 import { checkGLError } from "./debug.js";
-import { vec3_add, vec3_cross, vec3_normalize, vec3_scale, vec3_sub, vec4_t3 } from "./glmatrix_utils.js";
 import { GLSLSource } from "./glsl.js";
+import { VEC3, VEC4, type mat4, type vec3 } from "./matrix";
 import { Program, type ProgramOptions } from "./program.js";
 import type Projection from "./projection.js";
 import Scene from "./scene.js";
 import fragSource from "./shader/skybox.frag";
 import vertSource from "./shader/skybox.vert";
-glMatrix.setMatrixArrayType(Array);
 
 export interface CubeMapInfo {
     face: number,
@@ -92,17 +90,17 @@ export class SkyBoxProgram extends Program {
         const fovy = scene.projection.fovy;
         const aspect = scene.projection.aspect;
 
-        const forward = vec3_normalize(vec3_sub(vec4_t3(cameraTo), vec4_t3(cameraFrom)));
-        const worldup = vec3_normalize(cameraUp);
-        const right = vec3_normalize(vec3_cross(worldup, forward));
-        const up = vec3_normalize(vec3_cross(forward, right));
+        const forward = VEC3.normalize(VEC3.sub(VEC4.force3(cameraTo), VEC4.force3(cameraFrom)));
+        const worldup = VEC3.normalize(cameraUp);
+        const right = VEC3.normalize(VEC3.cross(worldup, forward));
+        const up = VEC3.normalize(VEC3.cross(forward, right));
         const half_height = near * Math.tan(fovy / 2);
         const half_width = aspect * half_height;
 
-        const leftUp = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
-        const rightUp = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, -half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
-        const rightDown = vec3_normalize(vec3_add(vec3_sub(vec3_scale(right, -half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
-        const leftDown = vec3_normalize(vec3_add(vec3_sub(vec3_scale(right, half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
+        const leftUp = VEC3.normalize(VEC3.add(VEC3.add(VEC3.scale(right, half_width), VEC3.scale(up, half_height)), VEC3.scale(forward, near)));
+        const rightUp = VEC3.normalize(VEC3.add(VEC3.add(VEC3.scale(right, -half_width), VEC3.scale(up, half_height)), VEC3.scale(forward, near)));
+        const rightDown = VEC3.normalize(VEC3.add(VEC3.sub(VEC3.scale(right, -half_width), VEC3.scale(up, half_height)), VEC3.scale(forward, near)));
+        const leftDown = VEC3.normalize(VEC3.add(VEC3.sub(VEC3.scale(right, half_width), VEC3.scale(up, half_height)), VEC3.scale(forward, near)));
 
         // vertices in clip space
         const vertices = [

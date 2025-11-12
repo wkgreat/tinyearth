@@ -1,8 +1,8 @@
-import { mat4, vec3 } from "gl-matrix";
 import Camera from "./camera.js";
 import { TinyEarthEvent } from "./event.js";
 import Frustum, { buildFrustum } from "./frustum.js";
 import type { Layer } from "./layer.js";
+import { MAT4, type mat4, type vec3 } from "./matrix.js";
 import Projection from "./projection.js";
 import { Sun } from "./sun.js";
 import type TinyEarth from "./tinyearth.js";
@@ -128,7 +128,7 @@ export default class Scene {
         const y = 0;
         const w2 = this.#viewWidth / 2;
         const h2 = this.#viewHeight / 2;
-        const m = mat4.fromValues(
+        const m = MAT4.fromValues(
             w2, 0, 0, 0,
             0, h2, 0, 0,
             0, 0, 0.5, 0,
@@ -143,9 +143,9 @@ export default class Scene {
     }
 
     computeWorldToScreenMatrix(): mat4 {
-        const m = mat4.create();
-        mat4.multiply(m, this.#projection.perspectiveMatrix, this.#camera.viewMatrix);
-        mat4.multiply(m, this.viewportMatrix, m);
+        const m = MAT4.create();
+        MAT4.mul_(m, this.#projection.perspectiveMatrix, this.#camera.viewMatrix);
+        MAT4.mul_(m, this.viewportMatrix, m);
         this.#worldToScreenMatrix = m;
         return this.#worldToScreenMatrix;
     }

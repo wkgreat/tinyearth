@@ -1,7 +1,6 @@
-import { glMatrix, mat4 } from "gl-matrix";
 import { TinyEarthEvent } from "./event.js";
+import { MAT4, type mat4 } from "./matrix.js";
 import type Scene from "./scene.js";
-glMatrix.setMatrixArrayType(Array);
 
 class Projection {
 
@@ -9,7 +8,7 @@ class Projection {
     #aspect: number = 1;
     #near: number = 0.1;
     #far: number = 1E10;
-    #matrix: mat4 = mat4.create();
+    #matrix: mat4 = MAT4.create();
     #scene: Scene;
 
     constructor(scene: Scene, fovy: number, aspect: number, near: number, far: number) {
@@ -21,7 +20,7 @@ class Projection {
     }
 
     get perspectiveMatrix(): mat4 {
-        return mat4.perspective(this.#matrix, this.#fovy, this.#aspect, this.#near, this.#far);
+        return MAT4.perspective_(this.#matrix, this.#fovy, this.#aspect, this.#near, this.#far);
     }
 
     get fovy(): number {

@@ -1,20 +1,18 @@
-import { glMatrix, mat4, vec3, vec4 } from "gl-matrix";
 import { type NumArr2, type NumArr3 } from "./defines.js";
 import { TinyEarthEvent } from "./event.js";
-import { mat4_mul, mat4_rotateAroundLine, vec3_array, vec3_normalize, vec3_scale, vec3_sub, vec3_t4, vec4_t3 } from "./glmatrix_utils.js";
 import Scene from "./scene.js";
 import SRS from "./proj.js";
-glMatrix.setMatrixArrayType(Array);
+import { MAT4, VEC3, VEC4, type mat4, type vec3, type vec4 } from "./matrix.js";
 
 export type CameraEventCallback = (camera: Camera, info: any) => void;
 
 class Camera {
 
-    #from: vec4 = vec4.fromValues(1, 1, 1, 1);
-    #to: vec4 = vec4.fromValues(0, 0, 0, 1);
-    #up: vec4 = vec4.fromValues(0, 1, 0, 0);
-    #viewMtx: mat4 = mat4.create();
-    #invViewMtx: mat4 = mat4.create();
+    #from: vec4 = VEC4.fromValues(1, 1, 1, 1);
+    #to: vec4 = VEC4.fromValues(0, 0, 0, 1);
+    #up: vec4 = VEC4.fromValues(0, 1, 0, 0);
+    #viewMtx: mat4 = MAT4.create();
+    #invViewMtx: mat4 = MAT4.create();
 
     #scene: Scene;
 
@@ -28,15 +26,15 @@ class Camera {
 
     #setVec4(vout: vec4, vin: vec3 | vec4) {
         if (vin.length == 3) {
-            vec4.set(vout, vin[0], vin[1], vin[2], 1);
+            VEC4.set(vout, vin[0], vin[1], vin[2], 1);
         } else {
-            vec4.set(vout, vin[0], vin[1], vin[2], vin[3] as number);
+            VEC4.set(vout, vin[0], vin[1], vin[2], vin[3] as number);
         }
     }
 
     _look() {
-        mat4.lookAt(this.#viewMtx, vec4_t3(this.#from), vec4_t3(this.#to), vec4_t3(this.#up));
-        mat4.invert(this.#invViewMtx, this.#viewMtx);
+        this.#viewMtx = MAT4.lookAt(VEC4.force3(this.#from), VEC4.force3(this.#to), VEC4.force3(this.#up));
+        this.#invViewMtx = MAT4.invert(this.#viewMtx)!;
     }
 
     get viewMatrix() {
@@ -61,16 +59,16 @@ class Camera {
         const ax = Math.atan(lx / SRS.SPHERIOD_WGS84.a);
         const ay = Math.atan(ly / SRS.SPHERIOD_WGS84.a);
 
-        const viewFrom4 = vec4.transformMat4(vec4.create(), this.#from, this.#viewMtx);
-        const viewTo4 = vec4.transformMat4(vec4.create(), this.#to, this.#viewMtx);
-        const viewFrom3 = vec4_t3(viewFrom4);
-        const viewTo3 = vec4_t3(viewTo4);
+        const viewFrom4 = VEC4.transform(this.#from, this.#viewMtx);
+        const viewTo4 = VEC4.transform(this.#to, this.#viewMtx);
+        let viewFrom3 = VEC4.force3(viewFrom4);
+        let viewTo3 = VEC4.force3(viewTo4);
 
-        vec3.rotateY(viewFrom3, viewFrom3, viewTo3, ax); // 绕Y轴旋转dx
-        vec3.rotateX(viewFrom3, viewFrom3, viewTo3, ay); // 绕x轴旋转dy
+        viewFrom3 = VEC3.rotateY(viewFrom3, viewTo3, ax); // 绕Y轴旋转dx
+        viewFrom3 = VEC3.rotateX(viewFrom3, viewTo3, ay); // 绕x轴旋转dy
 
-        vec4.set(viewFrom4, viewFrom3[0], viewFrom3[1], viewFrom3[2], 1);
-        vec4.transformMat4(this.#from, viewFrom4, this.#invViewMtx);
+        VEC4.set(viewFrom4, viewFrom3[0], viewFrom3[1], viewFrom3[2], 1);
+        this.#from = VEC4.transform(viewFrom4, this.#invViewMtx);
 
         this._look();
 
@@ -86,11 +84,10 @@ class Camera {
      * {@link ../docs/source/camera.md | Earth Self Rotation Effect}
     */
     roundForEarthSelfRotationEffect(a: number) {
-        const mat = mat4.create();
-        mat4.identity(mat);
-        mat4.rotateZ(mat, mat, -a);
-        vec4.transformMat4(this.#from, this.#from, mat);
-        this.#to = vec4.fromValues(0, 0, 0, 1);
+        let mat = MAT4.create();
+        mat = MAT4.rotateZ(mat, -a);
+        this.#from = VEC4.transform(this.#from, mat);
+        this.#to = VEC4.fromValues(0, 0, 0, 1);
         this._look();
 
         this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
@@ -106,15 +103,15 @@ class Camera {
     zoom(f: number) {
 
         //TODO 考虑地球为椭球体
-        const d = vec4.create();
+        let d = VEC4.create();
         const fromLonLatAlt: NumArr3 = SRS.transform(SRS.ECEF, SRS.WGS84, [this.#from[0], this.#from[1], this.#from[2]]);
         const toLonLatAlt: NumArr3 = [fromLonLatAlt[0], fromLonLatAlt[1], 1];
         const to = SRS.transform(SRS.WGS84, SRS.ECEF, toLonLatAlt);
-        const toVec4 = vec4.fromValues(to[0], to[1], to[2], 1);
-        vec4.sub(d, toVec4, this.#from);
+        const toVec4 = VEC4.fromValues(to[0], to[1], to[2], 1);
+        d = VEC4.sub(toVec4, this.#from);
         const factor = Math.sign(f) * 0.1;
-        vec4.scale(d, d, factor);
-        vec4.add(this.#from, this.#from, d);
+        d = VEC4.scale(d, factor);
+        this.#from = VEC4.add(this.#from, d);
         this._look();
 
         this.#scene.tinyearth?.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
@@ -130,16 +127,15 @@ class Camera {
      * TODO 根据比例尺移动，move时避免重复请求
     */
     move(dx: number, dy: number) {
-        const viewFrom4 = vec4.transformMat4(vec4.create(), this.#from, this.#viewMtx);
-        const viewTo4 = vec4.transformMat4(vec4.create(), this.#to, this.#viewMtx);
+        const viewFrom4 = VEC4.transform(this.#from, this.#viewMtx);
+        const viewTo4 = VEC4.transform(this.#to, this.#viewMtx);
 
-        const mtx = mat4.create();
-        mat4.translate(mtx, mtx, [dx, dy, 0]);
-        vec4.transformMat4(viewFrom4, viewFrom4, mtx);
-        vec4.transformMat4(viewTo4, viewTo4, mtx);
-
-        vec4.transformMat4(this.#from, viewFrom4, this.#invViewMtx);
-        vec4.transformMat4(this.#to, viewTo4, this.#invViewMtx);
+        const mtx = MAT4.create();
+        MAT4.translate_(mtx, mtx, [dx, dy, 0]);
+        VEC4.transform_(viewFrom4, viewFrom4, mtx);
+        VEC4.transform_(viewTo4, viewTo4, mtx);
+        VEC4.transform_(this.#from, viewFrom4, this.#invViewMtx);
+        VEC4.transform_(this.#to, viewTo4, this.#invViewMtx);
 
         this._look();
 
@@ -156,18 +152,18 @@ class Camera {
     moveTarget(ax: number, ay: number) {
 
         // the axis from earth center to camera position (perpendicular to ground)
-        const panAxis = vec3_t4(vec3_normalize(vec4_t3(this.#from)), 1);
+        const panAxis = VEC3.force4(VEC3.normalize(VEC4.force3(this.#from)), 1);
 
         // the axis of view space x axis transformed to world space
-        const tiltAxis = vec4.fromValues(1, 0, 0, 0); // the x axis in view space
-        vec4.transformMat4(tiltAxis, tiltAxis, this.#invViewMtx); // transform to world space
+        const tiltAxis = VEC4.fromValues(1, 0, 0, 0); // the x axis in view space
+        VEC4.transform_(tiltAxis, tiltAxis, this.#invViewMtx); // transform to world space
 
         // transform
-        const panMatrix = mat4_rotateAroundLine(this.#from, panAxis, ax);
-        const tiltMatrix = mat4_rotateAroundLine(this.#from, tiltAxis, ay);
-        const m = mat4_mul(panMatrix, tiltMatrix);
-        const to = vec4.create();
-        vec4.transformMat4(to, this.#to, m);
+        const panMatrix = MAT4.rotateAroundLine(this.#from, panAxis, ax);
+        const tiltMatrix = MAT4.rotateAroundLine(this.#from, tiltAxis, ay);
+        const m = MAT4.mul(panMatrix, tiltMatrix);
+        const to = VEC4.create();
+        VEC4.transform_(to, this.#to, m);
 
         const d = Camera.computeDeviateVertical(this.#from, to);
 
@@ -236,21 +232,21 @@ class Camera {
     }
 
     static computeDeviateVertical(from: vec3, to: vec3): number {
-        const viewNormal = vec3_normalize(vec3_sub(to, from));
-        const verticalNormal = vec3_normalize(vec3_scale(from, -1));
-        const d = vec3.dot(viewNormal, verticalNormal);
+        const viewNormal = VEC3.normalize(VEC3.sub(to, from));
+        const verticalNormal = VEC3.normalize(VEC3.scale(from, -1));
+        const d = VEC3.dot(viewNormal, verticalNormal);
         return d;
     }
 
     getCameraDeviate(): number {
-        const viewNormal = vec3_normalize(vec3_sub(vec4_t3(this.#to), vec4_t3(this.#from)));
-        const verticalNormal = vec3_normalize(vec3_scale(this.#from, -1));
-        const d = vec3.dot(viewNormal, verticalNormal);
+        const viewNormal = VEC3.normalize(VEC3.sub(VEC4.force3(this.#to), VEC4.force3(this.#from)));
+        const verticalNormal = VEC3.normalize(VEC3.scale(this.#from, -1));
+        const d = VEC3.dot(viewNormal, verticalNormal);
         return d;
     }
 
     getHeightToSurface() {
-        const from = SRS.transform(SRS.ECEF, SRS.WGS84, vec3_array(vec4_t3(this.#from)));
+        const from = SRS.transform(SRS.ECEF, SRS.WGS84, VEC3.array(VEC4.force3(this.#from)));
         return from[2];
     }
 

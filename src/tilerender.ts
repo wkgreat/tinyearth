@@ -1,9 +1,7 @@
-import { mat4, vec3, vec4 } from "gl-matrix";
 import Camera from "./camera.js";
 import type { NumArr3 } from "./defines.js";
 import { TinyEarthEvent } from "./event.js";
 import Frustum from "./frustum.js";
-import { vec3_t4, vec4_affine } from "./glmatrix_utils.js";
 import { GLSLSource } from "./glsl.js";
 import { Tile, TileMesher, TileStatus } from "./maptiler.js";
 import { Program, type ProgramOptions } from "./program.js";
@@ -18,6 +16,7 @@ import instanceTileVertSource from './shader/tileInstance.vert';
 import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
 import { checkGLError } from "./debug.js";
+import { MAT4, VEC3, VEC4, type mat4, type vec3, type vec4 } from "./matrix.js";
 
 const DefaultTileSize: number = 256;
 
@@ -381,7 +380,7 @@ export class GlobeTileProgram extends Program {
 
             const that = this;
 
-            const modelMtx = mat4.create(); //TODO move to other place
+            const modelMtx = MAT4.create(); //TODO move to other place
 
             for (let provider of this.tileProviders) {
                 if (provider.isStop()) {
@@ -684,15 +683,15 @@ export class TileTree {
         const corners = tile.getTileCorner();
         const m = scene.worldToScreenMatrix;
 
-        let p0 = vec3_t4(corners[0]); // lowerleft
-        let p1 = vec3_t4(corners[1]); // upperleft
-        let p2 = vec3_t4(corners[2]); // upperright
-        let p3 = vec3_t4(corners[3]); // lowerright
+        let p0 = VEC3.force4(corners[0]); // lowerleft
+        let p1 = VEC3.force4(corners[1]); // upperleft
+        let p2 = VEC3.force4(corners[2]); // upperright
+        let p3 = VEC3.force4(corners[3]); // lowerright
 
-        p0 = vec4_affine(p0, m);
-        p1 = vec4_affine(p1, m);
-        p2 = vec4_affine(p2, m);
-        p3 = vec4_affine(p3, m);
+        p0 = VEC4.affine(p0, m);
+        p1 = VEC4.affine(p1, m);
+        p2 = VEC4.affine(p2, m);
+        p3 = VEC4.affine(p3, m);
 
         const r0 = this.#vec4_dist2d(p0, p1) / DefaultTileSize;
         const r1 = this.#vec4_dist2d(p1, p2) / DefaultTileSize;

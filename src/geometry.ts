@@ -1,6 +1,5 @@
-import { vec3 } from "gl-matrix";
 import type { NumArr3 } from "./defines";
-import { vec3_add, vec3_length, vec3_scale, vec3_sub } from "./glmatrix_utils";
+import { VEC3, type vec3 } from "./matrix";
 import SRS, { type projcode_t } from "./proj";
 
 export class Coordinate {
@@ -10,7 +9,7 @@ export class Coordinate {
     #t: number;
 
     constructor(x: number, y: number, z: number, m?: number | null, t?: number | null) {
-        this.#values = vec3.fromValues(x, y, z);
+        this.#values = VEC3.fromValues(x, y, z);
         this.#m = m ?? 0;
         this.#t = t ?? 0;
     }
@@ -80,7 +79,7 @@ export class Coordinate {
     }
 
     distance(c: Coordinate): number {
-        return vec3_length(vec3_sub(c.v, this.v));
+        return VEC3.length(VEC3.sub(c.v, this.v));
     }
 
     mix(c: Coordinate, w: number): Coordinate {
@@ -91,7 +90,7 @@ export class Coordinate {
         const t0 = this.t;
         const t1 = c.t;
 
-        const v = vec3_add(vec3_scale(v0, 1 - w), vec3_scale(v1, w));
+        const v = VEC3.add(VEC3.scale(v0, 1 - w), VEC3.scale(v1, w));
         const m = (1 - w) * m0 + w * m1;
         const t = (1 - w) * t0 + w * t1;
 

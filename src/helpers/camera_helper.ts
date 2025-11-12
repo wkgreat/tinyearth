@@ -1,6 +1,6 @@
 import type Camera from "../camera";
 import { TinyEarthEvent } from "../event";
-import { vec4_fromtext, vec4_text } from "../glmatrix_utils";
+import { VEC4 } from "../matrix";
 import { BaseHelper, type BaseHelperOptions } from "./helper";
 
 export interface CameraHelperOptions extends BaseHelperOptions {
@@ -50,7 +50,7 @@ export default class CameraHelper extends BaseHelper {
         const upInput = document.getElementById(this.upInputId) as HTMLInputElement | null;
 
         if (fromInput) {
-            fromInput.value = vec4_text(this.#camera.from);
+            fromInput.value = VEC4.text(this.#camera.from);
             // fromInput.addEventListener("change", (e) => {
             //     const text = (e as any).target.value;
             //     const v = vec4_fromtext(text);
@@ -61,7 +61,7 @@ export default class CameraHelper extends BaseHelper {
         }
 
         if (toInput) {
-            toInput.value = vec4_text(this.#camera.to);
+            toInput.value = VEC4.text(this.#camera.to);
             // toInput.addEventListener("change", (e) => {
             //     const text = (e as any).target.value;
             //     const v = vec4_fromtext(text);
@@ -72,7 +72,7 @@ export default class CameraHelper extends BaseHelper {
         }
 
         if (upInput) {
-            upInput.value = vec4_text(this.#camera.up);
+            upInput.value = VEC4.text(this.#camera.up);
             // upInput.addEventListener("change", (e) => {
             //     const text = (e as any).target.value;
             //     const v = vec4_fromtext(text);
@@ -86,13 +86,13 @@ export default class CameraHelper extends BaseHelper {
             callback: (info) => {
                 if (info.camera === this.#camera) {
                     if (fromInput) {
-                        fromInput.value = vec4_text(this.#camera.from);
+                        fromInput.value = VEC4.text(this.#camera.from);
                     }
                     if (toInput) {
-                        toInput.value = vec4_text(this.#camera.to);
+                        toInput.value = VEC4.text(this.#camera.to);
                     }
                     if (upInput) {
-                        upInput.value = vec4_text(this.#camera.up);
+                        upInput.value = VEC4.text(this.#camera.up);
                     }
 
                 }

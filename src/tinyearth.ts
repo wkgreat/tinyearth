@@ -1,4 +1,3 @@
-import { glMatrix } from "gl-matrix";
 import type { ColorLike } from "./color.js";
 import Color from "./color.js";
 import type { NumArr4 } from "./defines.js";
@@ -14,7 +13,6 @@ import CameraMouseControlTool from "./tools/camera_mouse_control.js";
 import type BaseTool from "./tools/tool.js";
 import { GLFrameBuffer } from "./webgl.js";
 import { ScreenQuad, ScreenQuadProgram } from "./screenQuad.js";
-glMatrix.setMatrixArrayType(Array);
 
 export interface TinyEarthOptions {
     canvas: HTMLCanvasElement | string;

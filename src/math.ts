@@ -1,8 +1,6 @@
-import { glMatrix, mat3, vec3, vec4 } from "gl-matrix";
-import type { NumArr3 } from "./defines.js";
-import { vec3_add, vec3_cross, vec3_mul, vec3_normalize, vec3_scale, vec3_sub } from "./glmatrix_utils.js";
+import type { NumArr2, NumArr3 } from "./defines.js";
+import { MAT3, VEC3, VEC4, type mat3, type vec3, type vec4 } from "./matrix.js";
 import SRS, { type projcode_t } from "./proj.js";
-glMatrix.setMatrixArrayType(Array);
 
 export function toRadians(d: number): number {
     return d * Math.PI / 180;
@@ -17,7 +15,7 @@ export function toDegrees(r: number): number {
 */
 export class Point3D {
 
-    position: vec3 = vec3.fromValues(0, 0, 0);
+    position: vec3 = VEC3.fromValues(0, 0, 0);
 
     projcode: projcode_t = 4978;
 
@@ -32,10 +30,10 @@ export class Point3D {
     static fromXYZ(x: number, y: number, z: number, proj: projcode_t = SRS.EPSG_4978): Point3D {
         const p = new Point3D();
         if (proj === SRS.EPSG_4978) {
-            p.position = vec3.fromValues(x, y, z);
+            p.position = VEC3.fromValues(x, y, z);
         } else {
             const a = SRS.transform(proj, SRS.EPSG_4978, [x, y, z]) as NumArr3;
-            p.position = vec3.fromValues(a[0], a[1], a[2]);
+            p.position = VEC3.fromValues(a[0], a[1], a[2]);
         }
         return p;
     }
@@ -55,11 +53,11 @@ export class Point3D {
 
 export class Triangle {
 
-    p0: vec3 = vec3.fromValues(0, 0, 0);
+    p0: vec3 = VEC3.fromValues(0, 0, 0);
 
-    p1: vec3 = vec3.fromValues(1, 0, 0);
+    p1: vec3 = VEC3.fromValues(1, 0, 0);
 
-    p2: vec3 = vec3.fromValues(0, 1, 0);
+    p2: vec3 = VEC3.fromValues(0, 1, 0);
 
     constructor(p0: vec3, p1: vec3, p2: vec3) {
         this.p0 = p0;
@@ -70,23 +68,23 @@ export class Triangle {
 
 export class Ray {
 
-    origin: vec3 = vec3.fromValues(0, 0, 0);
+    origin: vec3 = VEC3.fromValues(0, 0, 0);
 
-    direct: vec3 = vec3.fromValues(1, 1, 1);
+    direct: vec3 = VEC3.fromValues(1, 1, 1);
 
     constructor(origin: vec3, direct: vec3) {
         this.origin = origin;
-        this.direct = vec3.normalize(vec3.create(), direct);
+        this.direct = VEC3.normalize(direct);
     }
 
     pointOnRay(p: vec3): boolean {
-        const d = vec3.subtract(vec3.create(), p, this.origin);
-        if (Math.abs(vec3.length(d)) < 1E-6) {
+        const d = VEC3.sub(p, this.origin);
+        if (Math.abs(VEC3.length(d)) < 1E-6) {
             return true;
         }
-        const d0 = vec3.normalize(vec3.create(), d);
-        const d1 = vec3.normalize(vec3.create(), this.direct);
-        const c = vec3.length(vec3.cross(vec3.create(), d0, d1));
+        const d0 = VEC3.normalize(d);
+        const d1 = VEC3.normalize(this.direct);
+        const c = VEC3.length(VEC3.cross(d0, d1));
 
         if (Math.abs(c) < 1E-6) {
             return true;
@@ -96,16 +94,16 @@ export class Ray {
 
     collineation(other_ray: Ray): boolean {
 
-        const d0 = vec3.normalize(vec3.create(), this.direct);
-        const d1 = vec3.normalize(vec3.create(), other_ray.direct);
-        const a = vec3.length(vec3_cross(d0, d1));
-        const b: vec3 = vec3_sub(this.origin, other_ray.origin);
+        const d0 = VEC3.normalize(this.direct);
+        const d1 = VEC3.normalize(other_ray.direct);
+        const a = VEC3.length(VEC3.cross(d0, d1));
+        const b: vec3 = VEC3.sub(this.origin, other_ray.origin);
 
         if (Math.abs(a) < 1E-6) {
             if (Math.abs(b.length) < 1E-6) {
                 return true;
             }
-            const c = vec3.length(vec3.cross(vec3.create(), vec3.normalize(vec3.create(), b), d0))
+            const c = VEC3.length(VEC3.cross(VEC3.normalize(b), d0))
             if (Math.abs(c) < 1E-6) {
                 return true;
             }
@@ -116,7 +114,7 @@ export class Ray {
 
 export class Plane {
 
-    params: vec4 = vec4.fromValues(0, 0, 0, 0);
+    params: vec4 = VEC4.fromValues(0, 0, 0, 0);
 
     constructor(params: vec4) {
         this.params = params;
@@ -124,11 +122,11 @@ export class Plane {
 
     static fromThreePoints(p0: vec3, p1: vec3, p2: vec3): Plane | null {
 
-        const v1 = vec3_sub(p1, p0);
-        const v2 = vec3_sub(p2, p0);
+        const v1 = VEC3.sub(p1, p0);
+        const v2 = VEC3.sub(p2, p0);
 
-        const n = vec3_cross(v1, v2);
-        if (Math.abs(vec3.length(n)) < 1E-6) {
+        const n = VEC3.cross(v1, v2);
+        if (Math.abs(VEC3.length(n)) < 1E-6) {
             // 三点共线
             return null;
         }
@@ -136,12 +134,12 @@ export class Plane {
         const [A, B, C] = [n[0], n[1], n[2]];
         const D = -(A * p0[0] + B * p0[1] + C * p0[2]);
 
-        return new Plane(vec4.fromValues(A, B, C, D));
+        return new Plane(VEC4.fromValues(A, B, C, D));
     }
 }
 
 export function pointOutSidePlane(p: vec4, plane: Plane): boolean {
-    return vec4.dot(p, plane.params) < 0;
+    return VEC4.dot(p, plane.params) < 0;
 }
 
 interface RayCrossTriangleResult {
@@ -152,10 +150,10 @@ interface RayCrossTriangleResult {
 export function rayCrossTriangle(ray: Ray, triangle: Triangle): RayCrossTriangleResult {
 
     const epsilon = 1E-6;
-    const e1 = vec3.subtract(vec3.create(), triangle.p1, triangle.p0);
-    const e2 = vec3.subtract(vec3.create(), triangle.p2, triangle.p0);
-    const q = vec3.cross(vec3.create(), ray.direct, e2);
-    const a = vec3.dot(e1, q);
+    const e1 = VEC3.sub(triangle.p1, triangle.p0);
+    const e2 = VEC3.sub(triangle.p2, triangle.p0);
+    const q = VEC3.cross(ray.direct, e2);
+    const a = VEC3.dot(e1, q);
     if (Math.abs(a) < epsilon) {
         return {
             cross: false,
@@ -163,23 +161,23 @@ export function rayCrossTriangle(ray: Ray, triangle: Triangle): RayCrossTriangle
         }
     }
     const f = 1 / a;
-    const s = vec3.subtract(vec3.create(), ray.origin, triangle.p0);
-    const u = f * vec3.dot(s, q);
+    const s = VEC3.sub(ray.origin, triangle.p0);
+    const u = f * VEC3.dot(s, q);
     if (u < 0.0) {
         return {
             cross: false,
             uvt: [0, 0, 0]
         }
     }
-    const r = vec3.cross(vec3.create(), s, e1);
-    const v = f * vec3.dot(ray.direct, r);
+    const r = VEC3.cross(s, e1);
+    const v = f * VEC3.dot(ray.direct, r);
     if (v < 0.0 || u + v > 1.0) {
         return {
             cross: false,
             uvt: [0, 0, 0]
         }
     }
-    const t = f * vec3.dot(e2, r);
+    const t = f * VEC3.dot(e2, r);
     return {
         cross: true,
         uvt: [u, v, t]
@@ -194,15 +192,15 @@ interface PlaceCrossPlaneResult {
 
 export function planeCrossPlane(plane0: Plane, plane1: Plane): PlaceCrossPlaneResult {
 
-    let n0 = vec3.fromValues(plane0.params[0], plane0.params[1], plane0.params[2])
-    n0 = vec3.normalize(vec3.create(), n0);
+    let n0 = VEC3.fromValues(plane0.params[0], plane0.params[1], plane0.params[2])
+    n0 = VEC3.normalize(n0);
 
-    let n1 = vec3.fromValues(plane1.params[0], plane1.params[1], plane1.params[2])
-    n1 = vec3.normalize(vec3.create(), n1);
+    let n1 = VEC3.fromValues(plane1.params[0], plane1.params[1], plane1.params[2])
+    n1 = VEC3.normalize(n1);
 
-    let d = vec3_cross(n0, n1);
+    let d = VEC3.cross(n0, n1);
 
-    if (Math.abs(vec3.length(d)) < 1E-6) {
+    if (Math.abs(VEC3.length(d)) < 1E-6) {
         return {
             cross: false,
             ray: null
@@ -232,7 +230,7 @@ export function planeCrossPlane(plane0: Plane, plane1: Plane): PlaceCrossPlaneRe
         y = (C1 * D2 - C2 * D1) / detX;
         z = (B2 * D1 - B1 * D2) / detX;
     }
-    const ray = new Ray(vec3.fromValues(x, y, z), d);
+    const ray = new Ray(VEC3.fromValues(x, y, z), d);
 
     return {
         cross: true,
@@ -243,7 +241,7 @@ export function planeCrossPlane(plane0: Plane, plane1: Plane): PlaceCrossPlaneRe
 
 export class Sphere {
 
-    center: vec3 = vec3.fromValues(0, 0, 0);
+    center: vec3 = VEC3.fromValues(0, 0, 0);
 
     radius: number = 1;
 
@@ -260,9 +258,9 @@ export class Sphere {
 */
 export function rayCrossSphere(ray: Ray, sphere: Sphere, all: boolean = false): Point3D[] | null {
 
-    const oc = vec3_sub(ray.origin, sphere.center);
-    const b = vec3.dot(ray.direct, oc);
-    const c = vec3.dot(oc, oc) - sphere.radius * sphere.radius;
+    const oc = VEC3.sub(ray.origin, sphere.center);
+    const b = VEC3.dot(ray.direct, oc);
+    const c = VEC3.dot(oc, oc) - sphere.radius * sphere.radius;
     const d = b * b - c;
     if (d < 0) {
         return null;
@@ -274,8 +272,8 @@ export function rayCrossSphere(ray: Ray, sphere: Sphere, all: boolean = false): 
     const epsilon = -1 * (t1 - t0) * 1E-5;
 
     if (all) {
-        const p0 = vec3_add(ray.origin, vec3_scale(ray.direct, t0));
-        const p1 = vec3_add(ray.origin, vec3_scale(ray.direct, t1));
+        const p0 = VEC3.add(ray.origin, VEC3.scale(ray.direct, t0));
+        const p1 = VEC3.add(ray.origin, VEC3.scale(ray.direct, t1));
         return [Point3D.fromVec3(p0), Point3D.fromVec3(p1)];
     } else {
         let t;
@@ -288,7 +286,7 @@ export function rayCrossSphere(ray: Ray, sphere: Sphere, all: boolean = false): 
         } else {
             return null;
         }
-        const p = vec3_add(ray.origin, vec3_scale(ray.direct, t));
+        const p = VEC3.add(ray.origin, VEC3.scale(ray.direct, t));
         return [Point3D.fromVec3(p)];
     }
 }
@@ -298,13 +296,13 @@ export function rayCrossSphere(ray: Ray, sphere: Sphere, all: boolean = false): 
 */
 export class Spheriod {
 
-    params: vec3 = vec3.fromValues(1, 1, 1);
+    params: vec3 = VEC3.fromValues(1, 1, 1);
 
     matrix: mat3;
 
     constructor(a: number, b: number, c: number) {
-        this.params = vec3.fromValues(a, b, c);
-        this.matrix = mat3.fromValues(
+        this.params = VEC3.fromValues(a, b, c);
+        this.matrix = MAT3.fromValues(
             1.0 / (a * a), 0.0, 0.0,
             0.0, 1.0 / (b * b), 0.0,
             0.0, 0.0, 1.0 / (c * c)
@@ -328,15 +326,15 @@ export class Spheriod {
     }
 
     radius(d: vec3) {
-        const n = vec3_normalize(d);
-        const denom = vec3.dot(n, vec3_mul(n, this.m));
+        const n = VEC3.normalize(d);
+        const denom = VEC3.dot(n, VEC3.transform(n, this.m));
         return 1.0 / Math.sqrt(denom);
     }
 
     clampToSurface(p: vec3, elevation: number = 0) {
-        const n = vec3_normalize(p);
+        const n = VEC3.normalize(p);
         const t = this.radius(n);
-        return vec3_add(vec3_scale(n, t), vec3_scale(n, elevation));
+        return VEC3.add(VEC3.scale(n, t), VEC3.scale(n, elevation));
     }
 
 }
@@ -411,8 +409,8 @@ export function rayCrossSpheriod(ray: Ray, spheriod: Spheriod, all: boolean = fa
     const t1 = (-B + Math.sqrt(D)) / (2 * A);
 
     if (all) {
-        const p0 = vec3_add(ray.origin, vec3_scale(ray.direct, t0));
-        const p1 = vec3_add(ray.origin, vec3_scale(ray.direct, t1));
+        const p0 = VEC3.add(ray.origin, VEC3.scale(ray.direct, t0));
+        const p1 = VEC3.add(ray.origin, VEC3.scale(ray.direct, t1));
         return [Point3D.fromVec3(p0), Point3D.fromVec3(p1)];
     } else {
         let t = 0;
@@ -423,8 +421,26 @@ export function rayCrossSpheriod(ray: Ray, spheriod: Spheriod, all: boolean = fa
         } else if (t1 >= 0) {
             t = t1;
         }
-        const p = vec3_add(ray.origin, vec3_scale(ray.direct, t));
+        const p = VEC3.add(ray.origin, VEC3.scale(ray.direct, t));
         return [Point3D.fromVec3(p)];
     }
 
+}
+
+export type DFloat = NumArr2;
+
+export namespace dfloat {
+    export function create(n: number): DFloat {
+        const high = Math.fround(n);
+        const low = Math.fround(n - high);
+        return [high, low];
+    }
+
+    export function high(d: DFloat): number {
+        return d[0];
+    }
+
+    export function low(d: DFloat): number {
+        return d[1];
+    }
 }

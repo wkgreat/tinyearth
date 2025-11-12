@@ -1,6 +1,6 @@
-import { mat4 } from "gl-matrix";
 import type { ValueType } from "./defines";
 import type { LineString, Point } from "./geometry";
+import { MAT4, type mat4 } from "./matrix";
 
 export type EntityProperties = { [k: string]: ValueType };
 
@@ -19,7 +19,7 @@ export class Entity {
 
     constructor(options: EntityOptions) {
         this.#id = options.id ?? crypto.randomUUID();
-        this.#matrix = options.matrix ?? mat4.create();
+        this.#matrix = options.matrix ?? MAT4.create();
         this.#properties = options.properties ?? {};
     }
 

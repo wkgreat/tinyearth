@@ -1,7 +1,5 @@
-import { vec3 } from "gl-matrix";
 import { NumArr3 } from "../src/defines";
 import SRS from "../src/proj"
-import { vec3_array } from "../src/glmatrix_utils";
 
 describe("spheriod", () => {
 
