@@ -1,6 +1,10 @@
 #version 300 es
 precision highp float;
 
+#define __DEFINE_REPLACE__
+
+#include "dfloat.glsl"
+
 #include "color.glsl"
 
 #include "spheriod.glsl"
@@ -10,6 +14,14 @@ precision highp float;
 in vec4 a_lastpos;
 in vec4 a_nextpos;
 in vec4 a_position;
+
+in vec3 a_lastpos_high;
+in vec3 a_lastpos_low;
+in vec3 a_nextpos_high;
+in vec3 a_nextpos_low;
+in vec3 a_position_high;
+in vec3 a_position_low;
+
 in float a_side;
 
 in float a_entityid;
@@ -17,10 +29,8 @@ in vec4 a_color;
 in float a_linewidth;
 in float a_normlen;
 
-uniform bool u_clampToGround;
-
-out vec4 v_worldpos;
-out vec4 v_viewpos;
+out dfvec4 v_relworldpos;
+out dfvec4 v_relviewpos;
 out float v_entityid;
 out vec4 v_color;
 
@@ -37,31 +47,35 @@ void main() {
 
     v_color = a_color;
 
-    vec4 worldpos;
-    vec4 last_worldpos;
-    vec4 next_worldpos;
-    
+    dfvec4 worldpos = dfv3t4(dfvec3(a_position_high, a_position_low), df(1.0));
+    dfvec4 last_worldpos = dfv3t4(dfvec3(a_lastpos_high, a_lastpos_low), df(1.0));
+    dfvec4 next_worldpos = dfv3t4(dfvec3(a_nextpos_high, a_nextpos_low), df(1.0));
+
     if(u_clampToGround) {
-        worldpos = vec4(clamp_to_ground(a_position.xyz, SPHERIOD_WGS84, 0.0), 1.0);
-        last_worldpos = vec4(clamp_to_ground(a_lastpos.xyz, SPHERIOD_WGS84, 0.0), 1.0);
-        next_worldpos = vec4(clamp_to_ground(a_nextpos.xyz, SPHERIOD_WGS84, 0.0), 1.0);
-    } else {
-        worldpos = a_position;
-        last_worldpos = a_lastpos;
-        next_worldpos = a_nextpos;
+        worldpos = dfv3t4(clamp_to_ground_df(dfv4t3(worldpos), SPHERIOD_WGS84_df, df(u_clampToGroundOffset)), df(1.0));
+        last_worldpos = dfv3t4(clamp_to_ground_df(dfv4t3(last_worldpos), SPHERIOD_WGS84_df, df(u_clampToGroundOffset)), df(1.0));
+        next_worldpos = dfv3t4(clamp_to_ground_df(dfv4t3(next_worldpos), SPHERIOD_WGS84_df, df(u_clampToGroundOffset)), df(1.0));
     }
 
-    vec4 ndspos = u_scene.viewportmtx * u_projection.projmtx * u_camera.viewmtx * worldpos;
-    ndspos /= abs(ndspos.w); // if the position is behind the camera, w will small than zero!
+    dfvec4 relworldpos = dfv3t4(relative(dfv4t3(worldpos)), df(1.0));
+    dfvec4 last_relworldpos = dfv3t4(relative(dfv4t3(last_worldpos)), df(1.0));
+    dfvec4 next_relworldpos = dfv3t4(relative(dfv4t3(next_worldpos)), df(1.0));
 
-    vec4 last_ndspos = u_scene.viewportmtx * u_projection.projmtx * u_camera.viewmtx * last_worldpos;
-    last_ndspos /= abs(last_ndspos.w); // if the position is behind the camera, w will small than zero!
+    dfmat4 spv = dfmat4_mul(u_scene_df.viewportmtx, dfmat4_mul(u_projection_df.projmtx, u_camera_df.relviewmtx));
 
-    vec4 next_ndspos = u_scene.viewportmtx * u_projection.projmtx * u_camera.viewmtx * next_worldpos;
-    next_ndspos /= abs(next_ndspos.w); // if the position is behind the camera, w will small than zero!
+    dfvec4 relndspos = dfvec4_mul(spv, relworldpos);
+    relndspos = dfvec4_normabsw(relndspos); // p /= abs(p.w) if the position is behind the camera, w will small than zero!
 
-    vec2 ld = last_ndspos.xy - ndspos.xy;
-    vec2 nd = next_ndspos.xy - ndspos.xy;
+    dfvec4 last_relndspos = dfvec4_mul(spv, last_relworldpos);
+    last_relndspos = dfvec4_normabsw(last_relndspos); // p /= abs(p.w)  if the position is behind the camera, w will small than zero!
+
+    dfvec4 next_relndspos = dfvec4_mul(spv, next_relworldpos);
+    next_relndspos = dfvec4_normabsw(next_relndspos);  // p /= abs(p.w)  if the position is behind the camera, w will small than zero!
+
+    
+
+    vec2 ld = dfvec2_out(dfvec2_sub(dfvec4_force2(last_relndspos), dfvec4_force2(relndspos)));
+    vec2 nd = dfvec2_out(dfvec2_sub(dfvec4_force2(next_relndspos), dfvec4_force2(relndspos)));
     vec2 d;
 
     float w = a_linewidth;
@@ -89,22 +103,20 @@ void main() {
 
     vec2 offset = a_side * w * d;
 
-    vec4 new_ndspos = vec4(ndspos.xy + offset, ndspos.z, 1.0);
+    vec4 newp = vec4(dfvec2_out(dfvec4_force2(relndspos)) + offset, dfloat_out(dfvec4_z(relndspos)), 1.0);
+    dfvec4 new_ndspos = dfv4(newp);
 
-    vec4 new_ndcpos = inverse(u_scene.viewportmtx) * new_ndspos;
-    new_ndcpos /= new_ndcpos.w;
+    dfvec4 new_ndcpos = dfvec4_normw(dfvec4_mul(dfmat4_inv(u_scene_df.viewportmtx), new_ndspos));
 
-    vec4 new_viewpos = inverse(u_projection.projmtx) * new_ndcpos;
-    new_viewpos /= new_viewpos.w;
+    dfvec4 new_viewpos = dfvec4_normw(dfvec4_mul(dfmat4_inv(u_projection_df.projmtx), new_ndcpos));
 
-    vec4 new_worldpos = inverse(u_camera.viewmtx) * new_viewpos;
-    new_worldpos /= new_worldpos.w;
+    dfvec4 new_worldpos = dfvec4_normw(dfvec4_mul(dfmat4_inv(u_camera_df.relviewmtx), new_viewpos));
 
-    gl_Position = new_ndcpos;
+    gl_Position = dfvec4_out(new_ndcpos);
 
-    v_viewpos = new_viewpos;
+    v_relviewpos = new_viewpos;
 
-    v_worldpos = new_worldpos;
+    v_relworldpos = new_worldpos;
     
     v_entityid = a_entityid;
 

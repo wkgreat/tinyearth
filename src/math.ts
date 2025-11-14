@@ -1,5 +1,6 @@
+import type { mat4 } from "gl-matrix";
 import type { NumArr2, NumArr3 } from "./defines.js";
-import { MAT3, VEC3, VEC4, type mat3, type vec3, type vec4 } from "./matrix.js";
+import { MAT3, MAT4, VEC2, VEC3, VEC4, type mat3, type vec2, type vec3, type vec4 } from "./matrix.js";
 import SRS, { type projcode_t } from "./proj.js";
 
 export function toRadians(d: number): number {
@@ -427,7 +428,12 @@ export function rayCrossSpheriod(ray: Ray, spheriod: Spheriod, all: boolean = fa
 
 }
 
+
 export type DFloat = NumArr2;
+export type DFvec2 = [vec2, vec2];
+export type DFvec3 = [vec3, vec3];
+export type DFvec4 = [vec4, vec4];
+export type DFmat4 = [mat4, mat4];
 
 export namespace dfloat {
     export function create(n: number): DFloat {
@@ -441,6 +447,129 @@ export namespace dfloat {
     }
 
     export function low(d: DFloat): number {
+        return d[1];
+    }
+}
+
+export namespace dfvec2 {
+    export function create(v: vec2): DFvec2 {
+
+        const h = VEC2.create();
+        const l = VEC2.create();
+        const v0 = dfloat.create(v[0]);
+        const v1 = dfloat.create(v[1]);
+
+        VEC2.set(h,
+            dfloat.high(v0),
+            dfloat.high(v1)
+        );
+
+        VEC2.set(l,
+            dfloat.low(v0),
+            dfloat.low(v1)
+        );
+
+        return [h, l];
+    }
+
+    export function high(d: DFvec2): vec2 {
+        return d[0];
+    }
+
+    export function low(d: DFvec2): vec2 {
+        return d[1];
+    }
+}
+
+export namespace dfvec3 {
+    export function create(v: vec3): DFvec3 {
+
+        const h = VEC3.create();
+        const l = VEC3.create();
+        const v0 = dfloat.create(v[0]);
+        const v1 = dfloat.create(v[1]);
+        const v2 = dfloat.create(v[2]);
+
+        VEC3.set(h,
+            dfloat.high(v0),
+            dfloat.high(v1),
+            dfloat.high(v2),
+        );
+
+        VEC3.set(l,
+            dfloat.low(v0),
+            dfloat.low(v1),
+            dfloat.low(v2)
+        );
+
+        return [h, l];
+    }
+
+    export function high(d: DFvec3): vec3 {
+        return d[0];
+    }
+
+    export function low(d: DFvec3): vec3 {
+        return d[1];
+    }
+}
+
+
+export namespace dfvec4 {
+    export function create(v: vec4): DFvec4 {
+
+        const h = VEC4.create();
+        const l = VEC4.create();
+        const v0 = dfloat.create(v[0]);
+        const v1 = dfloat.create(v[1]);
+        const v2 = dfloat.create(v[2]);
+        const v3 = dfloat.create(v[3]);
+
+        VEC4.set(h,
+            dfloat.high(v0),
+            dfloat.high(v1),
+            dfloat.high(v2),
+            dfloat.high(v3),
+        );
+
+        VEC4.set(l,
+            dfloat.low(v0),
+            dfloat.low(v1),
+            dfloat.low(v2),
+            dfloat.low(v3),
+        );
+
+        return [h, l];
+    }
+
+    export function high(d: DFvec4): vec4 {
+        return d[0];
+    }
+
+    export function low(d: DFvec4): vec4 {
+        return d[1];
+    }
+}
+
+export namespace dfmat4 {
+    export function create(m: mat4): DFmat4 {
+        const hs: number[] = []
+        const ls: number[] = []
+        for (let i = 0; i < 16; ++i) {
+            const d: DFloat = dfloat.create(m[i]!);
+            hs.push(dfloat.high(d));
+            ls.push(dfloat.low(d));
+        }
+        const mh = MAT4.fromArray(hs);
+        const lh = MAT4.fromArray(ls);
+        return [mh, lh];
+    }
+
+    export function high(d: DFmat4): mat4 {
+        return d[0];
+    }
+
+    export function low(d: DFmat4): mat4 {
         return d[1];
     }
 }

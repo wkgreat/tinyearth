@@ -13,6 +13,8 @@ class Camera {
     #up: vec4 = VEC4.fromValues(0, 1, 0, 0);
     #viewMtx: mat4 = MAT4.create();
     #invViewMtx: mat4 = MAT4.create();
+    #relViewMtx: mat4 = MAT4.create();
+    #invRelViewMtx: mat4 = MAT4.create();
 
     #scene: Scene;
 
@@ -35,6 +37,12 @@ class Camera {
     _look() {
         this.#viewMtx = MAT4.lookAt(VEC4.force3(this.#from), VEC4.force3(this.#to), VEC4.force3(this.#up));
         this.#invViewMtx = MAT4.invert(this.#viewMtx)!;
+        const d = VEC3.sub(VEC4.force3(this.#to), VEC4.force3(this.#from));
+        this.#relViewMtx = MAT4.lookAt(VEC3.fromValues(0, 0, 0), d, VEC4.force3(this.#up));
+        this.#invRelViewMtx = MAT4.invert(this.#relViewMtx)!;
+
+        this.#computeHightToSurface();
+        this.#computeCameraDeviate();
     }
 
     get viewMatrix() {
@@ -43,6 +51,14 @@ class Camera {
 
     get ViewMatrixInv() {
         return this.#invViewMtx;
+    }
+
+    get relViewMatrix() {
+        return this.#relViewMtx;
+    }
+
+    get relViewMatrixInv() {
+        return this.#invRelViewMtx;
     }
 
     /**
@@ -238,16 +254,25 @@ class Camera {
         return d;
     }
 
-    getCameraDeviate(): number {
+    #cameraDeviate: number = 0.0;
+    #computeCameraDeviate() {
         const viewNormal = VEC3.normalize(VEC3.sub(VEC4.force3(this.#to), VEC4.force3(this.#from)));
         const verticalNormal = VEC3.normalize(VEC3.scale(this.#from, -1));
         const d = VEC3.dot(viewNormal, verticalNormal);
-        return d;
+        this.#cameraDeviate = d;
     }
 
-    getHeightToSurface() {
+    getCameraDeviate(): number {
+        return this.#cameraDeviate;
+    }
+
+    #heightToSurface: number = 0.0;
+    #computeHightToSurface() {
         const from = SRS.transform(SRS.ECEF, SRS.WGS84, VEC3.array(VEC4.force3(this.#from)));
-        return from[2];
+        this.#heightToSurface = from[2];
+    }
+    getHeightToSurface() {
+        return this.#heightToSurface;
     }
 
     getViewDistanceToSurface() {
@@ -256,6 +281,7 @@ class Camera {
 
     /**  
      * TODO 暂时不考虑视角倾斜
+     * TODO lazy calc
     */
     getResolution(): NumArr2 {
         const projection = this.#scene.projection;
@@ -269,6 +295,7 @@ class Camera {
         return [v / viewWidth, h / viewHeight];
     }
 
+    //TODO lazy calc
     getFieldFromEarthCenter() {
         const projection = this.#scene.projection;
         const height = this.getHeightToSurface();

@@ -13,6 +13,7 @@ export interface LayerOptions {
     entities: Entity[]
     style: Style,
     clampToGround?: boolean
+    clampToGroundOffset?: number
 }
 
 export abstract class Layer {
@@ -23,6 +24,7 @@ export abstract class Layer {
     style: Style;
     program: Program | null = null;
     clampToGround: boolean;
+    clampToGroundOffset: number;
 
     protected attributes: { [k: string]: GLAttribute } = {};
 
@@ -32,6 +34,7 @@ export abstract class Layer {
         this.entities = options.entities;
         this.style = options.style;
         this.clampToGround = options.clampToGround ?? false;
+        this.clampToGroundOffset = options.clampToGroundOffset ?? 0;
 
         this.program = this.createProgram();
         this.createAttributes();
@@ -145,7 +148,11 @@ export class PointLayer extends GeometryLayer {
     }
 
     override createProgram(): PointProgram {
-        const program = new PointProgram({ tinyearth: this.tinyearth });
+        const program = new PointProgram({
+            tinyearth: this.tinyearth, advance: {
+                logDepth: this.tinyearth.advance.glLogDepth ?? false
+            }
+        });
         program.setFirst(0);
         program.setCount(this.entities.length);
         return program;
@@ -157,10 +164,16 @@ export class PointLayer extends GeometryLayer {
         }
 
         //position
+        // this.attributes["position"] = new GLAttribute({
+        //     gl: this.program.gl,
+        //     name: "a_position",
+        //     elemSize: 3
+        // });
         this.attributes["position"] = new GLAttribute({
             gl: this.program.gl,
             name: "a_position",
-            elemSize: 3
+            elemSize: 3,
+            isDFloat: true
         });
 
         //size
@@ -234,7 +247,7 @@ export class PointLayer extends GeometryLayer {
     override activateAttributes(): void {
         if (this.program && this.program.program) {
             for (const k in this.attributes) {
-                this.attributes[k]?.activate(this.program.program);
+                this.attributes[k]?.activate(this.program);
             }
         }
     }
@@ -253,7 +266,7 @@ export class PointLayer extends GeometryLayer {
     override refreshUniforms(): void {
         if (this.program && this.program.program) {
             this.program.refreshAllUniforms();
-            this.program.setClampToGround(this.clampToGround);
+            this.program.setClampToGround(this.clampToGround, this.clampToGroundOffset);
         }
     }
 
@@ -281,7 +294,10 @@ export class LineStringLayer extends GeometryLayer {
 
     override createProgram(): LineStringProgram {
         const program = new LineStringProgram({
-            tinyearth: this.tinyearth
+            tinyearth: this.tinyearth,
+            advance: {
+                logDepth: this.tinyearth.advance.glLogDepth ?? false
+            }
         });
         program.setFirst(0);
         program.setCount(0);
@@ -295,7 +311,8 @@ export class LineStringLayer extends GeometryLayer {
         this.attributes["position"] = new GLAttribute({
             gl: this.program.gl,
             name: "a_position",
-            elemSize: 3
+            elemSize: 3,
+            isDFloat: true,
         });
 
         this.attributes["entityid"] = new GLAttribute({
@@ -313,13 +330,15 @@ export class LineStringLayer extends GeometryLayer {
         this.attributes["lastpos"] = new GLAttribute({
             gl: this.program.gl,
             name: "a_lastpos",
-            elemSize: 3
+            elemSize: 3,
+            isDFloat: true,
         })
 
         this.attributes["nextpos"] = new GLAttribute({
             gl: this.program.gl,
             name: "a_nextpos",
-            elemSize: 3
+            elemSize: 3,
+            isDFloat: true,
         })
 
         this.attributes["side"] = new GLAttribute({
@@ -422,7 +441,7 @@ export class LineStringLayer extends GeometryLayer {
     override activateAttributes(): void {
         if (this.program && this.program.program) {
             for (const k in this.attributes) {
-                this.attributes[k]?.activate(this.program.program);
+                this.attributes[k]?.activate(this.program);
             }
         }
     }
@@ -441,14 +460,12 @@ export class LineStringLayer extends GeometryLayer {
     override refreshUniforms(): void {
         if (this.program && this.program.program) {
             this.program.refreshAllUniforms();
-            this.program.setClampToGround(this.clampToGround);
+            this.program.setClampToGround(this.clampToGround, this.clampToGroundOffset);
             this.program.setModelMatrixUniform(this.entities[0]?.matrix);
         }
     }
 
-    override beforeDraw(): void {
-        this.program?.gl.lineWidth(1.0);
-    }
+    override beforeDraw(): void {}
 
     override afterDraw(): void {}
 }

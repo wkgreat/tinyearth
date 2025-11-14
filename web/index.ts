@@ -137,10 +137,34 @@ function main() {
                 strokeColor: new Color(1.0, 0.0, 0.0, 1.0),
                 strokeWidth: 2
             }),
-            clampToGround: true
+            clampToGround: true,
+            clampToGroundOffset: 100
         });
 
         tinyearth.scene.addLayer(pointLayer);
+
+        const lineLayer = new LineStringLayer({
+            tinyearth,
+            entities: [
+                new LineStringEntity({
+                    lineString: new LineString([
+                        new Coordinate(100, 30, 0),
+                        new Coordinate(120, 40, 0),
+                        new Coordinate(140, 80, 0),
+                        new Coordinate(140, 40, 0),
+                    ], SRS.WGS84, false)
+                })
+            ],
+            style: new LineStringStyle({
+                color: new Color(0.0, 1.0, 0.0, 1.0),
+                lineWidth: 2,
+                lineNumSegs: 100
+            }),
+            clampToGround: true,
+            clampToGroundOffset: 100
+        });
+
+        tinyearth.scene.addLayer(lineLayer);
 
         tinyearth.draw();
 

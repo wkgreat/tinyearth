@@ -19,6 +19,7 @@ class Projection {
         this.#far = far;
     }
 
+    //TODO lazy calc
     get perspectiveMatrix(): mat4 {
         return MAT4.perspective_(this.#matrix, this.#fovy, this.#aspect, this.#near, this.#far);
     }
@@ -27,6 +28,7 @@ class Projection {
         return this.#fovy;
     }
 
+    //TODO lazy calc
     get fovx(): number {
         const half_fovy = this.#fovy / 2;
         const t = Math.tan(half_fovy)

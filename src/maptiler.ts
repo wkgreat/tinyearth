@@ -43,13 +43,13 @@ export class Tile {
 
     #status: TileStatus = TileStatus.NEW;
 
-    mesh: Float32Array | null = null;
+    mesh: number[] | null = null;
 
     normals: [vec3, vec3, vec3, vec3] | null = null;
 
     corners: [vec3, vec3, vec3, vec3] | null = null;
 
-    subdivisionLevel: number = 3;
+    subdivisionLevel: number = 2;
 
     constructor(url: TileURL, x: number = 0, y: number = 0, z: number = 0) {
         this.setUrl(url, x, y, z);
@@ -269,6 +269,7 @@ export class Tile {
 
     }
 
+    //TODO optimize
     intersectFrustum(frustum: Frustum | null): boolean {
         if (frustum === null) {
             return true;
@@ -351,13 +352,13 @@ export class Tile {
 
 export class TileMesher {
 
-    static toRootMeshVertex(): Float32Array {
+    static toRootMeshVertex(): number[] {
 
         const vertices: number[] = [];
         const posExt: Extent = [XLIMIT[0], YLIMIT[1], XLIMIT[1], YLIMIT[1]];
         const texExt: Extent = [0, 0, 1, 1];
         this.toRootMeshVertexRec(posExt, texExt, 0, 4, vertices);
-        return new Float32Array(vertices);
+        return vertices;
     }
 
     static toRootMeshVertexRec(posExt: Extent, texExt: Extent, curlevel: number, level: number, vertices: number[]) {
@@ -432,7 +433,7 @@ export class TileMesher {
         const texExt: Extent = [0, 0, 1, 1];
         this.toMeshRec(posExt, texExt, 0, level, targetProj, vertices);
         return {
-            vertices: new Float32Array(vertices),
+            vertices: vertices,
             texImage: tile.image
         };
     }

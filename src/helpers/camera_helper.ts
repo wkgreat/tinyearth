@@ -14,6 +14,8 @@ export default class CameraHelper extends BaseHelper {
     fromInputId = "camera-helper-from-input"
     toInputId = "camera-helper-to-input"
     upInputId = "camera-helper-up-input"
+    heightInputId = "camera-helper-height-input"
+    resInputId = "camera-helper-res-input";
     title = "Camera";
 
     constructor(options: CameraHelperOptions) {
@@ -38,7 +40,17 @@ export default class CameraHelper extends BaseHelper {
             this.createInput(this.upInputId, "text", { disabled: true })
         );
 
-        this.element = this.createHelperDiv(this.helperId, this.title, [item0, item1, item2]);
+        const item3 = this.createItem(
+            this.createLabel("height"),
+            this.createInput(this.heightInputId, "text", { disabled: true })
+        );
+
+        const item4 = this.createItem(
+            this.createLabel("resolution:"),
+            this.createInput(this.resInputId, "text", { disabled: true })
+        );
+
+        this.element = this.createHelperDiv(this.helperId, this.title, [item0, item1, item2, item3, item4]);
 
         return this.element;
 
@@ -48,39 +60,30 @@ export default class CameraHelper extends BaseHelper {
         const fromInput = document.getElementById(this.fromInputId) as HTMLInputElement | null;
         const toInput = document.getElementById(this.toInputId) as HTMLInputElement | null;
         const upInput = document.getElementById(this.upInputId) as HTMLInputElement | null;
+        const heightInput = document.getElementById(this.heightInputId) as HTMLInputElement | null;
+        const resolutionInput = document.getElementById(this.resInputId) as HTMLInputElement | null;
 
         if (fromInput) {
             fromInput.value = VEC4.text(this.#camera.from);
-            // fromInput.addEventListener("change", (e) => {
-            //     const text = (e as any).target.value;
-            //     const v = vec4_fromtext(text);
-            //     if (v) {
-            //         this.#camera.from = v;
-            //     }
-            // });
         }
 
         if (toInput) {
             toInput.value = VEC4.text(this.#camera.to);
-            // toInput.addEventListener("change", (e) => {
-            //     const text = (e as any).target.value;
-            //     const v = vec4_fromtext(text);
-            //     if (v) {
-            //         this.#camera.to = v;
-            //     }
-            // });
         }
 
         if (upInput) {
             upInput.value = VEC4.text(this.#camera.up);
-            // upInput.addEventListener("change", (e) => {
-            //     const text = (e as any).target.value;
-            //     const v = vec4_fromtext(text);
-            //     if (v) {
-            //         this.#camera.up = v;
-            //     }
-            // });
         }
+
+        if (heightInput) {
+            heightInput.value = this.#camera.getHeightToSurface().toString();
+        }
+
+        if (resolutionInput) {
+            resolutionInput.value = this.#camera.getResolution().join(",");
+        }
+
+
 
         this.tinyearth.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
             callback: (info) => {
@@ -93,6 +96,12 @@ export default class CameraHelper extends BaseHelper {
                     }
                     if (upInput) {
                         upInput.value = VEC4.text(this.#camera.up);
+                    }
+                    if (heightInput) {
+                        heightInput.value = this.#camera.getHeightToSurface().toString();
+                    }
+                    if (resolutionInput) {
+                        resolutionInput.value = this.#camera.getResolution().join(",");
                     }
 
                 }

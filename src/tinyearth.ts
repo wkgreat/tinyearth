@@ -2,9 +2,8 @@ import type { ColorLike } from "./color.js";
 import Color from "./color.js";
 import type { NumArr4 } from "./defines.js";
 import EventBus, { TinyEarthEvent } from "./event.js";
-import type { Program } from "./program.js";
-import SRS from "./proj.js";
 import Scene, { type SceneOptions } from "./scene.js";
+import { ScreenQuad, ScreenQuadProgram } from "./screenQuad.js";
 import { defaultSkyBoxSourceInfo, SkyBoxProgram, type SkyBoxSourceInfo } from "./skybox.js";
 import { GlobeTileProgram, RenderMethod, TileProvider } from "./tilerender.js";
 import { TileResources, type TileSourceInfo } from "./tilesource.js";
@@ -12,7 +11,12 @@ import Timer from "./timer.js";
 import CameraMouseControlTool from "./tools/camera_mouse_control.js";
 import type BaseTool from "./tools/tool.js";
 import { GLFrameBuffer } from "./webgl.js";
-import { ScreenQuad, ScreenQuadProgram } from "./screenQuad.js";
+
+export interface TinyEarthAdvanceOptions {
+    glErrorCheck?: boolean,
+    glLogDepth?: boolean,
+    wireframe?: boolean
+}
 
 export interface TinyEarthOptions {
     canvas: HTMLCanvasElement | string;
@@ -20,26 +24,7 @@ export interface TinyEarthOptions {
     night?: boolean
     skybox?: boolean
     bgcolor?: ColorLike,
-    advance?: {
-        glErrorCheck?: boolean
-    }
-}
-
-const cameraFrom = SRS.transform(SRS.WGS84, SRS.ECEF, [118.778869, 32.043823, 1E7]);
-const cameraTo = [0, 0, 0];
-const cameraUp = [0, 0, 1];
-
-const defaultSceneOptions: Omit<SceneOptions, "viewport" | "tinyearth"> = {
-    camera: {
-        from: cameraFrom,
-        to: cameraTo,
-        up: cameraUp
-    },
-    projection: {
-        fovy: Math.PI / 3,
-        near: 10,
-        far: 1E8
-    },
+    advance?: TinyEarthAdvanceOptions
 }
 
 export default class TinyEarth {
@@ -74,8 +59,10 @@ export default class TinyEarth {
 
     #tools: BaseTool[] = [];
 
-    #advance = {
-        glErrorCheck: false
+    #advance: TinyEarthAdvanceOptions = {
+        glErrorCheck: false,
+        glLogDepth: false,
+        wireframe: false
     }
 
     //framebuffer
@@ -91,6 +78,13 @@ export default class TinyEarth {
 
     constructor(options: TinyEarthOptions) {
 
+        //advance options
+        const advance = options.advance ?? {};
+        this.#advance.glErrorCheck = advance.glErrorCheck ?? false;
+        this.#advance.glLogDepth = advance.glLogDepth ?? true;
+        this.#advance.wireframe = advance.wireframe ?? false;
+
+        // basic
         this.eventBus = new EventBus();
         this.timer = new Timer(Date.now());
         this.timer.setEventBus(this.eventBus);
@@ -142,16 +136,13 @@ export default class TinyEarth {
 
         this.refreshFrameBuffer();
 
-        const _sceneOpts: Omit<SceneOptions, "viewport" | "tinyearth"> = options.scene ?? defaultSceneOptions;
         const viewportOpts = {
             viewport: {
                 width: this.viewWidth,
                 height: this.viewHeight
             }
         }
-        this.scene = new Scene({ ..._sceneOpts, ...viewportOpts, tinyearth: this });
-
-        const that = this;
+        this.scene = new Scene({ ...options.scene, ...viewportOpts, tinyearth: this });
 
         window.addEventListener('resize', this.resizeHandler.bind(this));
 
@@ -164,7 +155,9 @@ export default class TinyEarth {
         this.globeTilePorgram = new GlobeTileProgram({
             tinyearth: this,
             advance: {
-                renderMethod: RenderMethod.STATIC
+                renderMethod: RenderMethod.STATIC,
+                wireframe: this.#advance.wireframe ?? false,
+                logDepth: this.#advance.glLogDepth ?? false
             }
         });
 
@@ -173,7 +166,11 @@ export default class TinyEarth {
         this.addTileProvider(this.#defaultTileProvider);
 
         // skybox program
-        this.skyboxProgram = new SkyBoxProgram({ tinyearth: this });
+        this.skyboxProgram = new SkyBoxProgram({
+            tinyearth: this, advance: {
+                logDepth: this.#advance.glLogDepth ?? false
+            }
+        });
 
         this.setSkyboxSource(defaultSkyBoxSourceInfo);
 
@@ -183,12 +180,7 @@ export default class TinyEarth {
         });
         cameraMouseControlTool.enable();
 
-        //advance
-        const advance = options.advance ?? {};
-        this.#advance.glErrorCheck = advance.glErrorCheck ?? false;
-
         // screen quad
-
         this.#fullScreenQuad = new ScreenQuad({
             tinyearth: this
         })
@@ -202,12 +194,16 @@ export default class TinyEarth {
         this.gl.clearColor(this.bgcolor.r, this.bgcolor.g, this.bgcolor.b, this.bgcolor.a);
     }
 
+    get advance(): TinyEarthAdvanceOptions {
+        return this.#advance;
+    }
+
     get frameBuffer() {
         return this.#frameBuffer;
     }
 
     get glErrorCheck() {
-        return this.#advance.glErrorCheck;
+        return this.#advance.glErrorCheck ?? false;
     }
 
     // webgl clear and setup

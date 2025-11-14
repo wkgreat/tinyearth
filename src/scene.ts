@@ -3,6 +3,7 @@ import { TinyEarthEvent } from "./event.js";
 import Frustum, { buildFrustum } from "./frustum.js";
 import type { Layer } from "./layer.js";
 import { MAT4, type mat4, type vec3 } from "./matrix.js";
+import SRS from "./proj.js";
 import Projection from "./projection.js";
 import { Sun } from "./sun.js";
 import type TinyEarth from "./tinyearth.js";
@@ -11,13 +12,13 @@ export interface SceneOptions {
 
     tinyearth: TinyEarth;
 
-    camera: {
+    camera?: {
         from: vec3,
         to: vec3,
         up: vec3
     },
 
-    projection: {
+    projection?: {
         fovy: number,
         near: number,
         far: number
@@ -27,6 +28,19 @@ export interface SceneOptions {
         width: number,
         height: number
     }
+}
+
+const defaultSceneOptions: Omit<SceneOptions, "viewport" | "tinyearth"> = {
+    camera: {
+        from: SRS.transform(SRS.WGS84, SRS.ECEF, [118.778869, 32.043823, 1E7]),
+        to: [0, 0, 0],
+        up: [0, 0, 1]
+    },
+    projection: {
+        fovy: Math.PI / 3,
+        near: 10,
+        far: 1E8
+    },
 }
 
 export default class Scene {
@@ -45,8 +59,12 @@ export default class Scene {
 
     constructor(options: SceneOptions) {
         this.#tinyearth = options.tinyearth;
-        this.#camera = new Camera(this, options.camera.from, options.camera.to, options.camera.up);
-        this.#projection = new Projection(this, options.projection.fovy, options.viewport.width / options.viewport.height, options.projection.near, options.projection.far);
+
+        const cameraOpts = options.camera ?? defaultSceneOptions.camera!;
+        const projOpts = options.projection ?? defaultSceneOptions.projection!;
+
+        this.#camera = new Camera(this, cameraOpts.from, cameraOpts.to, cameraOpts.up);
+        this.#projection = new Projection(this, projOpts.fovy, options.viewport.width / options.viewport.height, projOpts.near, projOpts.far);
         this.#viewWidth = options.viewport.width;
         this.#viewHeight = options.viewport.height;
         this.#frustum = this.computeFrustum();

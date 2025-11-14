@@ -1,10 +1,13 @@
 import type { NumArr4 } from "./defines";
+import { dfloat } from "./math";
+import type { Program } from "./program";
 import type TinyEarth from "./tinyearth";
 
 export interface GLBufferOptions {
     gl: WebGL2RenderingContext;
     id?: string
     type: number
+    isDFloat?: boolean
 }
 
 export class GLBuffer {
@@ -12,14 +15,63 @@ export class GLBuffer {
     id: string;
     gl: WebGL2RenderingContext;
     type: number;
-    buffer: WebGLBuffer;
-
+    isDFloat: boolean;
+    buffer0: WebGLBuffer | null = null;
+    buffer1: WebGLBuffer | null = null;
 
     constructor(options: GLBufferOptions) {
         this.id = options.id ?? crypto.randomUUID();
         this.gl = options.gl;
         this.type = options.type;
-        this.buffer = this.gl.createBuffer();
+        this.isDFloat = options.isDFloat ?? false;
+        this.buffer0 = this.gl.createBuffer();
+        if (this.isDFloat) {
+            this.buffer1 = this.gl.createBuffer();
+        }
+    }
+
+    fillData(data: number[], usage: GLenum = this.gl.STATIC_DRAW) {
+        if (this.isDFloat) {
+
+            const dfdata = data.map(d => dfloat.create(d));
+            const hdata = dfdata.map(d => d[0]);
+            const ldata = dfdata.map(d => d[1]);
+            if (this.buffer0 !== null) {
+                this.gl.bindBuffer(this.type, this.buffer0);
+                this.gl.bufferData(this.type, new Float32Array(hdata), usage);
+            } else {
+                console.error("buffer is null");
+            }
+            if (this.buffer1 !== null) {
+                this.gl.bindBuffer(this.type, this.buffer1);
+                this.gl.bufferData(this.type, new Float32Array(ldata), usage);
+            } else {
+                console.error("buffer is null");
+            }
+
+        } else {
+            if (this.buffer0 !== null) {
+                this.gl.bindBuffer(this.type, this.buffer0);
+                this.gl.bufferData(this.type, new Float32Array(data), usage);
+            } else {
+                console.error("buffer is null");
+            }
+        }
+    }
+
+    updateData(data: number[]) {
+        //TODO
+    }
+
+    destroy() {
+        if (this.buffer0) {
+            this.gl.deleteBuffer(this.buffer0);
+            this.buffer0 = null;
+        }
+        if (this.buffer1) {
+            this.gl.deleteBuffer(this.buffer1);
+            this.buffer1 = null;
+        }
     }
 
 }
@@ -35,6 +87,7 @@ export interface GLAttributeOptions {
     buffer?: GLBuffer;
     usage?: number;
     buftype?: number;
+    isDFloat?: boolean;
 }
 
 export class GLAttribute {
@@ -46,8 +99,10 @@ export class GLAttribute {
     normalized: boolean;
     stride: number;
     offset: number;
-    buffer: GLBuffer;
+    privateBuffer: GLBuffer | null = null;
+    sharedBuffer: GLBuffer | null = null;
     usage: number;
+    isDFloat?: boolean;
 
     constructor(options: GLAttributeOptions) {
         this.gl = options.gl;
@@ -57,31 +112,66 @@ export class GLAttribute {
         this.normalized = options.normalized ?? false;
         this.stride = options.stride ?? 0;
         this.offset = options.offset ?? 0;
-        this.buffer = options.buffer ?? new GLBuffer({
+        this.isDFloat = options.isDFloat ?? false;
+        this.privateBuffer = options.buffer ?? new GLBuffer({
             gl: this.gl,
-            type: options.buftype ?? this.gl.ARRAY_BUFFER
+            type: options.buftype ?? this.gl.ARRAY_BUFFER,
+            isDFloat: this.isDFloat
         });
         this.usage = options.usage ?? this.gl.STATIC_DRAW;
     }
 
+    shareBuffer(buffer: GLBuffer | null) {
+        this.sharedBuffer = buffer;
+    }
+
     fillData(array: number[]) {
-        this.gl.bindBuffer(this.buffer.type, this.buffer.buffer);
-        // TODO create different typed array by numType
-        this.gl.bufferData(this.buffer.type, new Float32Array(array), this.gl.STATIC_DRAW);
+        this.privateBuffer?.fillData(array, this.gl.STATIC_DRAW);
     }
 
-    modifyData() {
-        //TODO
-    }
-
-    activate(program: WebGLProgram) {
+    #active(program: Program, buffer: GLBuffer | null) {
         if (this.gl) {
-            const location = this.gl.getAttribLocation(program, this.name);
-            if (location >= 0) {
-                this.gl.bindBuffer(this.buffer.type, this.buffer.buffer);
-                this.gl.vertexAttribPointer(location, this.elemSize, this.numType, this.normalized, this.stride, this.offset);
-                this.gl.enableVertexAttribArray(location);
+            if (this.isDFloat) {
+
+                const highname = `${this.name}_high`;
+                const lowname = `${this.name}_low`;
+                const highloc = program.getAttributeLocation(highname);
+                const lowloc = program.getAttributeLocation(lowname);
+
+                if (highloc >= 0 && lowloc >= 0 && buffer) {
+
+                    this.gl.bindBuffer(buffer.type, buffer.buffer0);
+                    this.gl.vertexAttribPointer(highloc, this.elemSize, this.numType, this.normalized, this.stride, this.offset);
+                    this.gl.enableVertexAttribArray(highloc);
+
+                    this.gl.bindBuffer(buffer.type, buffer.buffer1);
+                    this.gl.vertexAttribPointer(lowloc, this.elemSize, this.numType, this.normalized, this.stride, this.offset);
+                    this.gl.enableVertexAttribArray(lowloc);
+                }
+
+            } else {
+                const location = program.getAttributeLocation(this.name);
+                if (location >= 0 && buffer) {
+                    this.gl.bindBuffer(buffer.type, buffer.buffer0);
+                    this.gl.vertexAttribPointer(location, this.elemSize, this.numType, this.normalized, this.stride, this.offset);
+                    this.gl.enableVertexAttribArray(location);
+                }
             }
+        }
+    }
+
+    activate(program: Program) {
+        if (this.sharedBuffer) {
+            this.#active(program, this.sharedBuffer);
+        } else {
+            this.#active(program, this.privateBuffer);
+        }
+    }
+
+    destroy() {
+        if (this.gl && this.privateBuffer) {
+            this.gl.deleteBuffer(this.privateBuffer);
+            this.privateBuffer = null;
         }
     }
 }
