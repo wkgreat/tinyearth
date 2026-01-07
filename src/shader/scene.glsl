@@ -31,6 +31,8 @@ struct Scene {
     vec2 viewport;
     mat4 viewportmtx;
     float logDepthC;
+    float neardepth;
+    float fardepth;
 };
 
 uniform Camera u_camera;
@@ -68,6 +70,8 @@ struct Scene_df {
     dfvec2 viewport;
     dfmat4 viewportmtx;
     dfloat logDepthC;
+    float neardepth;
+    float fardepth;
 };
 
 uniform Camera_df u_camera_df;

@@ -30,7 +30,11 @@ function main() {
         // tinyearth
         tinyearth = new TinyEarth({
             canvas: canvas,
-            night: false
+            night: false,
+            advance: {
+                reverseZ: false,
+                glLogDepth: false,
+            }
         });
 
         // helper container
@@ -138,7 +142,7 @@ function main() {
                 strokeWidth: 2
             }),
             clampToGround: true,
-            clampToGroundOffset: 100
+            clampToGroundOffset: 10
         });
 
         tinyearth.scene.addLayer(pointLayer);
@@ -161,7 +165,7 @@ function main() {
                 lineNumSegs: 100
             }),
             clampToGround: true,
-            clampToGroundOffset: 100
+            clampToGroundOffset: 10
         });
 
         tinyearth.scene.addLayer(lineLayer);

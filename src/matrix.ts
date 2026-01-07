@@ -7,6 +7,7 @@ import {
 } from "gl-matrix";
 glMatrix.setMatrixArrayType(Array);
 import type { NumArr2, NumArr3, NumArr4 } from "./defines.js";
+import { num_eq } from "./math.js";
 
 export type vec2 = glvec2_t;
 export type vec3 = glvec3_t;
@@ -97,9 +98,19 @@ export namespace VEC3 {
     export function length(v: vec3): number {
         return glvec3.length(v);
     }
+
+    export function eq(a: vec3, b: vec3, e: number = 0): boolean {
+        return num_eq(a[0], b[0], e) && num_eq(a[1], b[1], e) && num_eq(a[2], b[2], e);
+    }
+
     //scale
     export function scale(v: vec3, s: number): vec3 {
-        return glvec3.scale(glvec3.create(), v, s);
+        return VEC3.fromValues(
+            v[0] * s,
+            v[1] * s,
+            v[2] * s
+        );
+        // return glvec3.scale(glvec3.create(), v, s);
     }
     //normalize
     export function normalize_(out: vec3, v: vec3): vec3 {
@@ -110,7 +121,12 @@ export namespace VEC3 {
     }
     //add
     export function add(a: vec3, b: vec3): vec3 {
-        return glvec3.add(glvec3.create(), a, b);
+        return VEC3.fromValues(
+            a[0] + b[0],
+            a[1] + b[1],
+            a[2] + b[2],
+        );
+        // return glvec3.add(glvec3.create(), a, b);
     }
     //sub
     export function sub(a: vec3, b: vec3): vec3 {
@@ -182,6 +198,11 @@ export namespace VEC4 {
     export function length(v: vec4): number {
         return glvec4.length(v);
     }
+
+    export function eq(a: vec4, b: vec4, e: number = 0): boolean {
+        return num_eq(a[0], b[0], e) && num_eq(a[1], b[1], e) && num_eq(a[2], b[2], e) && num_eq(a[3], b[3], e);
+    }
+
     //scale
     export function scale_(out: vec4, v: vec4, s: number): vec4 {
         return glvec4.scale(out, v, s);
@@ -335,6 +356,18 @@ export namespace MAT4 {
         );
     }
 
+    export function set(out: mat4,
+        m00: number, m01: number, m02: number, m03: number,
+        m10: number, m11: number, m12: number, m13: number,
+        m20: number, m21: number, m22: number, m23: number,
+        m30: number, m31: number, m32: number, m33: number): mat4 {
+        out[0] = m00; out[1] = m01; out[2] = m02; out[3] = m03;
+        out[4] = m10; out[5] = m11; out[6] = m12; out[7] = m13;
+        out[8] = m20; out[9] = m21; out[10] = m22; out[11] = m23;
+        out[12] = m30; out[13] = m31; out[14] = m32; out[15] = m33;
+        return out;
+    }
+
     //mul
     export function mul_(out: mat4, a: mat4, b: mat4): mat4 {
         return glmat4.mul(out, a, b);
@@ -364,11 +397,26 @@ export namespace MAT4 {
         return glmat4.lookAt(glmat4.create(), eye, center, up);
     }
     //perspective
-    export function perspective_(out: mat4, fovy: number, aspect: number, near: number, far: number): mat4 {
-        return glmat4.perspective(out, fovy, aspect, near, far);
+    export function perspective_(out: mat4, fovy: number, aspect: number, near: number, far: number, reverseZ: boolean = false): mat4 {
+        if (reverseZ) {
+            const f = 1 / Math.tan(fovy / 2);
+            out = MAT4.set(out,
+                f / aspect, 0, 0, 0,
+                0, f, 0, 0,
+                0, 0, 0, -1,
+                0, 0, near, 0
+            );
+            return out;
+
+        } else {
+            return glmat4.perspective(out, fovy, aspect, near, far);
+        }
+
+
+
     }
-    export function perspective(fovy: number, aspect: number, near: number, far: number): mat4 {
-        return glmat4.perspective(glmat4.create(), fovy, aspect, near, far);
+    export function perspective(fovy: number, aspect: number, near: number, far: number, reverseZ: boolean = false): mat4 {
+        return perspective_(MAT4.create(), fovy, aspect, near, far, reverseZ);
     }
 
     //rotateX

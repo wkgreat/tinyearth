@@ -378,10 +378,22 @@ export abstract class Program {
                 this.gl.uniform1f(u_logDepthC, this.tinyearth.scene.getLogDepthC());
             }
 
+            const u_neardepth = this.gl.getUniformLocation(this.program, "u_scene.neardepth");
+            if (u_neardepth) {
+                this.gl.uniform1f(u_neardepth, this.tinyearth.nearDepth);
+            }
+
+            const u_fardepth = this.gl.getUniformLocation(this.program, "u_scene.fardepth");
+            if (u_fardepth) {
+                this.gl.uniform1f(u_fardepth, this.tinyearth.farDepth);
+            }
+
             ////
             this.setUniformDFvec2("u_scene_df.viewport", VEC2.fromValues(this.tinyearth.scene.viewWidth, this.tinyearth.scene.viewHeight));
             this.setUniformDFmat4("u_scene_df.viewportmtx", false, this.tinyearth.scene.viewportMatrix);
             this.setUniformDFloat("u_scene_df.logDepthC", this.tinyearth.scene.getLogDepthC());
+            this.setUniformDFloat("u_scene_df.neardepth", this.tinyearth.nearDepth);
+            this.setUniformDFloat("u_scene_df.fardepth", this.tinyearth.farDepth);
 
         }
     }

@@ -1,7 +1,7 @@
 import type { mat4 } from "gl-matrix";
 import type { NumArr2, NumArr3 } from "./defines.js";
 import { MAT3, MAT4, VEC2, VEC3, VEC4, type mat3, type vec2, type vec3, type vec4 } from "./matrix.js";
-import SRS, { type projcode_t } from "./proj.js";
+import Decimal from "decimal.js";
 
 export function toRadians(d: number): number {
     return d * Math.PI / 180;
@@ -11,14 +11,28 @@ export function toDegrees(r: number): number {
     return r * 180 / Math.PI;
 }
 
+export function num_eq(a: number, b: number, e: number = 0): boolean {
+    return Math.abs(a - b) <= e;
+}
+
+export function num_atan(n: number): number {
+    const r = new Decimal(n);
+    const a = r.atan();
+    return a.toNumber();
+}
+
+export function num_tan(rad: number): number {
+    const r = new Decimal(rad);
+    const a = r.tan();
+    return a.toNumber();
+}
+
 /**
  * Point in 3D space.
 */
 export class Point3D {
 
     position: vec3 = VEC3.fromValues(0, 0, 0);
-
-    projcode: projcode_t = 4978;
 
     constructor() {}
 
@@ -28,14 +42,9 @@ export class Point3D {
         return p;
     }
 
-    static fromXYZ(x: number, y: number, z: number, proj: projcode_t = SRS.EPSG_4978): Point3D {
+    static fromXYZ(x: number, y: number, z: number): Point3D {
         const p = new Point3D();
-        if (proj === SRS.EPSG_4978) {
-            p.position = VEC3.fromValues(x, y, z);
-        } else {
-            const a = SRS.transform(proj, SRS.EPSG_4978, [x, y, z]) as NumArr3;
-            p.position = VEC3.fromValues(a[0], a[1], a[2]);
-        }
+        p.position = VEC3.fromValues(x, y, z);
         return p;
     }
 
@@ -45,10 +54,6 @@ export class Point3D {
     getX(): number { return this.position[0] };
     getY(): number { return this.position[1] };
     getZ(): number { return this.position[2] };
-
-    setProjcode(code: projcode_t) { this.projcode = code; }
-
-    getProjcode(): projcode_t { return this.projcode; }
 
 }
 
@@ -137,6 +142,11 @@ export class Plane {
 
         return new Plane(VEC4.fromValues(A, B, C, D));
     }
+}
+
+export function distanceToPlane(p: vec3, plane: Plane) {
+    const f = VEC3.dot(p, VEC4.force3(plane.params)) + plane.params[3];
+    return Math.abs(f) / VEC3.length(VEC4.force3(plane.params));
 }
 
 export function pointOutSidePlane(p: vec4, plane: Plane): boolean {

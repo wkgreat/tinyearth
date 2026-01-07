@@ -15,7 +15,8 @@ import { GLFrameBuffer } from "./webgl.js";
 export interface TinyEarthAdvanceOptions {
     glErrorCheck?: boolean,
     glLogDepth?: boolean,
-    wireframe?: boolean
+    wireframe?: boolean,
+    reverseZ?: boolean
 }
 
 export interface TinyEarthOptions {
@@ -62,14 +63,15 @@ export default class TinyEarth {
     #advance: TinyEarthAdvanceOptions = {
         glErrorCheck: false,
         glLogDepth: false,
-        wireframe: false
+        wireframe: false,
+        reverseZ: true
     }
 
     //framebuffer
 
     #frameBuffer: GLFrameBuffer | null = null;
 
-    #groundFrameBuffer: GLFrameBuffer | null = null;
+    // #groundFrameBuffer: GLFrameBuffer | null = null;
 
     // screen quad
     #fullScreenQuad: ScreenQuad;
@@ -80,9 +82,18 @@ export default class TinyEarth {
 
         //advance options
         const advance = options.advance ?? {};
-        this.#advance.glErrorCheck = advance.glErrorCheck ?? false;
-        this.#advance.glLogDepth = advance.glLogDepth ?? true;
-        this.#advance.wireframe = advance.wireframe ?? false;
+        if (advance.glErrorCheck !== undefined) {
+            this.#advance.glErrorCheck = advance.glErrorCheck;
+        }
+        if (advance.glLogDepth !== undefined) {
+            this.#advance.glLogDepth = advance.glLogDepth;
+        }
+        if (advance.wireframe !== undefined) {
+            this.#advance.wireframe = advance.wireframe;
+        }
+        if (advance.reverseZ !== undefined) {
+            this.#advance.reverseZ = advance.reverseZ;
+        }
 
         // basic
         this.eventBus = new EventBus();
@@ -190,12 +201,36 @@ export default class TinyEarth {
         })
     }
 
-    clearColor() {
+    setGLColor() {
         this.gl.clearColor(this.bgcolor.r, this.bgcolor.g, this.bgcolor.b, this.bgcolor.a);
+    }
+
+    setGLDepth() {
+
+        this.gl.enable(this.gl.DEPTH_TEST);
+        if (this.#advance.reverseZ) {
+            this.gl.depthFunc(this.gl.GEQUAL);
+            this.gl.clearDepth(0.0);
+        } else {
+            this.gl.depthFunc(this.gl.LEQUAL);
+            this.gl.clearDepth(1.0);
+        }
+    }
+
+    getGLClearDepth(): number {
+        return this.#advance.reverseZ ? 0.0 : 1.0;
     }
 
     get advance(): TinyEarthAdvanceOptions {
         return this.#advance;
+    }
+
+    get nearDepth(): number {
+        return this.#advance.reverseZ ? 1.0 : 0.0;
+    }
+
+    get farDepth(): number {
+        return this.#advance.reverseZ ? 0.0 : 1.0;
     }
 
     get frameBuffer() {
@@ -209,12 +244,11 @@ export default class TinyEarth {
     // webgl clear and setup
     glInit() {
         if (this.gl !== null) {
-            this.clearColor();
+            this.setGLColor();
+            this.setGLDepth();
 
-            this.gl.clearDepth(1.0);
-            this.gl.enable(this.gl.DEPTH_TEST);
             this.gl.enable(this.gl.CULL_FACE);
-            this.gl.depthFunc(this.gl.LEQUAL);
+
             this.gl.viewport(0, 0, this.viewWidth, this.viewHeight);
             this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
 
@@ -257,23 +291,23 @@ export default class TinyEarth {
             enableStencil: true
         });
 
-        if (this.#groundFrameBuffer) {
-            this.#groundFrameBuffer.destroy();
-        }
+        // if (this.#groundFrameBuffer) {
+        //     this.#groundFrameBuffer.destroy();
+        // }
 
-        this.#groundFrameBuffer = new GLFrameBuffer({
-            tinyearth: this,
-            width: this.viewWidth,
-            height: this.viewHeight,
-            enableColor: true,
-            enableDepth: true,
-            enableStencil: true
-        });
+        // this.#groundFrameBuffer = new GLFrameBuffer({
+        //     tinyearth: this,
+        //     width: this.viewWidth,
+        //     height: this.viewHeight,
+        //     enableColor: true,
+        //     enableDepth: true,
+        //     enableStencil: true
+        // });
     }
 
-    getGroundFrameBuffer() {
-        return this.#groundFrameBuffer;
-    }
+    // getGroundFrameBuffer() {
+    //     return this.#groundFrameBuffer;
+    // }
 
     addTileSource(tileInfo: TileSourceInfo): TileProvider {
         const tileProvider = new TileProvider(tileInfo, this);
@@ -429,18 +463,18 @@ export default class TinyEarth {
                     this.#frameBuffer,
                     {
                         color: this.bgcolor.toArray(),
-                        depth: 1.0,
+                        depth: this.getGLClearDepth(),
                         stencil: 0.0
                     }
                 )
-                GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#groundFrameBuffer);
-                if (this.#groundFrameBuffer) {
-                    this.#groundFrameBuffer.clear({
-                        color: this.bgcolor.toArray(),
-                        depth: 1.0,
-                        stencil: 0.0
-                    });
-                }
+                // GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#groundFrameBuffer);
+                // if (this.#groundFrameBuffer) {
+                //     this.#groundFrameBuffer.clear({
+                //         color: this.bgcolor.toArray(),
+                //         depth: this.getGLClearDepth(),
+                //         stencil: 0.0
+                //     });
+                // }
 
                 GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#frameBuffer);
                 if (this.skyboxProgram !== null) {
@@ -453,10 +487,10 @@ export default class TinyEarth {
                 }
 
 
-                if (this.#groundFrameBuffer) {
-                    GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#groundFrameBuffer);
-                    this.#groundFrameBuffer.tap();
-                }
+                // if (this.#groundFrameBuffer) {
+                //     GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#groundFrameBuffer);
+                //     this.#groundFrameBuffer.tap();
+                // }
 
                 GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#frameBuffer);
                 this.scene.drawLayers();

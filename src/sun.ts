@@ -73,8 +73,13 @@ export class Sun {
     }
 
     get position(): NumArr3 {
-        const p = Sun.getPositionAtTime(this.#scene.tinyearth.timer.currentDate);
-        return p;
+        if (this.#scene.tinyearth) {
+            const p = Sun.getPositionAtTime(this.#scene.tinyearth.timer.currentDate);
+            return p;
+        } else {
+            return [0, 0, 0];
+        }
+
     }
 
     static getPositionAtTime(date: Date): NumArr3 {

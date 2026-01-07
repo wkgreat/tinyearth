@@ -98,7 +98,7 @@ void main() {
     #endif
     
     #ifdef LOG_DEPTH
-        gl_FragDepth = dfloat_out(frag_depth_log_df(u_scene_df.logDepthC, u_projection_df.far, v_relviewz));
+        gl_FragDepth = dfloat_out(frag_depth_log_df(u_scene_df.logDepthC, u_projection_df.near, u_projection_df.far, v_relviewz));
     #endif
 
 }

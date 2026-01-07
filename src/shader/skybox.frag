@@ -31,5 +31,5 @@ void main() {
 
     fragColor = vec4(skycolor, 1.0f);
 
-    gl_FragDepth = 1.0;
+    gl_FragDepth = u_scene.fardepth;
 }

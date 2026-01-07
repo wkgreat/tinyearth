@@ -88,7 +88,7 @@ class Camera {
 
         this._look();
 
-        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+        this.#scene.tinyearth?.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
             camera: this,
             type: "round"
         });
@@ -106,7 +106,7 @@ class Camera {
         this.#to = VEC4.fromValues(0, 0, 0, 1);
         this._look();
 
-        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+        this.#scene?.tinyearth?.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
             camera: this,
             type: "roundForEarthSelfRotationEffect"
         });
@@ -155,7 +155,7 @@ class Camera {
 
         this._look();
 
-        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+        this.#scene?.tinyearth?.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
             camera: this,
             type: "move"
         });
@@ -193,7 +193,7 @@ class Camera {
 
             this._look();
 
-            this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+            this.#scene?.tinyearth?.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
                 camera: this,
                 type: "panTilt"
             });
@@ -222,7 +222,7 @@ class Camera {
 
     set from(from: vec4) {
         this.#from = from;
-        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+        this.#scene?.tinyearth?.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
             camera: this,
             type: "from"
         });
@@ -231,7 +231,7 @@ class Camera {
 
     set to(to: vec4) {
         this.#to = to;
-        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+        this.#scene?.tinyearth?.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
             camera: this,
             type: "to"
         });
@@ -240,11 +240,15 @@ class Camera {
 
     set up(up: vec4) {
         this.#up = up;
-        this.#scene.tinyearth.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
+        this.#scene?.tinyearth?.eventBus.fire(TinyEarthEvent.CAMERA_CHANGE, {
             camera: this,
             type: "up"
         });
         this._look();
+    }
+
+    get sightVector(): vec3 {
+        return VEC3.normalize(VEC3.sub(VEC4.force3(this.to), VEC4.force3(this.from)));
     }
 
     static computeDeviateVertical(from: vec3, to: vec3): number {

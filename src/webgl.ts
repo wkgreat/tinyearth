@@ -372,8 +372,8 @@ export class GLFrameBuffer {
         gl.bindTexture(gl.TEXTURE_2D, texture);
 
         gl.texImage2D(
-            gl.TEXTURE_2D, 0, gl.DEPTH24_STENCIL8, width, height,
-            0, gl.DEPTH_STENCIL, gl.UNSIGNED_INT_24_8, null
+            gl.TEXTURE_2D, 0, gl.DEPTH32F_STENCIL8, width, height,
+            0, gl.DEPTH_STENCIL, gl.FLOAT_32_UNSIGNED_INT_24_8_REV, null
         );
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);

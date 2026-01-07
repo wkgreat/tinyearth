@@ -47,14 +47,14 @@ void main() {
         dfvec3 worldpos = relative(clamp_to_ground_df(v_worldpos, SPHERIOD_WGS84_df, df(u_clampToGroundOffset)));
         #ifdef LOG_DEPTH
             viewz = dfvec4_z(dfvec4_normw(dfvec4_mul(u_camera_df.relviewmtx, dfv3t4(worldpos, df(1.0)))));
-            gl_FragDepth = dfloat_out(frag_depth_log_df(u_scene_df.logDepthC, u_projection_df.far, viewz));
+            gl_FragDepth = dfloat_out(frag_depth_log_df(u_scene_df.logDepthC, u_projection_df.near, u_projection_df.far, viewz));
         #else    
             ndspos = dfvec4_normw(dfvec4_mul(spv, dfv3t4(worldpos, df(1.0))));
             gl_FragDepth = dfloat_out(dfvec4_z(ndspos));
         #endif
     } else {
         #ifdef LOG_DEPTH
-            gl_FragDepth = dfloat_out(frag_depth_log_df(u_scene_df.logDepthC, u_projection_df.far, viewz));
+            gl_FragDepth = dfloat_out(frag_depth_log_df(u_scene_df.logDepthC, u_projection_df.near, u_projection_df.far, viewz));
         #else
         #endif
         

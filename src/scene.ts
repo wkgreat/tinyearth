@@ -1,8 +1,10 @@
 import Camera from "./camera.js";
+import type { NumArr2 } from "./defines.js";
 import { TinyEarthEvent } from "./event.js";
 import Frustum, { buildFrustum } from "./frustum.js";
 import type { Layer } from "./layer.js";
-import { MAT4, type mat4, type vec3 } from "./matrix.js";
+import { distanceToPlane, num_atan, num_tan, Plane, Point3D, Ray, rayCrossSpheriod, toDegrees } from "./math.js";
+import { MAT4, VEC3, VEC4, type mat4, type vec3 } from "./matrix.js";
 import SRS from "./proj.js";
 import Projection from "./projection.js";
 import { Sun } from "./sun.js";
@@ -10,7 +12,7 @@ import type TinyEarth from "./tinyearth.js";
 
 export interface SceneOptions {
 
-    tinyearth: TinyEarth;
+    tinyearth?: TinyEarth;
 
     camera?: {
         from: vec3,
@@ -45,7 +47,7 @@ const defaultSceneOptions: Omit<SceneOptions, "viewport" | "tinyearth"> = {
 
 export default class Scene {
 
-    #tinyearth: TinyEarth;
+    #tinyearth?: TinyEarth | undefined;
     #camera: Camera;
     #projection: Projection;
     #viewHeight: number = 0;
@@ -56,6 +58,7 @@ export default class Scene {
     #layers: Layer[] = [];
 
     #logdepthC: number = 5.0;
+    #strechDepthRange: NumArr2 = [0, 0]; //TODO
 
     constructor(options: SceneOptions) {
         this.#tinyearth = options.tinyearth;
@@ -63,30 +66,38 @@ export default class Scene {
         const cameraOpts = options.camera ?? defaultSceneOptions.camera!;
         const projOpts = options.projection ?? defaultSceneOptions.projection!;
 
+        let reverseZ = false;
+        if (this.#tinyearth) {
+            reverseZ = !!this.#tinyearth.advance.reverseZ;
+        }
+
         this.#camera = new Camera(this, cameraOpts.from, cameraOpts.to, cameraOpts.up);
-        this.#projection = new Projection(this, projOpts.fovy, options.viewport.width / options.viewport.height, projOpts.near, projOpts.far);
+        this.#projection = new Projection(this, projOpts.fovy, options.viewport.width / options.viewport.height, projOpts.near, projOpts.far, reverseZ);
         this.#viewWidth = options.viewport.width;
         this.#viewHeight = options.viewport.height;
         this.#frustum = this.computeFrustum();
         this.#worldToScreenMatrix = this.computeWorldToScreenMatrix();
+        this.#strechDepthRange = this.computeStretchDepthRange();
         this.#sun = new Sun(this);
-        this.#tinyearth.eventBus.addEventListener(TinyEarthEvent.PROJECTION_CHANGE, {
+        this.#tinyearth?.eventBus.addEventListener(TinyEarthEvent.PROJECTION_CHANGE, {
             callback: (info) => {
                 this.computeFrustum();
                 this.computeWorldToScreenMatrix();
+                this.#strechDepthRange = this.computeStretchDepthRange();
             }
         });
 
-        this.#tinyearth.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
+        this.#tinyearth?.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
             callback: (info) => {
                 this.computeFrustum();
                 this.computeWorldToScreenMatrix();
+                this.#strechDepthRange = this.computeStretchDepthRange();
             }
         });
         this.#logdepthC = 5.0;
     }
 
-    get tinyearth(): TinyEarth {
+    get tinyearth(): TinyEarth | undefined {
         return this.#tinyearth;
     }
 
@@ -166,6 +177,94 @@ export default class Scene {
         MAT4.mul_(m, this.viewportMatrix, m);
         this.#worldToScreenMatrix = m;
         return this.#worldToScreenMatrix;
+    }
+
+    computePoint9(): vec3[] {
+        const e = VEC3.scale(this.camera.sightVector, this.projection.near);
+        const u = VEC3.normalize(VEC4.force3(this.camera.up));
+        const r = VEC3.normalize(VEC3.negate(VEC3.cross(e, u)));
+        const y = num_tan(this.projection.fovy / 2) * this.projection.near;
+        const x = this.projection.aspect * y;
+
+        const p0 = VEC3.add(VEC3.add(VEC3.scale(r, -x), VEC3.scale(u, -y)), e);
+        const p1 = VEC3.add(VEC3.add(VEC3.scale(r, 0), VEC3.scale(u, -y)), e);
+        const p2 = VEC3.add(VEC3.add(VEC3.scale(r, x), VEC3.scale(u, -y)), e);
+        const p3 = VEC3.add(VEC3.add(VEC3.scale(r, -x), VEC3.scale(u, 0)), e);
+        const p4 = VEC3.add(VEC3.add(VEC3.scale(r, 0), VEC3.scale(u, 0)), e);
+        const p5 = VEC3.add(VEC3.add(VEC3.scale(r, x), VEC3.scale(u, 0)), e);
+        const p6 = VEC3.add(VEC3.add(VEC3.scale(r, -x), VEC3.scale(u, y)), e);
+        const p7 = VEC3.add(VEC3.add(VEC3.scale(r, 0), VEC3.scale(u, y)), e);
+        const p8 = VEC3.add(VEC3.add(VEC3.scale(r, x), VEC3.scale(u, y)), e);
+
+        return [p0, p1, p2, p3, p4, p5, p6, p7, p8];
+    }
+
+    computeDirection9() {
+        const e = VEC3.scale(this.camera.sightVector, this.projection.near);
+        const u = VEC3.normalize(VEC4.force3(this.camera.up));
+        const r = VEC3.normalize(VEC3.cross(e, u));
+        const y = num_tan(this.projection.fovy / 2) * this.projection.near;
+        const x = this.projection.aspect * y;
+
+        const p0 = VEC3.add(VEC3.add(VEC3.scale(r, -x), VEC3.scale(u, -y)), e);
+        const p1 = VEC3.add(VEC3.add(VEC3.scale(r, 0), VEC3.scale(u, -y)), e);
+        const p2 = VEC3.add(VEC3.add(VEC3.scale(r, x), VEC3.scale(u, -y)), e);
+        const p3 = VEC3.add(VEC3.add(VEC3.scale(r, -x), VEC3.scale(u, 0)), e);
+        const p4 = VEC3.add(VEC3.add(VEC3.scale(r, 0), VEC3.scale(u, 0)), e);
+        const p5 = VEC3.add(VEC3.add(VEC3.scale(r, x), VEC3.scale(u, 0)), e);
+        const p6 = VEC3.add(VEC3.add(VEC3.scale(r, -x), VEC3.scale(u, y)), e);
+        const p7 = VEC3.add(VEC3.add(VEC3.scale(r, 0), VEC3.scale(u, y)), e);
+        const p8 = VEC3.add(VEC3.add(VEC3.scale(r, x), VEC3.scale(u, y)), e);
+
+        const d0 = VEC3.normalize(VEC3.sub(p0, this.camera.from));
+        const d1 = VEC3.normalize(VEC3.sub(p1, this.camera.from));
+        const d2 = VEC3.normalize(VEC3.sub(p2, this.camera.from));
+        const d3 = VEC3.normalize(VEC3.sub(p3, this.camera.from));
+        const d4 = VEC3.normalize(VEC3.sub(p4, this.camera.from));
+        const d5 = VEC3.normalize(VEC3.sub(p5, this.camera.from));
+        const d6 = VEC3.normalize(VEC3.sub(p6, this.camera.from));
+        const d7 = VEC3.normalize(VEC3.sub(p7, this.camera.from));
+        const d8 = VEC3.normalize(VEC3.sub(p8, this.camera.from));
+
+        return [d0, d1, d2, d3, d4, d5, d6, d7, d8];
+    }
+
+    computeEarthPoint9(): (Point3D | null)[] {
+        const d9 = this.computeDirection9();
+        const origin = VEC4.force3(this.#camera.from);
+        const rays = d9.map(d => new Ray(origin, d));
+        const earth = SRS.SPHERIOD_WGS84;
+        const p9 = rays.map(ray => {
+            const r = rayCrossSpheriod(ray, earth, true);
+            return r ? r[0]! : null;
+        })
+        return p9;
+
+    }
+
+    computeStretchDepthRange(): NumArr2 {
+
+        const p9 = this.computeEarthPoint9();
+        let a = 0;
+        let b = 0;
+        const zs = p9.filter(p => p !== null).map(p => {
+            let v = VEC3.fromValues(p.getX(), p.getY(), p.getZ());
+            let r = VEC3.force4(VEC3.sub(v, VEC4.force3(this.camera.from)));
+            r = VEC4.affine(r, this.#camera.relViewMatrix);
+            return -r[2];
+        });
+        if (zs.length === 0) {
+            a = 0;
+        } else {
+            a = Math.min(...zs);
+        }
+        if (zs.length < 9) {
+            b = distanceToPlane(VEC3.fromValues(0, 0, 0), new Plane(this.frustum.near!));
+        } else {
+            b = Math.max(...zs);
+        }
+
+        return [a, b];
     }
 
     get frustum(): Frustum {

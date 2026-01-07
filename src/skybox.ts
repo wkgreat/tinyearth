@@ -166,16 +166,6 @@ export class SkyBoxProgram extends Program {
         });
     }
 
-    setUniforms(info: SkyboxUniformInfo) {
-        if (this.gl === null || this.program === null) {
-            return;
-        }
-        this.use();
-        this.setCameraUniform();
-        this.setProjectionUniform();
-        this.setSunUniform();
-    }
-
     setData() {
         if (this.gl === null || this.tinyearth.scene === null || this.program === null) {
             console.error("some of object is null");
@@ -210,7 +200,7 @@ export class SkyBoxProgram extends Program {
         }
         this.use();
         checkGLError(this.gl, "use", this.tinyearth.glErrorCheck);
-        // const a_position = this.gl.getAttribLocation(this.program, "a_position");
+
         this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.#texutre);
         checkGLError(this.gl, "bindTexture", this.tinyearth.glErrorCheck);
 
@@ -220,6 +210,8 @@ export class SkyBoxProgram extends Program {
         this.setCameraUniform();
 
         this.setProjectionUniform();
+
+        this.setSceneUniform();
 
         this.setData();
 

@@ -25,6 +25,8 @@ void main() {
         discard;
     } 
 
+    fragColor = v_color;
+
     #ifdef LOG_DEPTH
         dfvec4 viewpos = v_relviewpos;
     #else
@@ -36,21 +38,17 @@ void main() {
         dfvec3 worldpos = relative(clamp_to_ground_df(absolute(dfv4t3(v_relworldpos)), SPHERIOD_WGS84_df, df(u_clampToGroundOffset)));
         #ifdef LOG_DEPTH
             viewpos = dfvec4_normw(dfvec4_mul(u_camera_df.relviewmtx, dfv3t4(worldpos, df(1.0))));
-            gl_FragDepth = dfloat_out(frag_depth_log_df(u_scene_df.logDepthC, u_projection_df.far, dfvec4_z(viewpos)));
+            gl_FragDepth = dfloat_out(frag_depth_log_df(u_scene_df.logDepthC, u_projection_df.near, u_projection_df.far, dfvec4_z(viewpos)));
         #else    
             ndspos = dfvec4_normw(dfvec4_mul(spv, dfv3t4(worldpos, df(1.0))));
             gl_FragDepth = dfloat_out(dfvec4_z(ndspos));
         #endif
     } else {
         #ifdef LOG_DEPTH
-            gl_FragDepth = dfloat_out(frag_depth_log_df(u_scene_df.logDepthC, u_projection_df.far, dfvec4_z(v_relviewpos)));
+            gl_FragDepth = dfloat_out(frag_depth_log_df(u_scene_df.logDepthC, u_projection_df.near, u_projection_df.far, dfvec4_z(v_relviewpos)));
         #else
         #endif
 
     }
-
-
-    fragColor = v_color;
-
 
 }
