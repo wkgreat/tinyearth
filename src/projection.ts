@@ -26,6 +26,10 @@ class Projection {
         return MAT4.perspective_(this.#matrix, this.#fovy, this.#aspect, this.#near, this.#far, this.#reverseZ);
     }
 
+    get perspectiveMatrixZO(): mat4 {
+        return MAT4.perspective_(this.#matrix, this.#fovy, this.#aspect, this.#near, this.#far, this.#reverseZ, true);
+    }
+
     get fovy(): number {
         return this.#fovy;
     }

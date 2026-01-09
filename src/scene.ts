@@ -158,10 +158,24 @@ export default class Scene {
         const w2 = this.#viewWidth / 2;
         const h2 = this.#viewHeight / 2;
         const m = MAT4.fromValues(
-            w2, 0, 0, 0,
-            0, h2, 0, 0,
-            0, 0, 0.5, 0,
-            x + w2, y + h2, 0.5, 1
+            w2,     0,      0,      0, //
+            0,      h2,     0,      0,
+            0,      0,      0.5,    0,
+            x + w2, y + h2, 0.5,    1
+        );
+        return m;
+    }
+
+    get viewportMatrixZO(): mat4 {
+        const x = 0;
+        const y = 0;
+        const w2 = this.#viewWidth / 2;
+        const h2 = this.#viewHeight / 2;
+        const m = MAT4.fromValues(
+            w2,         0,      0,    0,
+            0,          h2,     0,    0,
+            0,          0,      1,    0,
+            x + w2,     y + h2, 0,    1
         );
         return m;
     }

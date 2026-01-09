@@ -41,7 +41,7 @@ export default class EarthRotationTool extends BaseTool {
         const callback = (timer: Timer) => {
             const dt = timer.deltaTime;
             const w = this.#velocity * dt;
-            this.tinyearth.scene.camera.roundForEarthSelfRotationEffect(w);
+            this.tinyearth.scene!.camera.roundForEarthSelfRotationEffect(w);
         };
         this.#callbackId = this.tinyearth.eventBus.addEventListener(TinyEarthEvent.TIMER_TICK, { callback });
     }
