@@ -10,28 +10,15 @@
 
 #include "color.module.wgsl"
 
-struct Material {
-    ambient: vec4f, //ka
-    diffuse: vec4f, //kd
-    specular: vec4f, //ks
-    emission: vec4f, //ke
-    shininess: f32 //ns
-};
-
 struct TileUniform {
     opacity: f32,
     enableNight: u32,
     isNight: u32
 };
 
-
-@group(0) @binding(0) var<uniform> scene : Scene;
-@group(0) @binding(1) var<uniform> sceneDF : SceneDF;
-
 @group(1) @binding(0) var image: texture_2d<f32>;
 @group(1) @binding(1) var theSampler: sampler;
 @group(1) @binding(2) var<uniform> tileUniform: TileUniform;
-// @group(1) @binding(3) var<uniform> material: Material;
 
 struct VSInput {
     @location(0) position: vec3f,

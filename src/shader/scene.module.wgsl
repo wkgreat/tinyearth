@@ -97,3 +97,6 @@ fn relative(pos: dfvec3) -> dfvec3 {
 fn absolute(pos: dfvec3) -> dfvec3 {
     return dfvec3_add(pos, dfvec4_force3(sceneDF.camera.eye));
 }
+
+@group(0) @binding(0) var<uniform> scene : Scene;
+@group(0) @binding(1) var<uniform> sceneDF : SceneDF;

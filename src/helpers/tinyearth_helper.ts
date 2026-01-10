@@ -8,6 +8,8 @@ export default class TinyEarthHelper extends BaseHelper {
     helperId = "tinyearth-helper";
     nightCheckboxId = "tinyearth-helper-night-checkbox";
     skyboxCheckboxId = "tinyearth-helper-skybox-checkbox";
+    skyboxExposureInputId = "tinyearth-helper-skybox-exposure-input";
+    skyboxcontrastInputId = "tinyearth-helper-skybox-contrast-input";
     bgcolorInputId = "tinyearth-helper-bgcolor-input";
     bgcolorAlphaInputId = "tinyearth-helper-bgcolor-alpha-input"
     renderCheckboxId = "tinyearth-render-checkbox"
@@ -21,31 +23,6 @@ export default class TinyEarthHelper extends BaseHelper {
 
     createElement(): HTMLDivElement | null {
 
-        const innerHTML = `
-        <div>
-            <div>
-            <label>Enable Night:</label>
-            <input type="checkbox" id="${this.nightCheckboxId}"></input>
-            </div>
-            <div>
-            <label>Enable Skybox:</label>
-            <input type="checkbox" id="${this.skyboxCheckboxId}"></input>
-            </div>
-            <div>
-            <label>Background Color:</label>
-            <input type="color" id="${this.bgcolorInputId}"></input>
-            </div>
-            <div>
-            <label>Background Alpha:</label>
-            <input type="range" id="${this.bgcolorAlphaInputId}" min="0" max="1" step="0.01"></input>
-            </div>
-            <div>
-            <label>Render Start/Stop</label>
-            <input type="checkbox" id=${this.renderCheckboxId}></input>
-            </div>
-        </div>
-        `
-
         const item0 = this.createItem(
             this.createLabel("Enable Night"),
             this.createInput(this.nightCheckboxId, "checkbox")
@@ -55,20 +32,28 @@ export default class TinyEarthHelper extends BaseHelper {
             this.createInput(this.skyboxCheckboxId, "checkbox")
         );
         const item2 = this.createItem(
+            this.createLabel("Skybox Exposure"),
+            this.createInput(this.skyboxExposureInputId, "range", { min: "0", max: "5", step: "0.1" })
+        );
+        const item3 = this.createItem(
+            this.createLabel("Skybox Contrast"),
+            this.createInput(this.skyboxcontrastInputId, "range", { min: "0", max: "5", step: "0.1" })
+        );
+        const item4 = this.createItem(
             this.createLabel("Background Color"),
             this.createInput(this.bgcolorInputId, "color")
         );
-        const item3 = this.createItem(
+        const item5 = this.createItem(
             this.createLabel("Background Alpha"),
             this.createInput(this.bgcolorAlphaInputId, "range", { min: "0", max: "1", step: "0.01" })
         );
-        const item4 = this.createItem(
+        const item6 = this.createItem(
             this.createLabel("Render Start/Stop"),
             this.createInput(this.renderCheckboxId, "checkbox")
         );
 
 
-        return this.createHelperDiv(this.helperId, this.title, [item0, item1, item2, item3, item4]);
+        return this.createHelperDiv(this.helperId, this.title, [item0, item1, item2, item3, item4, item5, item6]);
     }
 
     afterAddToContainer() {
@@ -94,6 +79,22 @@ export default class TinyEarthHelper extends BaseHelper {
             } else {
                 this.tinyearth.disableSkybox();
             }
+        });
+
+        const skyboxExposureInput = document.getElementById(this.skyboxExposureInputId) as HTMLInputElement;
+        skyboxExposureInput.value = this.tinyearth.skyboxProgram!.exposure.toString();
+
+        skyboxExposureInput.addEventListener("input", (event) => {
+            let v = (event as any).target.value
+            this.tinyearth.skyboxProgram!.exposure = parseFloat(v);
+        });
+
+        const skyboxContrastInput = document.getElementById(this.skyboxcontrastInputId) as HTMLInputElement;
+        skyboxContrastInput.value = this.tinyearth.skyboxProgram!.contrast.toString();
+
+        skyboxContrastInput.addEventListener("input", (event) => {
+            let v = (event as any).target.value
+            this.tinyearth.skyboxProgram!.contrast = parseFloat(v);
         });
 
         const bgcolorInput = document.getElementById(this.bgcolorInputId) as HTMLInputElement;

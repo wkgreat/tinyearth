@@ -2,44 +2,25 @@ import Camera from "./camera.js";
 import type { NumArr3 } from "./defines.js";
 import { TinyEarthEvent } from "./event.js";
 import Frustum from "./frustum.js";
-import { GLSLSource } from "./glsl.js";
-import { Tile, TileMesher, TileStatus } from "./maptiler.js";
+import { Tile, TileStatus } from "./maptiler.js";
 import { type ProgramAdvanceOptions, type ProgramOptions } from "./program.js";
 import SRS from "./proj.js";
 import type Scene from "./scene.js";
 
-import staticTileFragSource from "./shader/tile.frag";
-import staticTileVertSource from "./shader/tile.vert";
-import instanceTileFragSource from './shader/tileInstance.frag';
-import instanceTileVertSource from './shader/tileInstance.vert';
 
-import { checkGLError } from "./debug.js";
 import { MAT4, VEC2, VEC3, VEC4, type mat4, type vec2, type vec3, type vec4 } from "./matrix.js";
 import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
 
-////webgpu
-import tileWGSLSrouce from './shader/tile.wgsl';
-import { WGSLSource } from "./wgsl.js";
-import type { CanvasGPUInfo, GPUInfo } from "./webgpu.js";
-import { dfloat, dfmat4, dfvec2, dfvec3, dfvec4 } from "./math.js";
 import { makeShaderDataDefinitions, makeStructuredView, type ShaderDataDefinitions } from "webgpu-utils";
+import { dfloat, dfmat4, dfvec2, dfvec3, dfvec4 } from "./math.js";
+import tileWGSLSrouce from './shader/tile.wgsl';
+import type { CanvasGPUInfo, GPUInfo } from "./webgpu.js";
+import { WGSLSource } from "./wgsl.js";
 
 const DefaultTileSize: number = 256;
 
-interface GlobeTileProgramBufferInfo {
-    vertices?: WebGLBuffer,
-    texture?: WebGLTexture
-}
-
-export enum RenderMethod {
-    STATIC,
-    DYNAMIC,
-    INSTANCE
-}
-
 export interface GlobeTilePorgramAdvanceOptions extends ProgramAdvanceOptions {
-    renderMethod?: RenderMethod
 }
 
 interface GlobeTileProgramOptions extends Omit<ProgramOptions, 'vertSource' | 'fragSource'> {
@@ -53,22 +34,15 @@ export class GlobeTileProgram {
 
     tinyearth: TinyEarth;
 
-    buffers: GlobeTileProgramBufferInfo = {};
-
     numElements: number = 0;
 
     tileProviders: TileProvider[] = [];
 
     advance: GlobeTilePorgramAdvanceOptions = {
-        renderMethod: RenderMethod.STATIC,
         depthTest: false,
         wireframe: false
     }
 
-
-    //=============================================
-    // WEBGPU
-    //=============================================
     gpuinfo: GPUInfo;
     canvasinfo: CanvasGPUInfo;
     label = "tilerender";
@@ -76,8 +50,6 @@ export class GlobeTileProgram {
     pipeline: GPURenderPipeline | null = null;
     sampler: GPUSampler;
     shaderDefinitions: ShaderDataDefinitions;
-    sceneUniform: GPUBuffer | null = null;
-    sceneDFUniform: GPUBuffer | null = null;
     tileUniform: GPUBuffer | null = null;
     materialUniform: GPUBuffer | null = null;
     depthFunc: GPUCompareFunction = "less";
@@ -86,23 +58,9 @@ export class GlobeTileProgram {
     constructor(options: GlobeTileProgramOptions) {
         this.tinyearth = options.tinyearth;
         const advance = options.advance ?? {};
-        const renderMethod = advance.renderMethod ?? RenderMethod.STATIC;
         const depthTest = advance.depthTest ?? false;
         const wireframe = advance.wireframe ?? false;
 
-        let vertGLSLSource: GLSLSource;
-        let fragGLSLSource: GLSLSource;
-
-        //TODO dynamic draw
-        if (renderMethod === RenderMethod.STATIC || renderMethod === RenderMethod.DYNAMIC) {
-            vertGLSLSource = new GLSLSource(staticTileVertSource);
-            fragGLSLSource = new GLSLSource(staticTileFragSource);
-        } else {
-            vertGLSLSource = new GLSLSource(instanceTileVertSource);
-            fragGLSLSource = new GLSLSource(instanceTileFragSource);
-        }
-
-        this.advance.renderMethod = renderMethod;
         this.advance.depthTest = depthTest;
         this.advance.wireframe = wireframe;
 
@@ -114,13 +72,11 @@ export class GlobeTileProgram {
             this.cleardepth = 1.0;
         }
 
-        //=========WEBGPU==========
         this.gpuinfo = options.gpuinfo;
         this.canvasinfo = options.canvasinfo;
         const { device } = this.gpuinfo;
         const wgslsource = new WGSLSource(tileWGSLSrouce);
         const code = wgslsource.resovleSource();
-        wgslsource.logSource();
         this.shaderDefinitions = makeShaderDataDefinitions(code);
 
         this.module = device.createShaderModule({
@@ -145,8 +101,26 @@ export class GlobeTileProgram {
             fragment: {
                 module: this.module,
                 targets: [{
-                    format: this.canvasinfo.context.getConfiguration()!.format
+                    format: this.canvasinfo.context.getConfiguration()!.format,
+                    blend: {
+                        color: {
+                            srcFactor: "one",
+                            dstFactor: "one-minus-src-alpha",
+                            operation: "add",
+                        },
+                        alpha: {
+                            srcFactor: "one",
+                            dstFactor: "one-minus-src-alpha",
+                            operation: "add",
+                        },
+                    },
+                    writeMask: GPUColorWrite.ALL
                 }]
+            },
+            primitive: {
+                topology: 'triangle-list',
+                cullMode: 'back',
+                frontFace: 'ccw'
             },
             depthStencil: {
                 format: 'depth24plus',
@@ -160,8 +134,6 @@ export class GlobeTileProgram {
             minFilter: 'nearest'
         });
 
-        console.log(this.pipeline);
-
     }
 
     existTileProvider(tileProvider: TileProvider): boolean {
@@ -174,32 +146,6 @@ export class GlobeTileProgram {
 
     removeTileProvider(tileProvider: TileProvider) {
         this.tileProviders = this.tileProviders.filter(p => p !== tileProvider);
-    }
-
-    setMaterial() {
-        // if (this.gl && this.program) {
-        //     this.gl.useProgram(this.program);
-        //     this.setUniform4f("material.ambient", 0.1, 0.1, 0.1, 1.0);
-        //     this.setUniform4f("material.diffuse", 1.0, 1.0, 1.0, 1.0);
-        //     this.setUniform4f("material.specular", 1.0, 1.0, 1.0, 1.0);
-        //     this.setUniform4f("material.emission", 0.0, 0.0, 0.0, 1.0);
-        //     this.setUniform1f("material.shininess", 1000);
-        // }
-    }
-
-    refreshUniforms() {
-        // if (this.gl && this.program) {
-        //     this.gl.useProgram(this.program);
-        //     this.refreshAllUniforms();
-        // }
-    }
-
-    setVerticeData(verticeData: Float32Array) {
-        // if (this.gl && this.buffers.vertices) {
-        //     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.vertices);
-        //     this.gl.bufferData(this.gl.ARRAY_BUFFER, verticeData, this.gl.STATIC_DRAW);
-        //     this.numElements = verticeData.length;
-        // }
     }
 
     setTileNodeVertexBuffers(node: TileNode): void {
@@ -319,148 +265,6 @@ export class GlobeTileProgram {
 
     }
 
-    setSceneUniform(scene: Scene) {
-
-        const camera = scene.camera;
-        const projection = scene.projection;
-
-        const cameraData = {
-            eye: camera.from,
-            center: camera.to,
-            up: camera.up,
-            viewmtx: camera.viewMatrix,
-            relviewmtx: camera.relViewMatrix,
-            height: camera.getHeightToSurface(),
-        }
-
-        const projectionData = {
-            near: projection.near,
-            far: projection.far,
-            projmtx: projection.perspectiveMatrixZO //TODO webgpu projmtx
-        }
-
-        const sunData = {
-            position: scene.sun.position,
-            color: [1, 1, 1, 1]
-        }
-
-        const modelData = {
-            modelmtx: MAT4.create()
-        }
-
-        const viewportData = {
-            viewport: VEC2.fromValues(scene.viewWidth, scene.viewHeight),
-            viewportmtx: scene.viewportMatrixZO
-        }
-
-        const depthData = {
-            logDepthC: scene.getLogDepthC(),
-            neardepth: 0,
-            fardepth: 0
-        }
-
-        const sceneData = {
-            camera: cameraData,
-            projection: projectionData,
-            sun: sunData,
-            model: modelData,
-            viewport: viewportData,
-            depth: depthData
-        }
-
-        function number2dfstruct(n: number): { high: number, low: number } {
-            const df = dfloat.create(n);
-            return { high: df[0], low: df[1] };
-        }
-
-        function vec22dfstruct(v: vec2): { high: vec2, low: vec2 } {
-            const df = dfvec2.create(v);
-            return { high: df[0], low: df[1] };
-        }
-
-        function vec32dfstruct(v: vec3): { high: vec3, low: vec3 } {
-            const df = dfvec3.create(v);
-            return { high: df[0], low: df[1] };
-        }
-
-        function vec42dfstruct(v: vec4): { high: vec4, low: vec4 } {
-            const df = dfvec4.create(v);
-            return { high: df[0], low: df[1] };
-        }
-
-        function mat42dfstruct(m: mat4): { high: mat4, low: mat4 } {
-            const df = dfmat4.create(m);
-            return { high: df[0], low: df[1] };
-        }
-
-        const cameraDataDF = {
-            eye: vec42dfstruct(camera.from),
-            center: vec42dfstruct(camera.to),
-            up: vec42dfstruct(camera.up),
-            viewmtx: mat42dfstruct(camera.viewMatrix),
-            relviewmtx: mat42dfstruct(camera.relViewMatrix),
-            height: number2dfstruct(camera.getHeightToSurface()),
-        }
-
-        const projectionDataDF = {
-            near: number2dfstruct(projection.near),
-            far: number2dfstruct(projection.far),
-            projmtx: mat42dfstruct(projection.perspectiveMatrixZO)
-        }
-
-        const sunDataDF = {
-            position: vec32dfstruct(scene.sun.position),
-            color: [1, 1, 1, 1]
-        }
-
-        const modelDataDF = {
-            modelmtx: mat42dfstruct(MAT4.create())
-        }
-
-        const viewportDataDF = {
-            viewport: vec22dfstruct(VEC2.fromValues(scene.viewWidth, scene.viewHeight)),
-            viewportmtx: mat42dfstruct(scene.viewportMatrixZO)
-        }
-
-        const depthDataDF = {
-            logDepthC: number2dfstruct(scene.getLogDepthC()),
-            neardepth: 0,
-            fardepth: 0
-        }
-
-        const sceneDataDF = {
-            camera: cameraDataDF,
-            projection: projectionDataDF,
-            sun: sunDataDF,
-            model: modelDataDF,
-            viewport: viewportDataDF,
-            depth: depthDataDF
-        }
-
-        if (this.shaderDefinitions) {
-            const sceneUniView = makeStructuredView(this.shaderDefinitions.uniforms.scene!);
-            const sceneDFUniView = makeStructuredView(this.shaderDefinitions.uniforms.sceneDF!);
-            if (!this.sceneUniform) {
-                this.sceneUniform = this.gpuinfo.device.createBuffer({
-                    label: `${this.label} sceneUniform`,
-                    size: sceneUniView.arrayBuffer.byteLength,
-                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-                });
-            }
-            sceneUniView.set(sceneData);
-            this.gpuinfo.device.queue.writeBuffer(this.sceneUniform, 0, sceneUniView.arrayBuffer);
-
-            if (!this.sceneDFUniform) {
-                this.sceneDFUniform = this.gpuinfo.device.createBuffer({
-                    label: `${this.label} sceneDFUniform`,
-                    size: sceneDFUniView.arrayBuffer.byteLength,
-                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-                });
-            }
-            sceneDFUniView.set(sceneDataDF);
-            this.gpuinfo.device.queue.writeBuffer(this.sceneDFUniform, 0, sceneDFUniView.arrayBuffer);
-        }
-    }
     setTileUniform(opacity: number = 1.0, enableNight: boolean = false, isNight: boolean = false) {
 
         const tileUniView = makeStructuredView(this.shaderDefinitions.uniforms.tileUniform!);
@@ -483,30 +287,6 @@ export class GlobeTileProgram {
 
 
     }
-    setMaterialUniform() {
-
-        const materialUniView = makeStructuredView(this.shaderDefinitions.uniforms.material!);
-
-        if (!this.materialUniform) {
-            this.materialUniform = this.gpuinfo.device.createBuffer({
-                label: `${this.label}, materialUniform`,
-                size: materialUniView.arrayBuffer.byteLength,
-                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-            });
-        }
-
-        materialUniView.set({
-            ambient: [0.1, 0.1, 0.1, 1.0],
-            diffuse: [1.0, 1.0, 1.0, 1.0],
-            specular: [1.0, 1.0, 1.0, 1.0],
-            emission: [0.0, 0.0, 0.0, 1.0],
-            shininess: 1000
-        });
-
-        this.gpuinfo.device.queue.writeBuffer(this.materialUniform, 0, materialUniView.arrayBuffer);
-
-
-    }
 
     /**
      * @param {TileNode} node
@@ -520,8 +300,6 @@ export class GlobeTileProgram {
 
             this.setTileNodeVertexBuffers(node);
             this.setTileNodeTexture(node);
-
-            this.setSceneUniform(this.tinyearth.scene!);
             this.setTileUniform(opacity, this.tinyearth.night, isNight);
             // this.setMaterialUniform();
 
@@ -529,8 +307,8 @@ export class GlobeTileProgram {
                 label: `${this.label} sceneBindGroup`,
                 layout: this.pipeline!.getBindGroupLayout(0),
                 entries: [
-                    { binding: 0, resource: { buffer: this.sceneUniform! } },
-                    { binding: 1, resource: { buffer: this.sceneDFUniform! } }
+                    { binding: 0, resource: { buffer: this.tinyearth.scene!.webgpuResources.sceneUniform! } },
+                    { binding: 1, resource: { buffer: this.tinyearth.scene!.webgpuResources.sceneDFUniform! } }
                 ]
             });
 
@@ -561,135 +339,6 @@ export class GlobeTileProgram {
         }
     }
 
-    drawTileNodesDynamic(nodes: TileNode[], opacity: number = 1.0, isNight: boolean = false) {
-
-        // if (!this.program) { return; }
-
-        // //TODO move buffer to global
-        // let buffer: WebGLBuffer | null = null;
-
-        // for (const node of nodes) {
-
-        //     if (buffer === null) {
-        //         buffer = this.gl.createBuffer();
-        //         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
-        //         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(node.tile.mesh!), this.gl.DYNAMIC_DRAW);
-        //     } else {
-        //         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
-        //         this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, new Float32Array(node.tile.mesh!));
-        //     }
-
-        //     this.numElements = node.tile.mesh!.length;
-
-        //     if (node.texture) {
-        //         this.gl.bindTexture(this.gl.TEXTURE_2D, node.texture);
-        //     } else {
-        //         node.texture = this.createTextureAndSetData(node.tile.image!);
-        //     }
-
-        //     this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_position"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, 0); // 设置属性指针
-        //     this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_position")); // 激活属性
-
-        //     this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_texcoord"), 2, this.gl.FLOAT, false, (3 + 2 + 3) * 4, 3 * 4); // 设置属性指针
-        //     this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_texcoord")); // 激活属性
-
-        //     this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_normal"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, (3 + 2) * 4); // 设置属性指针
-        //     this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_normal")); // 激活属性
-
-        //     this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
-        //     this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
-
-        //     this.gl.drawArrays(this.gl.TRIANGLES, 0, this.numElements / 8);
-
-        // }
-
-    }
-
-    //TODO fixit
-    drawTileNodeInstance(nodes: TileNode[], opacity: number = 1.0, isNight: boolean = false) {
-
-        // if (this.program && this.program) {
-
-        //     nodes = nodes.filter(node => node.tile && node.tile.ready);
-
-        //     if (nodes.length > 0) {
-
-        //         const vao = this.gl.createVertexArray();
-        //         this.gl.bindVertexArray(vao);
-
-        //         // TODO only set once
-        //         const vertexBuffer = this.gl.createBuffer();
-        //         const vertexData = TileMesher.toRootMeshVertex();
-
-        //         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuffer);
-        //         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertexData), this.gl.STATIC_DRAW);
-
-        //         this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_position"), 2, this.gl.FLOAT, false, (2 + 2) * 4, 0);
-        //         this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_position"));
-
-        //         this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_texcoord"), 2, this.gl.FLOAT, false, (2 + 2) * 4, 2 * 4);
-        //         this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_texcoord"));
-
-        //         // TODO user int buffer
-        //         const tilekeyArray = nodes.flatMap(node => [node.key.x, node.key.y, node.key.z]);
-        //         // console.log(`tilekeyArray length: ${tilekeyArray.length}`);
-        //         const tilekeyData = new Float32Array(tilekeyArray);
-        //         const tilekeyBuffer = this.gl.createBuffer();
-        //         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, tilekeyBuffer);
-        //         this.gl.bufferData(this.gl.ARRAY_BUFFER, tilekeyData, this.gl.STATIC_DRAW);
-        //         this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_tilekey"), 3, this.gl.FLOAT, false, 0, 0);
-        //         this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_tilekey"));
-        //         this.gl.vertexAttribDivisor(this.gl.getAttribLocation(this.program, "a_tilekey"), 1); // instance data
-        //         checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
-
-        //         //texture
-        //         const texArray = this.gl.createTexture();
-        //         this.gl.bindTexture(this.gl.TEXTURE_2D_ARRAY, texArray);
-        //         this.gl.texStorage3D(
-        //             this.gl.TEXTURE_2D_ARRAY,   //target
-        //             1,                          //levels mipmap 层级数量（最小 mipmap 数量为 1）
-        //             this.gl.RGBA8,              //internalformat
-        //             256,                        //width
-        //             256,                        //height
-        //             nodes.length                //depth 对于 3D 纹理：深度（z 方向像素数）;对于 2D 纹理数组：层数（layer count）
-        //         );
-        //         checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
-        //         for (let i = 0; i < nodes.length; i++) {
-        //             this.gl.texSubImage3D(
-        //                 this.gl.TEXTURE_2D_ARRAY,   //target
-        //                 0,                          //level
-        //                 0,                          //xoffset
-        //                 0,                          //yoffset
-        //                 i,                          //zoffset
-        //                 256,                        //width
-        //                 256,                        //height
-        //                 1,                          //depth
-        //                 this.gl.RGBA,               //format
-        //                 this.gl.UNSIGNED_BYTE,      //type
-        //                 nodes[i]?.tile.image as HTMLImageElement //pixels
-        //             );
-        //         }
-
-        //         checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
-
-        //         this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-        //         this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-        //         this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-        //         this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-        //         this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
-
-        //         this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
-        //         this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
-
-        //         this.gl.bindVertexArray(vao);
-        //         this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, vertexData.length / 4, nodes.length);
-
-        //         checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
-
-        //     }
-        // }
-    }
-
     draw(): void {
         this.render();
     }
@@ -705,7 +354,7 @@ export class GlobeTileProgram {
             label: `${this.label}`,
             colorAttachments: [
                 {
-                    clearValue: [0, 0, 0, 1.0],
+                    clearValue: this.tinyearth.bgcolor,
                     loadOp: loadOp,
                     storeOp: 'store',
                     view: this.canvasinfo.context.getCurrentTexture().createView()
@@ -743,19 +392,13 @@ export class GlobeTileProgram {
                 nodes = nodes.filter(node => node.tile && node.tile.ready);
                 nodes.sort((a, b) => a.key.z - b.key.z);
 
-                if (this.advance.renderMethod === RenderMethod.INSTANCE) {
-                    this.drawTileNodeInstance(nodes, provider.getOpacity(), provider.night);
-                } else if (this.advance.renderMethod === RenderMethod.DYNAMIC) {
-                    this.drawTileNodesDynamic(nodes, provider.opacity, provider.night);
-                } else {
-                    let i = 0;
-                    for (let node of nodes) {
-                        const descriptor = that.createRenderPassDescriptor(i === 0);
-                        const pass = encoder.beginRenderPass(descriptor);
-                        that.drawTileNode(pass, node, provider.getOpacity(), provider.night);
-                        pass.end();
-                        i++;
-                    }
+                let i = 0;
+                for (let node of nodes) {
+                    const descriptor = that.tinyearth.getRenderPassDescriptor(false);
+                    const pass = encoder.beginRenderPass(descriptor);
+                    that.drawTileNode(pass, node, provider.getOpacity(), provider.night);
+                    pass.end();
+                    i++;
                 }
             }
 

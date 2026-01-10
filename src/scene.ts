@@ -1,14 +1,17 @@
+import { makeShaderDataDefinitions, makeStructuredView, type ShaderDataDefinitions } from "webgpu-utils";
 import Camera from "./camera.js";
 import type { NumArr2 } from "./defines.js";
 import { TinyEarthEvent } from "./event.js";
 import Frustum, { buildFrustum } from "./frustum.js";
 import type { Layer } from "./layer.js";
-import { distanceToPlane, num_atan, num_tan, Plane, Point3D, Ray, rayCrossSpheriod, toDegrees } from "./math.js";
-import { MAT4, VEC3, VEC4, type mat4, type vec3 } from "./matrix.js";
+import { dfloat, dfmat4, dfvec2, dfvec3, dfvec4, distanceToPlane, num_atan, num_tan, Plane, Point3D, Ray, rayCrossSpheriod, toDegrees } from "./math.js";
+import { MAT4, VEC2, VEC3, VEC4, type mat4, type vec2, type vec3, type vec4 } from "./matrix.js";
 import SRS from "./proj.js";
 import Projection from "./projection.js";
 import { Sun } from "./sun.js";
 import type TinyEarth from "./tinyearth.js";
+import sceneSource from './shader/scene.module.wgsl';
+import { WGSLSource } from "./wgsl.js";
 
 export interface SceneOptions {
 
@@ -45,6 +48,14 @@ const defaultSceneOptions: Omit<SceneOptions, "viewport" | "tinyearth"> = {
     },
 }
 
+interface SceneWebGPUResources {
+    definitions?: ShaderDataDefinitions;
+    sceneUniform?: GPUBuffer;
+    sceneDFUniform?: GPUBuffer;
+    bindGroupLayout?: GPUBindGroupLayout;
+    bindGroup?: GPUBindGroup;
+}
+
 export default class Scene {
 
     #tinyearth?: TinyEarth | undefined;
@@ -59,6 +70,8 @@ export default class Scene {
 
     #logdepthC: number = 5.0;
     #strechDepthRange: NumArr2 = [0, 0]; //TODO
+
+    #webgpuResources: SceneWebGPUResources = {};
 
     constructor(options: SceneOptions) {
         this.#tinyearth = options.tinyearth;
@@ -149,6 +162,10 @@ export default class Scene {
         return this.#logdepthC;
     }
 
+    get webgpuResources(): SceneWebGPUResources {
+        return this.#webgpuResources;
+    }
+
     /**
      * 获取视口变换矩阵（包含Y轴反转）
     */
@@ -158,10 +175,10 @@ export default class Scene {
         const w2 = this.#viewWidth / 2;
         const h2 = this.#viewHeight / 2;
         const m = MAT4.fromValues(
-            w2,     0,      0,      0, //
-            0,      h2,     0,      0,
-            0,      0,      0.5,    0,
-            x + w2, y + h2, 0.5,    1
+            w2, 0, 0, 0, //
+            0, h2, 0, 0,
+            0, 0, 0.5, 0,
+            x + w2, y + h2, 0.5, 1
         );
         return m;
     }
@@ -172,10 +189,10 @@ export default class Scene {
         const w2 = this.#viewWidth / 2;
         const h2 = this.#viewHeight / 2;
         const m = MAT4.fromValues(
-            w2,         0,      0,    0,
-            0,          h2,     0,    0,
-            0,          0,      1,    0,
-            x + w2,     y + h2, 0,    1
+            w2, 0, 0, 0,
+            0, h2, 0, 0,
+            0, 0, 1, 0,
+            x + w2, y + h2, 0, 1
         );
         return m;
     }
@@ -307,6 +324,180 @@ export default class Scene {
         for (let layer of this.#layers) {
             layer.draw();
         }
+    }
+
+    getShaderDefinitions(): ShaderDataDefinitions {
+        if (!this.#webgpuResources.definitions) {
+            const source = new WGSLSource(sceneSource);
+            const code = source.resovleSource();
+            this.#webgpuResources.definitions = makeShaderDataDefinitions(code);
+        }
+        return this.#webgpuResources.definitions;
+    }
+
+    get bindGroupLayout(): GPUBindGroupLayout {
+
+        const { device } = this.#tinyearth!.gpuinfo!;
+
+        if (!this.#webgpuResources.bindGroupLayout) {
+            this.#webgpuResources.bindGroupLayout = device.createBindGroupLayout({
+                label: "scene",
+                entries: [
+                    {
+                        binding: 0,
+                        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                        buffer: { type: 'uniform' }
+                    },
+                    {
+                        binding: 1,
+                        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                        buffer: { type: 'uniform' }
+                    }
+                ]
+            });
+        }
+
+        return this.#webgpuResources.bindGroupLayout;
+    }
+
+    getBindGroup(): GPUBindGroup {
+
+        if (!this.#webgpuResources.bindGroup) {
+
+            const { device } = this.#tinyearth!.gpuinfo!;
+
+            this.refreshSceneUniform();
+
+            this.#webgpuResources.bindGroup = device.createBindGroup({
+                label: "scene",
+                layout: this.bindGroupLayout,
+                entries: [
+                    { binding: 0, resource: { buffer: this.#webgpuResources.sceneUniform! } },
+                    { binding: 1, resource: { buffer: this.#webgpuResources.sceneDFUniform! } }
+                ]
+            });
+        }
+
+        return this.#webgpuResources.bindGroup;
+
+    }
+
+    refreshSceneUniform() {
+
+        const camera = this.camera;
+        const projection = this.projection;
+
+        const cameraData = {
+            eye: camera.from,
+            center: camera.to,
+            up: camera.up,
+            viewmtx: camera.viewMatrix,
+            relviewmtx: camera.relViewMatrix,
+            height: camera.getHeightToSurface(),
+        }
+
+        const projectionData = {
+            near: projection.near,
+            far: projection.far,
+            projmtx: projection.perspectiveMatrixZO
+        }
+
+        const sunData = {
+            position: this.sun.position,
+            color: [1, 1, 1, 1]
+        }
+
+        const modelData = {
+            modelmtx: MAT4.create()
+        }
+
+        const viewportData = {
+            viewport: VEC2.fromValues(this.viewWidth, this.viewHeight),
+            viewportmtx: this.viewportMatrixZO
+        }
+
+        const depthData = {
+            logDepthC: this.getLogDepthC(),
+            neardepth: this.tinyearth!.nearDepth,
+            fardepth: this.tinyearth!.farDepth
+        }
+
+        const sceneData = {
+            camera: cameraData,
+            projection: projectionData,
+            sun: sunData,
+            model: modelData,
+            viewport: viewportData,
+            depth: depthData
+        }
+
+        const cameraDataDF = {
+            eye: dfvec4.toObject(dfvec4.create(camera.from)),
+            center: dfvec4.toObject(dfvec4.create(camera.to)),
+            up: dfvec4.toObject(dfvec4.create(camera.up)),
+            viewmtx: dfmat4.toObject(dfmat4.create(camera.viewMatrix)),
+            relviewmtx: dfmat4.toObject(dfmat4.create(camera.relViewMatrix)),
+            height: dfloat.toObject(dfloat.create(camera.getHeightToSurface())),
+        }
+
+        const projectionDataDF = {
+            near: dfloat.toObject(dfloat.create(projection.near)),
+            far: dfloat.toObject(dfloat.create(projection.far)),
+            projmtx: dfmat4.toObject(dfmat4.create(projection.perspectiveMatrixZO))
+        }
+
+        const sunDataDF = {
+            position: dfvec3.toObject(dfvec3.create(this.sun.position)),
+            color: [1, 1, 1, 1]
+        }
+
+        const modelDataDF = {
+            modelmtx: dfmat4.toObject(dfmat4.create(MAT4.create()))
+        }
+
+        const viewportDataDF = {
+            viewport: dfvec2.toObject(dfvec2.create(VEC2.fromValues(this.viewWidth, this.viewHeight))),
+            viewportmtx: dfmat4.toObject(dfmat4.create(this.viewportMatrixZO))
+        }
+
+        const depthDataDF = {
+            logDepthC: dfloat.toObject(dfloat.create((this.getLogDepthC()))),
+            neardepth: this.tinyearth!.nearDepth,
+            fardepth: this.tinyearth!.farDepth
+        }
+
+        const sceneDataDF = {
+            camera: cameraDataDF,
+            projection: projectionDataDF,
+            sun: sunDataDF,
+            model: modelDataDF,
+            viewport: viewportDataDF,
+            depth: depthDataDF
+        }
+
+        const definitions = this.getShaderDefinitions();
+
+        const sceneUniView = makeStructuredView(definitions.uniforms.scene!);
+        const sceneDFUniView = makeStructuredView(definitions.uniforms.sceneDF!);
+        if (!this.#webgpuResources.sceneUniform) {
+            this.#webgpuResources.sceneUniform = this.tinyearth!.gpuinfo!.device.createBuffer({
+                label: `sceneUniform`,
+                size: sceneUniView.arrayBuffer.byteLength,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            });
+        }
+        sceneUniView.set(sceneData);
+        this.tinyearth!.gpuinfo!.device.queue.writeBuffer(this.#webgpuResources.sceneUniform, 0, sceneUniView.arrayBuffer);
+
+        if (!this.#webgpuResources.sceneDFUniform) {
+            this.#webgpuResources.sceneDFUniform = this.tinyearth!.gpuinfo!.device.createBuffer({
+                label: `sceneDFUniform`,
+                size: sceneDFUniView.arrayBuffer.byteLength,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            });
+        }
+        sceneDFUniView.set(sceneDataDF);
+        this.tinyearth!.gpuinfo!.device.queue.writeBuffer(this.#webgpuResources.sceneDFUniform, 0, sceneDFUniView.arrayBuffer);
     }
 
 };

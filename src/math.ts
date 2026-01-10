@@ -459,6 +459,10 @@ export namespace dfloat {
     export function low(d: DFloat): number {
         return d[1];
     }
+
+    export function toObject(d: DFloat): { high: number, low: number } {
+        return { high: dfloat.high(d), low: dfloat.low(d) };
+    }
 }
 
 export namespace dfvec2 {
@@ -488,6 +492,10 @@ export namespace dfvec2 {
 
     export function low(d: DFvec2): vec2 {
         return d[1];
+    }
+
+    export function toObject(d: DFvec2): { high: vec2, low: vec2 } {
+        return { high: dfvec2.high(d), low: dfvec2.low(d) };
     }
 }
 
@@ -521,6 +529,10 @@ export namespace dfvec3 {
 
     export function low(d: DFvec3): vec3 {
         return d[1];
+    }
+
+    export function toObject(d: DFvec3): { high: vec3, low: vec3 } {
+        return { high: dfvec3.high(d), low: dfvec3.low(d) };
     }
 }
 
@@ -559,6 +571,10 @@ export namespace dfvec4 {
     export function low(d: DFvec4): vec4 {
         return d[1];
     }
+
+    export function toObject(d: DFvec4): { high: vec4, low: vec4 } {
+        return { high: dfvec4.high(d), low: dfvec4.low(d) };
+    }
 }
 
 export namespace dfmat4 {
@@ -581,5 +597,9 @@ export namespace dfmat4 {
 
     export function low(d: DFmat4): mat4 {
         return d[1];
+    }
+
+    export function toObject(d: DFmat4): { high: mat4, low: mat4 } {
+        return { high: dfmat4.high(d), low: dfmat4.low(d) };
     }
 }

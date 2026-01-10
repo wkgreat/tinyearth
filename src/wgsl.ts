@@ -54,6 +54,33 @@ export class WGSLSource {
         return tree;
     }
 
+    #buildIncludeTreeRec(file: string, source: string, tree: { [key: string]: string[] }) {
+
+        if (!(file in tree)) {
+            tree[file] = [];
+        }
+
+        for (const match of source.matchAll(this.#regex)) {
+
+            const matchFileName = match[1];
+
+            if (!matchFileName) {
+                console.error(`matchFileName in null, file: ${file}`);
+            } else {
+
+                tree[file]!.push(matchFileName);
+
+                const matchSource = RAW_WGSL_CACHE[matchFileName];
+
+                if (!matchSource) {
+                    console.error(`matchSource in null, file: ${file}, ${matchFileName}`);
+                } else {
+                    this.#buildIncludeTreeRec(matchFileName, matchSource, tree);
+                }
+            }
+        }
+    }
+
     topologySort(tree: { [key: string]: string[] }): string[] {
 
         let canrm = true;
@@ -88,33 +115,6 @@ export class WGSLSource {
         includeList = includeList.filter(f => f !== "root");
 
         return includeList;
-    }
-
-    #buildIncludeTreeRec(file: string, source: string, tree: { [key: string]: string[] }) {
-
-        if (!(file in tree)) {
-            tree[file] = [];
-        }
-
-        for (const match of source.matchAll(this.#regex)) {
-
-            const matchFileName = match[1];
-
-            if (!matchFileName) {
-                console.error(`matchFileName in null, file: ${file}`);
-            } else {
-
-                tree[file]!.push(matchFileName);
-
-                const matchSource = RAW_WGSL_CACHE[matchFileName];
-
-                if (!matchSource) {
-                    console.error(`matchSource in null, file: ${file}`);
-                } else {
-                    this.#buildIncludeTreeRec(matchFileName, matchSource, tree);
-                }
-            }
-        }
     }
 
     logSource(): void {
