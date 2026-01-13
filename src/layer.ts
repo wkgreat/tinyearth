@@ -191,8 +191,6 @@ export class PointLayer extends GeometryLayer {
             ]
         });
 
-        const { depthFunc } = this.tinyearth.getDepthInfo();
-
         const pipeline = device.createRenderPipeline({
             label: "PointLayer",
             layout: pipelineLayout,
@@ -354,9 +352,11 @@ export class PointLayer extends GeometryLayer {
             const clampToGroundUniformView = makeStructuredView(shaderDef.uniforms.clampToGround!);
 
             clampToGroundUniformView.set({
-                inEnabled: this.clampToGround ? 1 : 0,
+                isEnabled: this.clampToGround ? 1 : 0,
                 offset: this.clampToGroundOffset
             });
+
+            console.log(this.clampToGroundOffset);
 
             this.webgpuProxy.clampToGroundUniform = device.createBuffer({
                 label: "PointLayer clampToGroundUniform",

@@ -7,14 +7,17 @@ struct Camera {
     center: vec4f,
     up: vec4f,
     viewmtx: mat4x4f,
+    viewmtrxInv: mat4x4f,
     relviewmtx: mat4x4f,
+    relviewmtxInv: mat4x4f,
     height: f32
 };
 
 struct Projection {
     near: f32,
     far: f32,
-    projmtx: mat4x4f
+    projmtx: mat4x4f,
+    projmtxInv: mat4x4f
 };
 
 struct Sun {
@@ -51,14 +54,17 @@ struct CameraDF {
     center: dfvec4,
     up: dfvec4,
     viewmtx: dfmat4,
+    viewmtxInv: dfmat4,
     relviewmtx: dfmat4,
+    relviewmtxInv: dfmat4,
     height: dfloat
 };
 
 struct ProjectionDF {
     near: dfloat,
     far: dfloat,
-    projmtx: dfmat4
+    projmtx: dfmat4,
+    projmtxInv: dfmat4
 };
 
 struct SunDF {
@@ -90,11 +96,19 @@ struct SceneDF {
     depth: DepthDF
 };
 
-fn relative(pos: dfvec3) -> dfvec3 {
+fn relative(pos: vec3f) -> vec3f {
+    return pos - scene.camera.eye.xyz;
+}
+
+fn absolute(pos: vec3f) -> vec3f {
+    return pos + scene.camera.eye.xyz;
+}
+
+fn relativeDF(pos: dfvec3) -> dfvec3 {
     return dfvec3_sub(pos, dfvec4_force3(sceneDF.camera.eye));
 }
 
-fn absolute(pos: dfvec3) -> dfvec3 {
+fn absoluteDF(pos: dfvec3) -> dfvec3 {
     return dfvec3_add(pos, dfvec4_force3(sceneDF.camera.eye));
 }
 

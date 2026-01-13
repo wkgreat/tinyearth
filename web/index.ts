@@ -150,7 +150,7 @@ function main() {
                     strokeWidth: 2
                 }),
                 clampToGround: true,
-                clampToGroundOffset: 0
+                clampToGroundOffset: 10
             });
 
             tinyearth.scene!.addLayer(pointLayer);

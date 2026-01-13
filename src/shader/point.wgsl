@@ -47,7 +47,7 @@ struct ClampToGround {
         worldpointpos = clamp_to_ground_df(worldpointpos, SPHERIOD_WGS84_df, df(clampToGround.offset));
     }
 
-    let relworldpointpos = dfv3t4(relative(worldpointpos), df(1.0));
+    let relworldpointpos = dfv3t4(relativeDF(worldpointpos), df(1.0));
     var relviewpointpos = dfvec4_mul(sceneDF.camera.relviewmtx, relworldpointpos);
     relviewpointpos = dfvec4_normw(relviewpointpos);
     let ndcpointpos: vec4f = dfvec4_out(dfvec4_normw(dfvec4_mul(sceneDF.projection.projmtx, relviewpointpos)));
@@ -92,8 +92,22 @@ struct FSOutput {
     let stroke = isStroke(input.size, input.strokewidth, radius);
     let color = mix(input.color, input.strokecolor, stroke);
 
-    //depth
-    let viewz = dfloat(input.relviewz_high, input.relviewz_low);
+    var viewz: dfloat;
+
+    if(clampToGround.isEnabled > 0u) {
+
+        var worldpos = dfvec4_mul(dfmat4_mul(sceneDF.camera.relviewmtxInv, sceneDF.projection.projmtxInv), dfv4(input.quadpos));
+        worldpos = dfvec4_normw(worldpos);
+        var worldpos3d = absoluteDF(dfvec4_force3(worldpos));
+        worldpos3d = clamp_to_ground_df(worldpos3d, SPHERIOD_WGS84_df, df(clampToGround.offset));
+        worldpos3d = relativeDF(worldpos3d);
+        var viewpos = dfvec4_mul(sceneDF.camera.relviewmtx, dfv3t4(worldpos3d, df(1.0)));
+        viewpos = dfvec4_normw(viewpos);
+        viewz = dfvec4_z(viewpos);
+
+    } else {
+        viewz = dfloat(input.relviewz_high, input.relviewz_low);
+    }
     //TODO check if log depth
     let depth = dfloat_out(frag_depth_log_df(sceneDF.depth.logDepthC, sceneDF.projection.near, sceneDF.projection.far, viewz));
     

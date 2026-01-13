@@ -49,7 +49,7 @@ class Camera {
         return this.#viewMtx;
     }
 
-    get ViewMatrixInv() {
+    get viewMatrixInv() {
         return this.#invViewMtx;
     }
 

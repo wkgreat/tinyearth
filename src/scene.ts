@@ -392,14 +392,17 @@ export default class Scene {
             center: camera.to,
             up: camera.up,
             viewmtx: camera.viewMatrix,
+            viewmtrxInv: camera.viewMatrixInv,
             relviewmtx: camera.relViewMatrix,
+            relviewmtxInv: camera.relViewMatrixInv,
             height: camera.getHeightToSurface(),
         }
 
         const projectionData = {
             near: projection.near,
             far: projection.far,
-            projmtx: projection.perspectiveMatrixZO
+            projmtx: projection.perspectiveMatrixZO,
+            projmtxInv: MAT4.invert(projection.perspectiveMatrixZO)
         }
 
         const sunData = {
@@ -436,14 +439,17 @@ export default class Scene {
             center: dfvec4.toObject(dfvec4.create(camera.to)),
             up: dfvec4.toObject(dfvec4.create(camera.up)),
             viewmtx: dfmat4.toObject(dfmat4.create(camera.viewMatrix)),
+            viewmtxInv: dfmat4.toObject(dfmat4.create(camera.viewMatrixInv)),
             relviewmtx: dfmat4.toObject(dfmat4.create(camera.relViewMatrix)),
+            relviewmtxInv: dfmat4.toObject(dfmat4.create(camera.relViewMatrixInv)),
             height: dfloat.toObject(dfloat.create(camera.getHeightToSurface())),
         }
 
         const projectionDataDF = {
             near: dfloat.toObject(dfloat.create(projection.near)),
             far: dfloat.toObject(dfloat.create(projection.far)),
-            projmtx: dfmat4.toObject(dfmat4.create(projection.perspectiveMatrixZO))
+            projmtx: dfmat4.toObject(dfmat4.create(projection.perspectiveMatrixZO)),
+            projmtxInv: dfmat4.toObject(dfmat4.create(MAT4.invert(projection.perspectiveMatrixZO)!))
         }
 
         const sunDataDF = {
