@@ -277,6 +277,32 @@ export default class TinyEarth {
         return this.createRenderPassDescriptor(first);
     }
 
+    getDepthInfo(): { depthFunc: GPUCompareFunction, clearDepth: number } {
+        let depthFunc: GPUCompareFunction = 'less';
+        let clearDepth = 1.0;
+
+        if (this.advance.reverseZ) {
+            depthFunc = 'greater-equal';
+            clearDepth = 0.0;
+        } else {
+            depthFunc = 'less-equal';
+            clearDepth = 1.0;
+        }
+
+        return {
+            depthFunc,
+            clearDepth
+        }
+    }
+
+    getDepthStencilState(): GPUDepthStencilState {
+        return {
+            format: 'depth24plus',
+            depthWriteEnabled: true,
+            depthCompare: this.getDepthInfo().depthFunc
+        };
+    }
+
     get glErrorCheck() {
         return this.#advance.glErrorCheck ?? false;
     }
@@ -434,7 +460,7 @@ export default class TinyEarth {
                     this.globeTilePorgram.render();
                 }
 
-                // this.scene.drawLayers();
+                this.scene.drawLayers();
             }
 
             this.eventBus.fire(TinyEarthEvent.TINYEARTH_FRAME, {

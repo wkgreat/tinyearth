@@ -153,11 +153,7 @@ export class SkyBoxProgram {
                 cullMode: 'back',
                 frontFace: 'ccw'
             },
-            depthStencil: {
-                format: 'depth24plus',
-                depthWriteEnabled: true,
-                depthCompare: depthFunc
-            }
+            depthStencil: this.tinyearth.getDepthStencilState()
         });
 
         const sampler = device.createSampler({

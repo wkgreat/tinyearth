@@ -1,3 +1,5 @@
+import type { FullArraySpec } from "webgpu-utils";
+
 export interface createGPUInfoOptions {}
 
 export interface GPUInfo {

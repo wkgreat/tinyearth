@@ -5,6 +5,10 @@ import type { Entity, GeometryEntity, LineStringEntity, PointEntity } from "./en
 import SRS from "./proj";
 import type { GeometryStyle, LineStringStyle, PointStyle, Style, StyleBoolMapFunction, StyleColorMapFunction, StyleNumberMapFunction } from "./style";
 import type TinyEarth from "./tinyearth";
+import { WGSLSource } from "./wgsl";
+import pointLayerSource from './shader/point.wgsl';
+import { createBuffersAndAttributesFromArrays, makeShaderDataDefinitions, makeStructuredView, type BuffersAndAttributes, type ShaderDataDefinitions, type TypedArray } from "webgpu-utils";
+import { dfloat, dfvec3 } from "./math";
 
 export interface LayerOptions {
     tinyearth: TinyEarth;
@@ -140,138 +144,262 @@ export class PointLayer extends GeometryLayer {
     override entities: PointEntity[];
     override style: PointStyle;
 
+    webgpuProxy: {
+        module?: GPUShaderModule;
+        pipeline?: GPURenderPipeline;
+        shaderDefinition?: ShaderDataDefinitions;
+        vertexBuffers?: {
+            quad?: BuffersAndAttributes,
+            pointpos?: BuffersAndAttributes,
+            pointattr?: BuffersAndAttributes
+        },
+        clampToGroundUniform?: GPUBuffer,
+        bindGroupLayout?: GPUBindGroupLayout
+    } = {}
+
     constructor(options: PointLayerOptions) {
         super(options);
         this.entities = options.entities;
         this.style = options.style;
-    }
 
-    // override createProgram(): PointProgram {
-    //     const program = new PointProgram({
-    //         tinyearth: this.tinyearth, advance: {
-    //             logDepth: this.tinyearth.advance.glLogDepth ?? false
-    //         }
-    //     });
-    //     program.setFirst(0);
-    //     program.setCount(this.entities.length);
-    //     return program;
-    // }
+        this.createBindGroupLayout();
 
-    override createAttributes() {
-        // if (this.program === null || this.program.program === null) {
-        //     return;
-        // }
+        this.fillVertexBuffer();
 
-        // //position
-        // // this.attributes["position"] = new GLAttribute({
-        // //     gl: this.program.gl,
-        // //     name: "a_position",
-        // //     elemSize: 3
-        // // });
-        // this.attributes["position"] = new GLAttribute({
-        //     gl: this.program.gl,
-        //     name: "a_position",
-        //     elemSize: 3,
-        //     isDFloat: true
-        // });
+        this.createPipeline();
 
-        // //size
-        // this.attributes["size"] = new GLAttribute({
-        //     gl: this.program.gl,
-        //     name: "a_size",
-        //     elemSize: 1
-        // });
-
-        // //color
-        // this.attributes["color"] = new GLAttribute({
-        //     gl: this.program.gl,
-        //     name: "a_color",
-        //     elemSize: 4
-        // });
-
-        // //stroke
-        // this.attributes["stroke"] = new GLAttribute({
-        //     gl: this.program.gl,
-        //     name: "a_stroke",
-        //     elemSize: 1
-        // });
-
-        // //strokeColor
-        // this.attributes["strokeColor"] = new GLAttribute({
-        //     gl: this.program.gl,
-        //     name: "a_strokecolor",
-        //     elemSize: 4
-        // });
-
-        // //strokeWidth
-        // this.attributes["strokeWidth"] = new GLAttribute({
-        //     gl: this.program.gl,
-        //     name: "a_strokewidth",
-        //     elemSize: 1
-        // });
+        this.setStaticUniform();
 
     }
-    override fillAttributes(): void {
 
-        // if (this.program === null) {
-        //     return;
-        // }
+    createPipeline() {
 
+        const { device } = this.tinyearth.gpuinfo!;
+        const source = new WGSLSource(pointLayerSource);
+        const code = source.resovleSource();
+        const module = device.createShaderModule({
+            label: "PointLayer",
+            code
+        });
+
+        const shaderDefinition = makeShaderDataDefinitions(code);
+
+        const pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [
+                this.tinyearth.scene!.bindGroupLayout,
+                this.webgpuProxy.bindGroupLayout
+            ]
+        });
+
+        const { depthFunc } = this.tinyearth.getDepthInfo();
+
+        const pipeline = device.createRenderPipeline({
+            label: "PointLayer",
+            layout: pipelineLayout,
+            vertex: {
+                module,
+                buffers: [
+                    ...this.webgpuProxy!.vertexBuffers!.quad!.bufferLayouts!,
+                    ...this.webgpuProxy!.vertexBuffers!.pointpos!.bufferLayouts!,
+                    ...this.webgpuProxy!.vertexBuffers!.pointattr!.bufferLayouts!
+                ]
+            },
+            fragment: {
+                module,
+                targets: [
+                    {
+                        format: this.tinyearth.canvasinfo!.context.getConfiguration()!.format
+                    }
+                ]
+            },
+            primitive: {
+                topology: 'triangle-strip',
+                cullMode: 'none'
+            },
+            depthStencil: this.tinyearth.getDepthStencilState()
+        });
+
+        this.webgpuProxy.module = module;
+        this.webgpuProxy.pipeline = pipeline;
+        this.webgpuProxy.shaderDefinition = shaderDefinition;
+    }
+
+    override createAttributes() {}
+    override fillAttributes(): void {}
+    override refreshAttributes(): void {}
+    override activateAttributes(): void {}
+    override createTextures(): void {}
+    override fillTextures(): void {}
+    override refreshTextures(): void {}
+    override activateTextures(): void {}
+    override refreshUniforms(): void {}
+    override beforeDraw(): void {}
+    override afterDraw(): void {}
+
+    createBindGroupLayout() {
+
+        const device = this.tinyearth.gpuinfo!.device!;
+
+        const layout = device.createBindGroupLayout({
+            label: "PointLayer",
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    buffer: { type: 'uniform' }
+                }
+            ]
+        });
+
+        this.webgpuProxy.bindGroupLayout = layout;
+
+    }
+
+    fillVertexBuffer() {
+        if (!this.webgpuProxy) {
+            this.webgpuProxy = {};
+        }
+
+        const device = this.tinyearth.gpuinfo!.device!;
         const count = this.entities.length;
 
-        const positionArray = this.entities.flatMap(e => {
-            const p = e.point.srs !== SRS.ECEF ? e.point.transform(SRS.ECEF, false) : e.point;
-            return [p.x, p.y, p.z];
+        if (!this.webgpuProxy.vertexBuffers) {
+            this.webgpuProxy.vertexBuffers = {}
+        }
+
+        const vertexBuffers = this.webgpuProxy.vertexBuffers;
+
+        if (!vertexBuffers.quad) {
+            const quad = [
+                -1, -1, 0, 0,
+                1, -1, 1, 0,
+                -1, 1, 0, 1,
+                1, 1, 1, 1
+            ];
+            const quadArray = new Float32Array(quad);
+
+            vertexBuffers.quad = createBuffersAndAttributesFromArrays(device, {
+                quadpos: { data: quadArray, numComponents: 2 },
+                quaduv: { data: quadArray, numComponents: 2 }
+            }, {
+                interleave: true,
+                stepMode: 'vertex',
+                shaderLocation: 0,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            });
+
+            device.queue.writeBuffer(this.webgpuProxy.vertexBuffers!.quad!.buffers[0]!, 0, quadArray.buffer);
+        }
+
+        if (!vertexBuffers.pointpos) {
+            const positions = this.entities.map(e => {
+                const p = e.point.srs !== SRS.ECEF ? e.point.transform(SRS.ECEF, false) : e.point;
+                return [
+                    p.x, p.y, p.z
+                ];
+            });
+            const positionsHigh = positions.map(p => {
+                const dp = dfvec3.create(p);
+                return [dp[0][0], dp[0][1], dp[0][2]]
+            });
+
+            const positionsLow = positions.map(p => {
+                const dp = dfvec3.create(p);
+                return [dp[1][0], dp[1][1], dp[1][2]]
+            })
+
+            vertexBuffers.pointpos = createBuffersAndAttributesFromArrays(device, {
+                pointpos: { data: positions.flatMap(c => c), numComponents: 3 },
+                pointpos_high: { data: positionsHigh.flatMap(c => c), numComponents: 3 },
+                pointpos_low: { data: positionsLow.flatMap(c => c), numComponents: 3 }
+            }, {
+                interleave: true,
+                stepMode: 'instance',
+                shaderLocation: 2
+            });
+
+        }
+
+        if (!vertexBuffers.pointattr) {
+            const sizes = this.getNumberArray(this.style.size, count);
+            const colors = this.getColorArray(this.style.color, count).flatMap(c => c);
+            const strokes = this.getBoolArray(this.style.stoke, count);
+            const strokeColors = this.getColorArray(this.style.strokeColor, count).flatMap(c => c);
+            const strokeWidths = this.getNumberArray(this.style.strokeWidth, count);
+
+            vertexBuffers.pointattr = createBuffersAndAttributesFromArrays(device, {
+                color: { data: colors, numComponents: 4 },
+                size: { data: sizes, numComponents: 1 },
+                stroke: { data: new Uint32Array(strokes), numComponents: 1 },
+                strokewidth: { data: strokeWidths, numComponents: 1 },
+                strokecolor: { data: strokeColors, numComponents: 4 }
+            }, {
+                stepMode: 'instance',
+                shaderLocation: 5
+            });
+        }
+    }
+
+    setStaticUniform() {
+
+        if (!this.webgpuProxy) {
+            return;
+        }
+
+        if (!this.webgpuProxy.clampToGroundUniform) {
+            const device = this.tinyearth.gpuinfo!.device!;
+
+            const shaderDef = this.webgpuProxy?.shaderDefinition!;
+
+            const clampToGroundUniformView = makeStructuredView(shaderDef.uniforms.clampToGround!);
+
+            clampToGroundUniformView.set({
+                inEnabled: this.clampToGround ? 1 : 0,
+                offset: this.clampToGroundOffset
+            });
+
+            this.webgpuProxy.clampToGroundUniform = device.createBuffer({
+                label: "PointLayer clampToGroundUniform",
+                size: clampToGroundUniformView.arrayBuffer.byteLength,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            });
+
+            device.queue.writeBuffer(this.webgpuProxy.clampToGroundUniform, 0, clampToGroundUniformView.arrayBuffer);
+        }
+
+    }
+
+
+    override draw() {
+
+        const device = this.tinyearth.gpuinfo!.device;
+
+        const sceneBindGroup = this.tinyearth.scene!.getBindGroup();
+        const layerBindGroup = device.createBindGroup({
+            layout: this.webgpuProxy.bindGroupLayout!,
+            entries: [
+                { binding: 0, resource: { buffer: this.webgpuProxy.clampToGroundUniform! } }
+            ]
         });
-        const sizeArray = this.getNumberArray(this.style.size, count);
-        const colorArray = this.getColorArray(this.style.color, count).flatMap(c => c);
-        const strokeArray = this.getBoolArray(this.style.stoke, count);
-        const strokeColorArray = this.getColorArray(this.style.strokeColor, count).flatMap(c => c);
-        const strokeWidthArray = this.getNumberArray(this.style.strokeWidth, count);
 
-        // this.attributes["position"]?.fillData(positionArray);
-        // this.attributes["color"]?.fillData(colorArray);
-        // this.attributes["size"]?.fillData(sizeArray);
-        // this.attributes["stroke"]?.fillData(strokeArray);
-        // this.attributes["strokeColor"]?.fillData(strokeColorArray);
-        // this.attributes["strokeWidth"]?.fillData(strokeWidthArray);
+        const encode = device.createCommandEncoder();
 
-        // (this.program as PointProgram).setFirst(0);
-        // (this.program as PointProgram).setCount(this.entities.length);
+        const pass = encode.beginRenderPass(this.tinyearth.getRenderPassDescriptor(false));
+
+        pass.setPipeline(this.webgpuProxy.pipeline!);
+        pass.setBindGroup(0, sceneBindGroup);
+        pass.setBindGroup(1, layerBindGroup);
+        pass.setVertexBuffer(0, this.webgpuProxy.vertexBuffers!.quad!.buffers[0]);
+        pass.setVertexBuffer(1, this.webgpuProxy.vertexBuffers!.pointpos!.buffers[0]);
+        pass.setVertexBuffer(2, this.webgpuProxy.vertexBuffers?.pointattr!.buffers[0]);
+        pass.draw(4, this.entities.length);
+        pass.end();
+
+        const commandBuffer = encode.finish();
+
+        device.queue.submit([commandBuffer]);
 
     }
-    override refreshAttributes(): void {
-        return;
-    }
-    override activateAttributes(): void {
-        // if (this.program && this.program.program) {
-        //     for (const k in this.attributes) {
-        //         this.attributes[k]?.activate(this.program);
-        //     }
-        // }
-    }
-    override createTextures(): void {
-        return;
-    }
-    override fillTextures(): void {
-        return;
-    }
-    override refreshTextures(): void {
-        return;
-    }
-    override activateTextures(): void {
-        return;
-    }
-    override refreshUniforms(): void {
-        // if (this.program && this.program.program) {
-        //     this.program.refreshAllUniforms();
-        //     this.program.setClampToGround(this.clampToGround, this.clampToGroundOffset);
-        // }
-    }
-
-    override beforeDraw(): void {}
-
-    override afterDraw(): void {}
 
 }
 

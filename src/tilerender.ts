@@ -52,8 +52,6 @@ export class GlobeTileProgram {
     shaderDefinitions: ShaderDataDefinitions;
     tileUniform: GPUBuffer | null = null;
     materialUniform: GPUBuffer | null = null;
-    depthFunc: GPUCompareFunction = "less";
-    cleardepth: number = 1.0;
 
     constructor(options: GlobeTileProgramOptions) {
         this.tinyearth = options.tinyearth;
@@ -63,14 +61,6 @@ export class GlobeTileProgram {
 
         this.advance.depthTest = depthTest;
         this.advance.wireframe = wireframe;
-
-        if (this.tinyearth.advance.reverseZ) {
-            this.depthFunc = 'greater-equal';
-            this.cleardepth = 0.0;
-        } else {
-            this.depthFunc = 'less-equal';
-            this.cleardepth = 1.0;
-        }
 
         this.gpuinfo = options.gpuinfo;
         this.canvasinfo = options.canvasinfo;
@@ -122,11 +112,7 @@ export class GlobeTileProgram {
                 cullMode: 'back',
                 frontFace: 'ccw'
             },
-            depthStencil: {
-                format: 'depth24plus',
-                depthWriteEnabled: true,
-                depthCompare: this.depthFunc
-            }
+            depthStencil: this.tinyearth.getDepthStencilState()
         });
         this.sampler = device.createSampler({
             label: this.label,
@@ -341,33 +327,6 @@ export class GlobeTileProgram {
 
     draw(): void {
         this.render();
-    }
-
-    createRenderPassDescriptor(firstpass: boolean = true) {
-        let loadOp: GPULoadOp = 'clear';
-        if (firstpass) {
-            loadOp = 'clear';
-        } else {
-            loadOp = 'load';
-        }
-        const passDescriptor: GPURenderPassDescriptor = {
-            label: `${this.label}`,
-            colorAttachments: [
-                {
-                    clearValue: this.tinyearth.bgcolor,
-                    loadOp: loadOp,
-                    storeOp: 'store',
-                    view: this.canvasinfo.context.getCurrentTexture().createView()
-                }
-            ],
-            depthStencilAttachment: {
-                view: this.tinyearth.frameBuffer!.depthTexture.createView(),
-                depthClearValue: this.cleardepth,
-                depthLoadOp: loadOp,  // 清空
-                depthStoreOp: "store",
-            }
-        }
-        return passDescriptor;
     }
 
     render() {

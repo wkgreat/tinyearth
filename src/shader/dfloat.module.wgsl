@@ -186,11 +186,18 @@ fn dfvec2_add(a: dfvec2, b: dfvec2) -> dfvec2 {
     result.low  = a.low + b.low + e;
     return result;
 }
+
 fn dfvec2_sub(a: dfvec2, b: dfvec2) -> dfvec2 {
     var result: dfvec2 = dfv2(vec2f(0,0));
     result.high = a.high - b.high;
     result.low  = a.low - b.low;
     return result;
+}
+
+fn dfvec2_mul(a: dfvec2, b: dfvec2) -> dfvec2 {
+    let high = a.high * b.high;
+    let low = a.high * b.low + a.low * b.high + a.low * b.low;
+    return dfvec2(high, low);
 }
 
 ////dfvec3
@@ -327,6 +334,13 @@ fn dfv4(v: vec4<f32>) -> dfvec4 {
     return dfvec4(
         vec4(v0.high,v1.high,v2.high,v3.high),
         vec4(v0.low,v1.low,v2.low,v3.low)
+    );
+}
+
+fn dfvec4_d2(v: dfvec4) -> dfvec2 {
+    return dfvec2(
+        v.high.xy,
+        v.low.xy
     );
 }
 

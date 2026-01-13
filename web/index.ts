@@ -144,13 +144,13 @@ function main() {
                         w = 1 - w / 100;
                         return leftColor.mix(rightColor, w);
                     },
-                    size: 10,
+                    size: 20,
                     stoke: true,
                     strokeColor: new Color(1.0, 0.0, 0.0, 1.0),
                     strokeWidth: 2
                 }),
                 clampToGround: true,
-                clampToGroundOffset: 10
+                clampToGroundOffset: 0
             });
 
             tinyearth.scene!.addLayer(pointLayer);
