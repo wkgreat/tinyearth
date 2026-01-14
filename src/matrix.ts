@@ -397,7 +397,7 @@ export namespace MAT4 {
         return glmat4.lookAt(glmat4.create(), eye, center, up);
     }
     //perspective
-    export function perspective_(out: mat4, fovy: number, aspect: number, near: number, far: number, reverseZ: boolean = false): mat4 {
+    export function perspective_(out: mat4, fovy: number, aspect: number, near: number, far: number, reverseZ: boolean = false, zo: boolean = false): mat4 {
         if (reverseZ) {
             const f = 1 / Math.tan(fovy / 2);
             out = MAT4.set(out,
@@ -409,14 +409,17 @@ export namespace MAT4 {
             return out;
 
         } else {
-            return glmat4.perspective(out, fovy, aspect, near, far);
+            if (zo) {
+                return glmat4.perspectiveZO(out, fovy, aspect, near, far);
+            } else {
+                return glmat4.perspective(out, fovy, aspect, near, far);
+            }
+
         }
-
-
-
     }
-    export function perspective(fovy: number, aspect: number, near: number, far: number, reverseZ: boolean = false): mat4 {
-        return perspective_(MAT4.create(), fovy, aspect, near, far, reverseZ);
+
+    export function perspective(fovy: number, aspect: number, near: number, far: number, reverseZ: boolean = false, zo: boolean = false): mat4 {
+        return perspective_(MAT4.create(), fovy, aspect, near, far, reverseZ, zo);
     }
 
     //rotateX

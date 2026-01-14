@@ -20,7 +20,7 @@ export default class CameraHelper extends BaseHelper {
 
     constructor(options: CameraHelperOptions) {
         super(options);
-        this.#camera = options.camera ?? this.tinyearth.scene.camera;
+        this.#camera = options.camera ?? this.tinyearth.scene!.camera;
     }
 
     createElement(): HTMLDivElement | null {

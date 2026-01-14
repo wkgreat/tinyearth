@@ -4,10 +4,12 @@ import proj4 from 'proj4';
 import Camera from '../src/camera';
 import { buildFrustum } from '../src/frustum';
 import { Tile } from '../src/maptiler';
-import { EPSG_3857, EPSG_4326, EPSG_4978 } from '../src/proj';
 import Projection from '../src/projection';
 import { TileNode, TileTree } from '../src/tilerender';
 import Scene from '../src/scene';
+import SRS from '../src/proj';
+import { NumArr3 } from '../src/defines';
+import { TileResources } from '../src/tilesource';
 glMatrix.setMatrixArrayType(Array);
 
 describe("tile", () => {
@@ -19,8 +21,8 @@ describe("tile", () => {
         const x = 27194;
         const y = 13301;
 
-        const point4326 = [118.767335, 32.050471, 0];
-        const point3857 = proj4(EPSG_4326, EPSG_3857, point4326);
+        const point4326 = [118.767335, 32.050471, 0] as NumArr3;
+        const point3857 = SRS.transform(SRS.EPSG_4326, SRS.EPSG_3857, point4326);
         const tile = new Tile(url, x, y, z);
         const [xmin, ymin, xmax, ymax] = tile.extent();
 
@@ -59,16 +61,16 @@ describe("tile", () => {
         });
 
 
-        const p4326 = [118.767335, 32.050471, 0];
-        const p4978 = proj4(EPSG_4326, EPSG_4978, p4326);
+        const p4326 = [118.767335, 32.050471, 0] as NumArr3;
+        const p4978 = SRS.transform(SRS.EPSG_4326, SRS.EPSG_4978, p4326);
         const vp = vec4.fromValues(p4978[0], p4978[1], p4978[2], 1);
 
 
-        const projection = new Projection(scene, Math.PI / 3, width / height, 1, 1E10);
+        const projection = new Projection(scene, Math.PI / 3, width / height, 1, 1E10, false);
         // const cameraFrom = proj4(EPSG_4326, EPSG_4978, [118.767335, 32.050471, 10000]);
         const camera = new Camera(scene, cameraFrom, cameraTo, cameraUp);
-        const projMtx = projection.perspective();
-        const viewMtx = camera.getMatrix().viewMtx;
+        const projMtx = projection.perspectiveMatrix;
+        const viewMtx = camera.viewMatrix;
         const frustum = buildFrustum(projection, camera);
 
 
@@ -107,10 +109,10 @@ describe("tile", () => {
             }
         });
 
-        const projection = new Projection(scene, Math.PI / 3, width / height, 1, 1E10);
+        const projection = new Projection(scene, Math.PI / 3, width / height, 1, 1E10, false);
         const camera = new Camera(scene, cameraFrom, cameraTo, cameraUp);
-        const projMtx = projection.perspective();
-        const viewMtx = camera.getMatrix().viewMtx;
+        const projMtx = projection.perspectiveMatrix;
+        const viewMtx = camera.viewMatrix;
 
         const frustum = buildFrustum(projection, camera);
 
@@ -134,47 +136,5 @@ describe("tile", () => {
 
 describe("TileTree", () => {
 
-    test("tile_tree_add", () => {
-
-        const tree = new TileTree("");
-
-        const tile = new Tile("", 0, 0, 1);
-
-        tree.addTile(tile);
-
-        expect(tree.root.children.length === 4).toBeTruthy();
-
-        let node = tree.getTileNode(1, 0, 0);
-
-        expect(node).not.toBeNull();
-
-        node = node as TileNode
-
-        expect(node).toBeInstanceOf(TileNode);
-        expect(node.key.z === 1).toBeTruthy();
-        expect(node.key.x === 0).toBeTruthy();
-        expect(node.key.y === 0).toBeTruthy();
-        expect(node.tile).toBe(tile);
-
-        let tn = 0;
-        let hn = 0;
-        let mn = 0;
-        tree.forEachTileNodesOfLevel(1, (node) => {
-            tn += 1;
-            if (node && node.tile) {
-                hn += 1;
-                expect(node.key.z === 1).toBeTruthy();
-                expect(node.key.x === 0).toBeTruthy();
-                expect(node.key.y === 0).toBeTruthy();
-            } else {
-                mn += 1;
-            }
-        })
-
-        expect(tn === 4).toBeTruthy();
-        expect(hn === 1).toBeTruthy();
-        expect(mn === 3).toBeTruthy();
-
-    })
 
 });

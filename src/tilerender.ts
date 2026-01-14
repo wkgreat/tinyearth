@@ -2,121 +2,130 @@ import Camera from "./camera.js";
 import type { NumArr3 } from "./defines.js";
 import { TinyEarthEvent } from "./event.js";
 import Frustum from "./frustum.js";
-import { GLSLSource } from "./glsl.js";
-import { Tile, TileMesher, TileStatus } from "./maptiler.js";
-import { Program, type ProgramAdvanceOptions, type ProgramOptions } from "./program.js";
+import { Tile, TileStatus } from "./maptiler.js";
+import { type ProgramAdvanceOptions, type ProgramOptions } from "./program.js";
 import SRS from "./proj.js";
 import type Scene from "./scene.js";
 
-import staticTileFragSource from "./shader/tile.frag";
-import staticTileVertSource from "./shader/tile.vert";
-import instanceTileFragSource from './shader/tileInstance.frag';
-import instanceTileVertSource from './shader/tileInstance.vert';
 
-import { checkGLError } from "./debug.js";
-import { MAT4, VEC3, VEC4, type mat4, type vec3, type vec4 } from "./matrix.js";
+import { MAT4, VEC2, VEC3, VEC4, type mat4, type vec2, type vec3, type vec4 } from "./matrix.js";
 import { type TileSourceInfo, type TileURL } from "./tilesource.js";
 import TinyEarth from "./tinyearth.js";
-import { GLAttribute, GLBuffer } from "./webgl.js";
+
+import { makeShaderDataDefinitions, makeStructuredView, type ShaderDataDefinitions } from "webgpu-utils";
+import { dfloat, dfmat4, dfvec2, dfvec3, dfvec4 } from "./math.js";
+import tileWGSLSrouce from './shader/tile.wgsl';
+import type { CanvasGPUInfo, GPUInfo } from "./webgpu.js";
+import { WGSLSource } from "./wgsl.js";
 
 const DefaultTileSize: number = 256;
 
-interface GlobeTileProgramBufferInfo {
-    vertices?: WebGLBuffer,
-    texture?: WebGLTexture
-}
-
-export enum RenderMethod {
-    STATIC,
-    DYNAMIC,
-    INSTANCE
-}
-
 export interface GlobeTilePorgramAdvanceOptions extends ProgramAdvanceOptions {
-    renderMethod?: RenderMethod
 }
 
 interface GlobeTileProgramOptions extends Omit<ProgramOptions, 'vertSource' | 'fragSource'> {
-    advance: GlobeTilePorgramAdvanceOptions
+    tinyearth: TinyEarth;
+    gpuinfo: GPUInfo;
+    canvasinfo: CanvasGPUInfo;
+    advance: GlobeTilePorgramAdvanceOptions;
 }
 
-export class GlobeTileProgram extends Program {
+export class GlobeTileProgram {
 
-    buffers: GlobeTileProgramBufferInfo = {};
+    tinyearth: TinyEarth;
 
     numElements: number = 0;
 
     tileProviders: TileProvider[] = [];
 
     advance: GlobeTilePorgramAdvanceOptions = {
-        renderMethod: RenderMethod.STATIC,
         depthTest: false,
         wireframe: false
     }
 
-    attributes: { [k: string]: GLAttribute } = {};
+    gpuinfo: GPUInfo;
+    canvasinfo: CanvasGPUInfo;
+    label = "tilerender";
+    module: GPUShaderModule | null = null;
+    pipeline: GPURenderPipeline | null = null;
+    sampler: GPUSampler;
+    shaderDefinitions: ShaderDataDefinitions;
+    tileUniform: GPUBuffer | null = null;
+    materialUniform: GPUBuffer | null = null;
 
     constructor(options: GlobeTileProgramOptions) {
-
+        this.tinyearth = options.tinyearth;
         const advance = options.advance ?? {};
-        const renderMethod = advance.renderMethod ?? RenderMethod.STATIC;
         const depthTest = advance.depthTest ?? false;
         const wireframe = advance.wireframe ?? false;
 
-        let vertGLSLSource: GLSLSource;
-        let fragGLSLSource: GLSLSource;
-
-        //TODO dynamic draw
-        if (renderMethod === RenderMethod.STATIC || renderMethod === RenderMethod.DYNAMIC) {
-            vertGLSLSource = new GLSLSource(staticTileVertSource);
-            fragGLSLSource = new GLSLSource(staticTileFragSource);
-        } else {
-            vertGLSLSource = new GLSLSource(instanceTileVertSource);
-            fragGLSLSource = new GLSLSource(instanceTileFragSource);
-        }
-
-        super({
-            ...options, vertSource: vertGLSLSource, fragSource: fragGLSLSource
-        });
-
-        this.advance.renderMethod = renderMethod;
         this.advance.depthTest = depthTest;
         this.advance.wireframe = wireframe;
 
-        this.createBuffer();
+        this.gpuinfo = options.gpuinfo;
+        this.canvasinfo = options.canvasinfo;
+        const { device } = this.gpuinfo;
+        const wgslsource = new WGSLSource(tileWGSLSrouce);
+        const code = wgslsource.resovleSource();
+        this.shaderDefinitions = makeShaderDataDefinitions(code);
 
-        this.createAttributes();
-    }
-
-    createAttributes() {
-        this.attributes["position"] = new GLAttribute({
-            gl: this.gl,
-            name: "a_position",
-            elemSize: 3,
-            isDFloat: true
+        this.module = device.createShaderModule({
+            label: this.label,
+            code
+        });
+        this.pipeline = device.createRenderPipeline({
+            label: this.label,
+            layout: 'auto',
+            vertex: {
+                module: this.module,
+                buffers: [
+                    { arrayStride: 3 * 4, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] },
+                    { arrayStride: 3 * 4, attributes: [{ shaderLocation: 1, offset: 0, format: 'float32x3' }] },
+                    { arrayStride: 3 * 4, attributes: [{ shaderLocation: 2, offset: 0, format: 'float32x3' }] },
+                    { arrayStride: 2 * 4, attributes: [{ shaderLocation: 3, offset: 0, format: 'float32x2' }] },
+                    { arrayStride: 3 * 4, attributes: [{ shaderLocation: 4, offset: 0, format: 'float32x3' }] },
+                    { arrayStride: 3 * 4, attributes: [{ shaderLocation: 5, offset: 0, format: 'float32x3' }] },
+                    { arrayStride: 3 * 4, attributes: [{ shaderLocation: 6, offset: 0, format: 'float32x3' }] },
+                ],
+                constants: {
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
+                }
+            },
+            fragment: {
+                module: this.module,
+                targets: [{
+                    format: this.canvasinfo.context.getConfiguration()!.format,
+                    blend: {
+                        color: {
+                            srcFactor: "one",
+                            dstFactor: "one-minus-src-alpha",
+                            operation: "add",
+                        },
+                        alpha: {
+                            srcFactor: "one",
+                            dstFactor: "one-minus-src-alpha",
+                            operation: "add",
+                        },
+                    },
+                    writeMask: GPUColorWrite.ALL
+                }],
+                constants: {
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
+                }
+            },
+            primitive: {
+                topology: 'triangle-list',
+                cullMode: 'back',
+                frontFace: 'ccw'
+            },
+            depthStencil: this.tinyearth.getDepthStencilState()
+        });
+        this.sampler = device.createSampler({
+            label: this.label,
+            magFilter: 'nearest',
+            minFilter: 'nearest'
         });
 
-        this.attributes["texcoord"] = new GLAttribute({
-            gl: this.gl,
-            name: "a_texcoord",
-            elemSize: 2,
-            isDFloat: false
-        });
-
-        this.attributes["normal"] = new GLAttribute({
-            gl: this.gl,
-            name: "a_normal",
-            elemSize: 3,
-            isDFloat: true
-        });
-    }
-
-    activateAttributes(): void {
-        if (this.program) {
-            for (const k in this.attributes) {
-                this.attributes[k]?.activate(this);
-            }
-        }
     }
 
     existTileProvider(tileProvider: TileProvider): boolean {
@@ -131,133 +140,144 @@ export class GlobeTileProgram extends Program {
         this.tileProviders = this.tileProviders.filter(p => p !== tileProvider);
     }
 
-    createBuffer() {
-        if (this.gl) {
-            this.buffers.vertices = this.gl.createBuffer();
-            this.buffers.texture = this.gl.createTexture();
-        }
-    }
+    setTileNodeVertexBuffers(node: TileNode): void {
 
-    setMaterial() {
-        if (this.gl && this.program) {
-            this.gl.useProgram(this.program);
-            this.setUniform4f("material.ambient", 0.1, 0.1, 0.1, 1.0);
-            this.setUniform4f("material.diffuse", 1.0, 1.0, 1.0, 1.0);
-            this.setUniform4f("material.specular", 1.0, 1.0, 1.0, 1.0);
-            this.setUniform4f("material.emission", 0.0, 0.0, 0.0, 1.0);
-            this.setUniform1f("material.shininess", 1000);
-        }
-    }
+        const { device } = this.gpuinfo;
 
-    refreshUniforms() {
-        if (this.gl && this.program) {
-            this.gl.useProgram(this.program);
-            this.refreshAllUniforms();
-        }
-    }
-
-    setVerticeData(verticeData: Float32Array) {
-        if (this.gl && this.buffers.vertices) {
-            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.vertices);
-            this.gl.bufferData(this.gl.ARRAY_BUFFER, verticeData, this.gl.STATIC_DRAW);
-            this.numElements = verticeData.length;
-        }
-    }
-
-    createTileBufferAndSetData(data: number[]): {
-        position: GLBuffer,
-        texcoord: GLBuffer,
-        normal: GLBuffer
-    } {
-
-        const positionData = []; //3
-        const texcoordData = []; //2
-        const normalData = []; //3
+        const data = node.tile.mesh!;
+        const positionArray = []; //3
+        const texcoordArray = []; //2
+        const normalArray = []; //3
 
         for (let i = 0; i < data.length; i += 8) {
-            positionData.push(...data.slice(i, i + 3));
-            texcoordData.push(...data.slice(i + 3, i + 3 + 2));
-            normalData.push(...data.slice(i + 3 + 2, i + 3 + 2 + 3));
+            positionArray.push(...data.slice(i, i + 3));
+            texcoordArray.push(...data.slice(i + 3, i + 3 + 2));
+            normalArray.push(...data.slice(i + 3 + 2, i + 3 + 2 + 3));
         }
 
-        const positionBuffer = new GLBuffer({
-            gl: this.gl,
-            type: this.gl.ARRAY_BUFFER,
-            isDFloat: true
+        const positions = new Float32Array(positionArray);
+        const texcoords = new Float32Array(texcoordArray);
+        const normals = new Float32Array(normalArray);
+
+        if (!node.positionBuffer) {
+            node.positionBuffer = device.createBuffer({
+                label: `${this.label}, positionBuffer`,
+                size: positions.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            });
+            device.queue.writeBuffer(node.positionBuffer, 0, positions.buffer);
+        }
+
+        const dfpositions = positionArray.map(d => dfloat.create(d));
+        const positions_high = new Float32Array(dfpositions.map(d => d[0]));
+        const positions_low = new Float32Array(dfpositions.map(d => d[1]));
+
+        if (!node.positionHighBuffer) {
+            node.positionHighBuffer = device.createBuffer({
+                label: `${this.label}, positionHighBuffer`,
+                size: positions_high.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            });
+            device.queue.writeBuffer(node.positionHighBuffer, 0, positions_high.buffer);
+        }
+
+
+        if (!node.positionLowBuffer) {
+            node.positionLowBuffer = device.createBuffer({
+                label: `${this.label}, positionLowBuffer`,
+                size: positions_low.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            });
+            device.queue.writeBuffer(node.positionLowBuffer, 0, positions_low.buffer);
+        }
+
+
+        if (!node.texoordBuffer) {
+            node.texoordBuffer = device.createBuffer({
+                label: `${this.label}, texcoordBuffer`,
+                size: texcoords.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            });
+            device.queue.writeBuffer(node.texoordBuffer, 0, texcoords.buffer);
+        }
+
+
+        if (!node.normalBuffer) {
+            node.normalBuffer = device.createBuffer({
+                label: `${this.label}, normalBuffer`,
+                size: normals.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            });
+            device.queue.writeBuffer(node.normalBuffer, 0, normals.buffer);
+        }
+
+        const dfnormas = normalArray.map(n => dfloat.create(n));
+        const normals_high = new Float32Array(dfnormas.map(d => d[0]));
+        const normals_low = new Float32Array(dfnormas.map(d => d[1]));
+
+        if (!node.normalHighBuffer) {
+            node.normalHighBuffer = device.createBuffer({
+                label: `${this.label}, normalHighBuffer`,
+                size: normals_high.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            });
+            device.queue.writeBuffer(node.normalHighBuffer, 0, normals_high.buffer);
+        }
+
+
+        if (!node.normalLowBuffer) {
+            node.normalLowBuffer = device.createBuffer({
+                label: `${this.label}, normalLowBuffer`,
+                size: normals_low.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            });
+            device.queue.writeBuffer(node.normalLowBuffer, 0, normals_low.buffer);
+        }
+    }
+
+    setTileNodeTexture(node: TileNode) {
+
+        if (!node.texture) {
+            const image = node.tile.image;
+            if (image) {
+                const { device } = this.gpuinfo;
+                node.texture = device.createTexture({
+                    label: this.label,
+                    format: 'rgba8unorm',
+                    size: [image.width, image.height, 1],
+                    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST
+                });
+                device.queue.copyExternalImageToTexture(
+                    { source: image, flipY: true },
+                    { texture: node.texture },
+                    [image.width, image.height]
+                );
+            }
+        }
+
+    }
+
+    setTileUniform(opacity: number = 1.0, enableNight: boolean = false, isNight: boolean = false) {
+
+        const tileUniView = makeStructuredView(this.shaderDefinitions.uniforms.tileUniform!);
+
+        if (!this.tileUniform) {
+            this.tileUniform = this.gpuinfo.device.createBuffer({
+                label: `${this.label}, tileUniform`,
+                size: tileUniView.arrayBuffer.byteLength,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            });
+        }
+
+        tileUniView.set({
+            opacity: opacity,
+            enableNight: enableNight ? 1 : 0,
+            isNight: isNight ? 1 : 0
         });
-        positionBuffer.fillData(positionData);
 
-        const texcoordBuffer = new GLBuffer({
-            gl: this.gl,
-            type: this.gl.ARRAY_BUFFER,
-            isDFloat: false
-        })
-        texcoordBuffer.fillData(texcoordData);
+        this.gpuinfo.device.queue.writeBuffer(this.tileUniform, 0, tileUniView.arrayBuffer);
 
-        const normalBuffer = new GLBuffer({
-            gl: this.gl,
-            type: this.gl.ARRAY_BUFFER,
-            isDFloat: true
-        });
-        normalBuffer.fillData(normalData);
 
-        return {
-            position: positionBuffer,
-            texcoord: texcoordBuffer,
-            normal: normalBuffer
-        }
-
-    }
-
-    createVertexBufferAndSetData(verticeData: number[]): WebGLBuffer | null {
-        if (this.gl) {
-            const buffer = this.gl.createBuffer();
-            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
-            this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(verticeData), this.gl.STATIC_DRAW);
-            this.numElements = verticeData.length;
-            return buffer;
-        } else {
-            return null;
-        }
-    }
-
-    createTextureAndSetData(textureData: HTMLImageElement): WebGLTexture | null {
-        if (this.gl) {
-            const texture = this.gl.createTexture();
-            this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-            //设置纹理参数
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-            this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
-            //纹理数据
-            this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, textureData);
-
-            return texture;
-        } else {
-            return null;
-        }
-
-    }
-
-    setData(verticeData: Float32Array, textureData: HTMLImageElement) {
-
-        if (this.gl && this.buffers.vertices && this.buffers.texture) {
-            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers["vertices"]);
-            this.gl.bufferData(this.gl.ARRAY_BUFFER, verticeData, this.gl.STATIC_DRAW);
-            this.numElements = verticeData.length;
-
-            this.gl.bindTexture(this.gl.TEXTURE_2D, this.buffers["texture"]);
-            //设置纹理参数
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-            this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
-            //纹理数据
-            this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, textureData);
-        }
     }
 
     /**
@@ -266,167 +286,48 @@ export class GlobeTileProgram extends Program {
      * @param {Camera} camera
      * @param {mat4} projMtx       
     */
-    drawTileNode(node: TileNode, modelMtx: mat4, camera: Camera, projMtx: mat4, opacity: number = 1.0, isNight: boolean = false) {
+    drawTileNode(pass: GPURenderPassEncoder, node: TileNode, opacity: number = 1.0, isNight: boolean = false) {
 
-        if (this.gl && this.program && node.tile && node.tile.ready) {
+        if (node.tile && node.tile.ready) {
 
-            this.numElements = node.tile.mesh!.length;
+            this.setTileNodeVertexBuffers(node);
+            this.setTileNodeTexture(node);
+            this.setTileUniform(opacity, this.tinyearth.night, isNight);
+            // this.setMaterialUniform();
 
-            if (node.positionBuffer && node.texoordBuffer && node.normalBuffer) {
-                this.attributes["position"]!.shareBuffer(node.positionBuffer);
-                this.attributes["texcoord"]!.shareBuffer(node.texoordBuffer);
-                this.attributes["normal"]!.shareBuffer(node.normalBuffer);
-            } else {
-                const buffers = this.createTileBufferAndSetData(node.tile.mesh!);
-                node.positionBuffer = buffers.position;
-                node.texoordBuffer = buffers.texcoord;
-                node.normalBuffer = buffers.normal;
-                this.attributes["position"]!.shareBuffer(node.positionBuffer);
-                this.attributes["texcoord"]!.shareBuffer(node.texoordBuffer);
-                this.attributes["normal"]!.shareBuffer(node.normalBuffer);
-            }
+            const sceneBindGroup = this.gpuinfo.device.createBindGroup({
+                label: `${this.label} sceneBindGroup`,
+                layout: this.pipeline!.getBindGroupLayout(0),
+                entries: [
+                    { binding: 0, resource: { buffer: this.tinyearth.scene!.webgpuResources.sceneUniform! } },
+                    { binding: 1, resource: { buffer: this.tinyearth.scene!.webgpuResources.sceneDFUniform! } }
+                ]
+            });
 
-            if (node.texture) {
-                this.gl.bindTexture(this.gl.TEXTURE_2D, node.texture);
-            } else {
-                node.texture = this.createTextureAndSetData(node.tile.image!);
-            }
 
-            this.activateAttributes();
 
-            this.setUniform1f("u_opacity", opacity);
-            this.setUniform1i("u_isNight", isNight ? 1 : 0);
+            const tileBindGroup = this.gpuinfo.device.createBindGroup({
+                label: `${this.label} tileBindGroup`,
+                layout: this.pipeline!.getBindGroupLayout(1),
+                entries: [
+                    { binding: 0, resource: node.texture! },
+                    { binding: 1, resource: this.sampler },
+                    { binding: 2, resource: { buffer: this.tileUniform! } },
+                    // { binding: 3, resource: { buffer: this.materialUniform! } }
+                ]
+            })
 
-            this.gl.drawArrays(this.gl.TRIANGLES, 0, this.numElements / 8);
-        }
-    }
-
-    drawTileNodesDynamic(nodes: TileNode[], opacity: number = 1.0, isNight: boolean = false) {
-
-        if (!this.program) { return; }
-
-        //TODO move buffer to global
-        let buffer: WebGLBuffer | null = null;
-
-        for (const node of nodes) {
-
-            if (buffer === null) {
-                buffer = this.gl.createBuffer();
-                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
-                this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(node.tile.mesh!), this.gl.DYNAMIC_DRAW);
-            } else {
-                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
-                this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, new Float32Array(node.tile.mesh!));
-            }
-
-            this.numElements = node.tile.mesh!.length;
-
-            if (node.texture) {
-                this.gl.bindTexture(this.gl.TEXTURE_2D, node.texture);
-            } else {
-                node.texture = this.createTextureAndSetData(node.tile.image!);
-            }
-
-            this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_position"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, 0); // 设置属性指针
-            this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_position")); // 激活属性
-
-            this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_texcoord"), 2, this.gl.FLOAT, false, (3 + 2 + 3) * 4, 3 * 4); // 设置属性指针
-            this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_texcoord")); // 激活属性
-
-            this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_normal"), 3, this.gl.FLOAT, false, (3 + 2 + 3) * 4, (3 + 2) * 4); // 设置属性指针
-            this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_normal")); // 激活属性
-
-            this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
-            this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
-
-            this.gl.drawArrays(this.gl.TRIANGLES, 0, this.numElements / 8);
-
-        }
-
-    }
-
-    //TODO fixit
-    drawTileNodeInstance(nodes: TileNode[], opacity: number = 1.0, isNight: boolean = false) {
-
-        if (this.program && this.program) {
-
-            nodes = nodes.filter(node => node.tile && node.tile.ready);
-
-            if (nodes.length > 0) {
-
-                const vao = this.gl.createVertexArray();
-                this.gl.bindVertexArray(vao);
-
-                // TODO only set once
-                const vertexBuffer = this.gl.createBuffer();
-                const vertexData = TileMesher.toRootMeshVertex();
-
-                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuffer);
-                this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertexData), this.gl.STATIC_DRAW);
-
-                this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_position"), 2, this.gl.FLOAT, false, (2 + 2) * 4, 0);
-                this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_position"));
-
-                this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_texcoord"), 2, this.gl.FLOAT, false, (2 + 2) * 4, 2 * 4);
-                this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_texcoord"));
-
-                // TODO user int buffer
-                const tilekeyArray = nodes.flatMap(node => [node.key.x, node.key.y, node.key.z]);
-                // console.log(`tilekeyArray length: ${tilekeyArray.length}`);
-                const tilekeyData = new Float32Array(tilekeyArray);
-                const tilekeyBuffer = this.gl.createBuffer();
-                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, tilekeyBuffer);
-                this.gl.bufferData(this.gl.ARRAY_BUFFER, tilekeyData, this.gl.STATIC_DRAW);
-                this.gl.vertexAttribPointer(this.gl.getAttribLocation(this.program, "a_tilekey"), 3, this.gl.FLOAT, false, 0, 0);
-                this.gl.enableVertexAttribArray(this.gl.getAttribLocation(this.program, "a_tilekey"));
-                this.gl.vertexAttribDivisor(this.gl.getAttribLocation(this.program, "a_tilekey"), 1); // instance data
-                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
-
-                //texture
-                const texArray = this.gl.createTexture();
-                this.gl.bindTexture(this.gl.TEXTURE_2D_ARRAY, texArray);
-                this.gl.texStorage3D(
-                    this.gl.TEXTURE_2D_ARRAY,   //target
-                    1,                          //levels mipmap 层级数量（最小 mipmap 数量为 1）
-                    this.gl.RGBA8,              //internalformat
-                    256,                        //width
-                    256,                        //height
-                    nodes.length                //depth 对于 3D 纹理：深度（z 方向像素数）;对于 2D 纹理数组：层数（layer count）
-                );
-                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
-                for (let i = 0; i < nodes.length; i++) {
-                    this.gl.texSubImage3D(
-                        this.gl.TEXTURE_2D_ARRAY,   //target
-                        0,                          //level
-                        0,                          //xoffset
-                        0,                          //yoffset
-                        i,                          //zoffset
-                        256,                        //width
-                        256,                        //height
-                        1,                          //depth
-                        this.gl.RGBA,               //format
-                        this.gl.UNSIGNED_BYTE,      //type
-                        nodes[i]?.tile.image as HTMLImageElement //pixels
-                    );
-                }
-
-                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
-
-                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-                this.gl.texParameteri(this.gl.TEXTURE_2D_ARRAY, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-                this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
-
-                this.gl.uniform1f(this.gl.getUniformLocation(this.program, "u_opacity"), opacity);
-                this.gl.uniform1i(this.gl.getUniformLocation(this.program, "u_isNight"), isNight ? 1 : 0);
-
-                this.gl.bindVertexArray(vao);
-                this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, vertexData.length / 4, nodes.length);
-
-                checkGLError(this.gl, "drawArraysInstanced", this.tinyearth.glErrorCheck);
-
-            }
+            pass.setPipeline(this.pipeline!);
+            pass.setBindGroup(0, sceneBindGroup);
+            pass.setBindGroup(1, tileBindGroup);
+            pass.setVertexBuffer(0, node.positionBuffer);
+            pass.setVertexBuffer(1, node.positionHighBuffer);
+            pass.setVertexBuffer(2, node.positionLowBuffer);
+            pass.setVertexBuffer(3, node.texoordBuffer);
+            pass.setVertexBuffer(4, node.normalBuffer);
+            pass.setVertexBuffer(5, node.normalHighBuffer);
+            pass.setVertexBuffer(6, node.normalLowBuffer);
+            pass.draw(node.tile.mesh!.length / 8);
         }
     }
 
@@ -435,16 +336,11 @@ export class GlobeTileProgram extends Program {
     }
 
     render() {
-        if (this.gl && this.program) {
-            this.gl.useProgram(this.program);
-
-            this.refreshUniforms();
-
-            this.setUniform1i("u_enableNight", this.tinyearth.night ? 1 : 0);
+        if (this.gpuinfo) {
 
             const that = this;
+            const encoder = this.gpuinfo.device.createCommandEncoder({ label: this.label });
 
-            const modelMtx = MAT4.create(); //TODO move to other place
 
             for (let provider of this.tileProviders) {
                 if (provider.isStop()) {
@@ -454,25 +350,26 @@ export class GlobeTileProgram extends Program {
                     continue;
                 }
 
-                this.setModelMatrixUniform(provider.modelmtx);
-
                 provider.frustum = this.tinyearth.scene!.frustum;
                 const level = provider.source.maxLevel;
 
-                let nodes = provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene, (node) => {});
+                let nodes = provider.tiletree.dynamicLevelProvide(level, this.tinyearth.scene!, (node) => {});
                 nodes = nodes.filter(node => node.tile && node.tile.ready);
                 nodes.sort((a, b) => a.key.z - b.key.z);
 
-                if (this.advance.renderMethod === RenderMethod.INSTANCE) {
-                    this.drawTileNodeInstance(nodes, provider.getOpacity(), provider.night);
-                } else if (this.advance.renderMethod === RenderMethod.DYNAMIC) {
-                    this.drawTileNodesDynamic(nodes, provider.opacity, provider.night);
-                } else {
-                    for (let node of nodes) {
-                        that.drawTileNode(node, modelMtx, this.tinyearth.scene.camera, this.tinyearth.scene.projection.perspectiveMatrix, provider.getOpacity(), provider.night);
-                    }
+                let i = 0;
+                for (let node of nodes) {
+                    const descriptor = that.tinyearth.getRenderPassDescriptor(false);
+                    const pass = encoder.beginRenderPass(descriptor);
+                    that.drawTileNode(pass, node, provider.getOpacity(), provider.night);
+                    pass.end();
+                    i++;
                 }
             }
+
+            const commandBuffer = encoder.finish();
+
+            this.gpuinfo.device.queue.submit([commandBuffer]);
         }
     }
 
@@ -495,13 +392,15 @@ export class TileNode {
 
     #tile: Tile;
 
-    #vertexBuffer: WebGLBuffer | null = null;
+    positionBuffer: GPUBuffer | null = null;
+    positionHighBuffer: GPUBuffer | null = null;
+    positionLowBuffer: GPUBuffer | null = null;
+    texoordBuffer: GPUBuffer | null = null;
+    normalBuffer: GPUBuffer | null = null;
+    normalHighBuffer: GPUBuffer | null = null;
+    normalLowBuffer: GPUBuffer | null = null;
 
-    positionBuffer: GLBuffer | null = null;
-    texoordBuffer: GLBuffer | null = null;
-    normalBuffer: GLBuffer | null = null;
-
-    #texture: WebGLTexture | null = null;
+    #texture: GPUTexture | null = null;
 
     #children: TileNode[] = [];
 
@@ -524,19 +423,11 @@ export class TileNode {
         // TODO need refresh texture.
     }
 
-    set vertexBuffer(buffer: WebGLBuffer | null) {
-        this.#vertexBuffer = buffer;
-    }
-
-    get vertexBuffer(): WebGLBuffer | null {
-        return this.#vertexBuffer;
-    }
-
-    set texture(t: WebGLTexture | null) {
+    set texture(t: GPUTexture | null) {
         this.#texture = t;
     }
 
-    get texture(): WebGLTexture | null {
+    get texture(): GPUTexture | null {
         return this.#texture;
     }
 
@@ -883,7 +774,7 @@ export class TileProvider {
     modelmtx: mat4 = MAT4.create();
 
     #cameraCallback: TileProviderCameraCallback = (info) => {
-        if (info.camera === null || info.camera !== this.tinyearth.scene.camera) {
+        if (info.camera === null || info.camera !== this.tinyearth.scene!.camera) {
             return;
         }
         const level = this.tileLevelWithCamera(info.camera);
@@ -896,7 +787,7 @@ export class TileProvider {
         this.tinyearth = tinyearth;
         this.source = source;
         this.tiletree = new TileTree(source);
-        this.#cameraCallback({ camera: this.tinyearth.scene.camera });
+        this.#cameraCallback({ camera: this.tinyearth.scene!.camera });
         this.tinyearth.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
             callback: this.#cameraCallback
         });
@@ -918,13 +809,14 @@ export class TileProvider {
             this.tiletree.forEachNode(node => {
                 node.tile = new Tile(source.url, node.key.x, node.key.y, node.key.z);
                 if (node.texture) {
-                    that.tinyearth.gl!.deleteTexture(node.texture);
+                    node.texture.destroy();
                     node.texture = null;
                 }
-                if (node.vertexBuffer) {
-                    that.tinyearth.gl!.deleteBuffer(node.vertexBuffer);
-                    node.vertexBuffer = null;
-                }
+                //TODO destroy other vertex buffers
+                // if (node.vertexBuffer) {
+                //     node.vertexBuffer.destroy();
+                //     node.vertexBuffer = null;
+                // }
             });
         }
         this.curlevel = this.tileLevel();
@@ -964,7 +856,7 @@ export class TileProvider {
     }
 
     tileLevel() {
-        const camera = this.tinyearth.scene.camera;
+        const camera = this.tinyearth.scene!.camera;
         if (camera) {
             return this.tileLevelWithCamera(camera);
         } else {
