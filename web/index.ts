@@ -33,7 +33,7 @@ function main() {
             night: false,
             advance: {
                 reverseZ: false,
-                glLogDepth: false,
+                logdepth: false,
             }
         });
 

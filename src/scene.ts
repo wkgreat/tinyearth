@@ -146,14 +146,6 @@ export default class Scene {
         return this.#projection;
     }
 
-    // set logDepthC(c: number) {
-    //     this.#logdepthC = c;
-    // }
-
-    // get logdepthC(): number {
-    //     return this.#logdepthC;
-    // }
-
     setLogDepthC(c: number) {
         this.#logdepthC = c;
     }

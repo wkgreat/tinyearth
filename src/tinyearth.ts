@@ -11,8 +11,8 @@ import type BaseTool from "./tools/tool.js";
 import { createCanvasGPUInfo, createGPUInfo, GPUFrameBuffer, type CanvasGPUInfo, type GPUInfo } from "./webgpu.js";
 
 export interface TinyEarthAdvanceOptions {
-    glErrorCheck?: boolean,
-    glLogDepth?: boolean,
+    debug?: boolean,
+    logdepth?: boolean,
     wireframe?: boolean,
     reverseZ?: boolean
 }
@@ -65,8 +65,8 @@ export default class TinyEarth {
     #tools: BaseTool[] = [];
 
     #advance: TinyEarthAdvanceOptions = {
-        glErrorCheck: false,
-        glLogDepth: false,
+        debug: false,
+        logdepth: false,
         wireframe: false,
         reverseZ: true
     }
@@ -85,11 +85,11 @@ export default class TinyEarth {
 
         //advance options
         const advance = options.advance ?? {};
-        if (advance.glErrorCheck !== undefined) {
-            this.#advance.glErrorCheck = advance.glErrorCheck;
+        if (advance.debug !== undefined) {
+            this.#advance.debug = advance.debug;
         }
-        if (advance.glLogDepth !== undefined) {
-            this.#advance.glLogDepth = advance.glLogDepth;
+        if (advance.logdepth !== undefined) {
+            this.#advance.logdepth = advance.logdepth;
         }
         if (advance.wireframe !== undefined) {
             this.#advance.wireframe = advance.wireframe;
@@ -167,7 +167,7 @@ export default class TinyEarth {
                 canvasinfo: this.canvasinfo,
                 advance: {
                     wireframe: this.#advance.wireframe ?? false,
-                    logDepth: this.#advance.glLogDepth ?? false
+                    logDepth: this.#advance.logdepth ?? false
                 }
             });
 
@@ -181,7 +181,7 @@ export default class TinyEarth {
                 gpuinfo: this.gpuinfo,
                 canvasinfo: this.canvasinfo,
                 advance: {
-                    logDepth: this.#advance.glLogDepth ?? false
+                    logDepth: this.#advance.logdepth ?? false
                 }
             });
 
@@ -303,8 +303,8 @@ export default class TinyEarth {
         };
     }
 
-    get glErrorCheck() {
-        return this.#advance.glErrorCheck ?? false;
+    get debug() {
+        return this.#advance.debug ?? false;
     }
 
     resizeHandler() {

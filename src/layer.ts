@@ -1,7 +1,6 @@
 import type { ColorLike } from "./color";
 import Color from "./color";
 import type { Entity, GeometryEntity, LineStringEntity, PointEntity } from "./entity";
-// import { LineStringProgram, PointProgram, type Program } from "./program";
 import SRS from "./proj";
 import type { GeometryStyle, LineStringStyle, PointStyle, Style, StyleBoolMapFunction, StyleColorMapFunction, StyleNumberMapFunction } from "./style";
 import type TinyEarth from "./tinyearth";
@@ -40,48 +39,9 @@ export abstract class Layer {
         this.clampToGround = options.clampToGround ?? false;
         this.clampToGroundOffset = options.clampToGroundOffset ?? 0;
 
-        // this.program = this.createProgram();
-        this.createAttributes();
-        this.fillAttributes();
-        this.createTextures();
-        this.fillTextures();
     }
 
-    // abstract createProgram(): Program;
-
-    abstract createAttributes(): void;
-
-    abstract fillAttributes(): void;
-
-    abstract refreshAttributes(): void;
-
-    abstract activateAttributes(): void;
-
-    abstract createTextures(): void;
-
-    abstract fillTextures(): void;
-
-    abstract refreshTextures(): void;
-
-    abstract activateTextures(): void;
-
-    abstract refreshUniforms(): void;
-
-    abstract beforeDraw(): void;
-
-    abstract afterDraw(): void;
-
     draw() {
-        // if (this.program === null || this.program.program === null) {
-        //     return;
-        // }
-        // this.program.use();
-        // this.activateAttributes();
-        // this.activateTextures();
-        // this.refreshUniforms();
-        // this.beforeDraw();
-        // this.program.draw();
-        // this.afterDraw();
     }
 
     getColorArray(color: ColorLike | StyleColorMapFunction, count: number): number[][] {
@@ -203,7 +163,7 @@ export class PointLayer extends GeometryLayer {
                     ...this.webgpuProxy!.vertexBuffers!.pointattr!.bufferLayouts!
                 ],
                 constants: {
-                    ENABLE_LOG_DEPTH: this.tinyearth.advance.glLogDepth ? 1 : 0
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
                 }
             },
             fragment: {
@@ -214,7 +174,7 @@ export class PointLayer extends GeometryLayer {
                     }
                 ],
                 constants: {
-                    ENABLE_LOG_DEPTH: this.tinyearth.advance.glLogDepth ? 1 : 0
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
                 }
             },
             primitive: {
@@ -228,18 +188,6 @@ export class PointLayer extends GeometryLayer {
         this.webgpuProxy.pipeline = pipeline;
         this.webgpuProxy.shaderDefinition = shaderDefinition;
     }
-
-    override createAttributes() {}
-    override fillAttributes(): void {}
-    override refreshAttributes(): void {}
-    override activateAttributes(): void {}
-    override createTextures(): void {}
-    override fillTextures(): void {}
-    override refreshTextures(): void {}
-    override activateTextures(): void {}
-    override refreshUniforms(): void {}
-    override beforeDraw(): void {}
-    override afterDraw(): void {}
 
     createBindGroupLayout() {
 
@@ -658,7 +606,7 @@ export class LineStringLayer extends GeometryLayer {
                     ...this.webgpuProxy.vertexBuffers!.vertex!.bufferLayouts
                 ],
                 constants: {
-                    ENABLE_LOG_DEPTH: this.tinyearth.advance.glLogDepth ? 1 : 0
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
                 }
             },
             fragment: {
@@ -669,7 +617,7 @@ export class LineStringLayer extends GeometryLayer {
                     }
                 ],
                 constants: {
-                    ENABLE_LOG_DEPTH: this.tinyearth.advance.glLogDepth ? 1 : 0
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
                 }
             },
             primitive: {
@@ -680,31 +628,6 @@ export class LineStringLayer extends GeometryLayer {
         });
 
     }
-
-    // override createProgram(): LineStringProgram {
-    //     const program = new LineStringProgram({
-    //         tinyearth: this.tinyearth,
-    //         advance: {
-    //             logDepth: this.tinyearth.advance.glLogDepth ?? false
-    //         }
-    //     });
-    //     program.setFirst(0);
-    //     program.setCount(0);
-    //     return program;
-    // }
-
-    override createAttributes(): void {}
-
-    override fillAttributes(): void {}
-    override refreshAttributes(): void {}
-    override activateAttributes(): void {}
-    override createTextures(): void {}
-    override fillTextures(): void {}
-    override refreshTextures(): void {}
-    override activateTextures(): void {}
-    override refreshUniforms(): void {}
-    override beforeDraw(): void {}
-    override afterDraw(): void {}
 
     override draw(): void {
 
