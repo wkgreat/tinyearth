@@ -10,6 +10,8 @@
 
 #include "color.module.wgsl"
 
+override ENABLE_LOG_DEPTH : bool = true;
+
 struct TileUniform {
     opacity: f32,
     enableNight: u32,
@@ -32,12 +34,13 @@ struct VSInput {
 
 struct VSOutput {
     @builtin(position) position: vec4f,
-    @location(0) texcoord: vec2f,
-    @location(1) normal: vec3f,
-    @location(2) relworldpos: vec3f,
-    @location(3) relviewz_high: f32,
-    @location(4) relviewz_low: f32,
-    @location(5) needskip: f32
+    @location(0) depth: f32,
+    @location(1) texcoord: vec2f,
+    @location(2) normal: vec3f,
+    @location(3) relworldpos: vec3f,
+    @location(4) relviewz_high: f32,
+    @location(5) relviewz_low: f32,
+    @location(6) needskip: f32
 };
 
 @vertex fn vs(input: VSInput) -> VSOutput {
@@ -50,7 +53,11 @@ struct VSOutput {
     output.needskip = 1.0 - step(0.0, dfloat_out(dfvec4_w(relndcpos)));
     let normal = dfvec3(input.normal_high, input.normal_low);
 
-    output.position = dfvec4_out(relndcpos);
+    let relndcposVec4f = dfvec4_out(relndcpos);
+
+    output.position = relndcposVec4f;
+
+    output.depth = relndcposVec4f.z / relndcposVec4f.w;
 
     output.relworldpos = dfvec3_out(dfvec4_force3(relworldpos));
 
@@ -125,10 +132,13 @@ struct FSOutput {
         fragcolor = texcolor;
     }
 
-    //logdepth
-    // TODO 判断是否开启logdepth
-    let rvz = dfloat(input.relviewz_high, input.relviewz_low);
-    fragdepth = dfloat_out(frag_depth_log_df(sceneDF.depth.logDepthC, sceneDF.projection.near, sceneDF.projection.far, rvz));
+    if(ENABLE_LOG_DEPTH) {
+        let rvz = dfloat(input.relviewz_high, input.relviewz_low);
+        fragdepth = dfloat_out(frag_depth_log_df(sceneDF.depth.logDepthC, sceneDF.projection.near, sceneDF.projection.far, rvz));
+    } else {
+        fragdepth = input.depth;
+    }
+
 
     output.color = fragcolor;
     output.depth = fragdepth;

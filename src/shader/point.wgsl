@@ -4,6 +4,8 @@
 
 #include "depth.module.wgsl"
 
+override ENABLE_LOG_DEPTH : bool = true;
+
 struct VSInput {
     @location(0) quadpos: vec2f,
     @location(1) quaduv: vec2f,
@@ -108,8 +110,15 @@ struct FSOutput {
     } else {
         viewz = dfloat(input.relviewz_high, input.relviewz_low);
     }
-    //TODO check if log depth
-    let depth = dfloat_out(frag_depth_log_df(sceneDF.depth.logDepthC, sceneDF.projection.near, sceneDF.projection.far, viewz));
+
+    var depth = 1.0;
+
+    if(ENABLE_LOG_DEPTH) {
+        depth = dfloat_out(frag_depth_log_df(sceneDF.depth.logDepthC, sceneDF.projection.near, sceneDF.projection.far, viewz));
+    } else {
+        depth = input.quadpos.z / input.quadpos.w;
+    }
+    
     
     output.color = color;
     output.depth = depth;
