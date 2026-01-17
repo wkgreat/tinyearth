@@ -31,7 +31,8 @@ struct Model {
 
 struct Viewport {
     viewport: vec2f,
-    viewportmtx: mat4x4f
+    viewportmtx: mat4x4f,
+    viewportmtxInv: mat4x4f
 };
 
 struct Depth {
@@ -79,6 +80,7 @@ struct ModelDF {
 struct ViewportDF {
     viewport: dfvec2,
     viewportmtx: dfmat4,
+    viewportmtxInv: dfmat4
 }
 
 struct DepthDF {

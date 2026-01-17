@@ -408,7 +408,8 @@ export default class Scene {
 
         const viewportData = {
             viewport: VEC2.fromValues(this.viewWidth, this.viewHeight),
-            viewportmtx: this.viewportMatrixZO
+            viewportmtx: this.viewportMatrixZO,
+            viewportmtxInv: MAT4.invert(this.viewportMatrixZO)
         }
 
         const depthData = {
@@ -455,7 +456,8 @@ export default class Scene {
 
         const viewportDataDF = {
             viewport: dfvec2.toObject(dfvec2.create(VEC2.fromValues(this.viewWidth, this.viewHeight))),
-            viewportmtx: dfmat4.toObject(dfmat4.create(this.viewportMatrixZO))
+            viewportmtx: dfmat4.toObject(dfmat4.create(this.viewportMatrixZO)),
+            viewportmtxInv: dfmat4.toObject(dfmat4.create(MAT4.invert(this.viewportMatrixZO)!))
         }
 
         const depthDataDF = {

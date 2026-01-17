@@ -345,6 +345,12 @@ export class PointLayer extends GeometryLayer {
 
         const status = this.tinyearth.renderStatus;
 
+        const pass = status.currentPass;
+
+        if (!pass) {
+            return;
+        }
+
         const sceneBindGroup = this.tinyearth.scene!.getBindGroup();
         const layerBindGroup = device.createBindGroup({
             layout: this.#webgpu.bindGroupLayout!,
@@ -352,10 +358,6 @@ export class PointLayer extends GeometryLayer {
                 { binding: 0, resource: { buffer: this.#webgpu.clampToGroundUniform! } }
             ]
         });
-
-        const encode = device.createCommandEncoder();
-
-        const pass = encode.beginRenderPass(this.tinyearth.getRenderPassDescriptor(false));
 
 
         if (status.reverseZ) {
@@ -367,13 +369,8 @@ export class PointLayer extends GeometryLayer {
         pass.setBindGroup(1, layerBindGroup);
         pass.setVertexBuffer(0, this.#webgpu.vertexBuffers!.quad!.buffers[0]);
         pass.setVertexBuffer(1, this.#webgpu.vertexBuffers!.pointpos!.buffers[0]);
-        pass.setVertexBuffer(2, this.#webgpu.vertexBuffers?.pointattr!.buffers[0]);
+        pass.setVertexBuffer(2, this.#webgpu.vertexBuffers!.pointattr!.buffers[0]);
         pass.draw(4, this.entities.length);
-        pass.end();
-
-        const commandBuffer = encode.finish();
-
-        device.queue.submit([commandBuffer]);
 
     }
 
@@ -690,6 +687,12 @@ export class LineStringLayer extends GeometryLayer {
 
         const status = this.tinyearth.renderStatus;
 
+        const pass = status.currentPass;
+
+        if (!pass) {
+            return;
+        }
+
         const sceneBindGroup = this.tinyearth.scene!.getBindGroup();
         const clampBindGroup = device.createBindGroup({
             layout: this.#webgpu.bindGroupLayouts.clampToGound!,
@@ -700,26 +703,16 @@ export class LineStringLayer extends GeometryLayer {
             ]
         });
 
-        const encode = device.createCommandEncoder();
-
-        const pass = encode.beginRenderPass(this.tinyearth.getRenderPassDescriptor(false));
-
         if (status.reverseZ) {
             pass.setPipeline(this.#webgpu.pipelines!.reverseZ!);
         } else {
             pass.setPipeline(this.#webgpu.pipelines!.commonZ!);
         }
 
-
         pass.setBindGroup(0, sceneBindGroup);
         pass.setBindGroup(1, clampBindGroup);
         pass.setVertexBuffer(0, this.#webgpu.vertexBuffers.vertex!.buffers[0]);
         pass.draw(this.vertexCount);
-        pass.end();
-
-        const commandBuffer = encode.finish();
-
-        device.queue.submit([commandBuffer]);
 
     }
 }

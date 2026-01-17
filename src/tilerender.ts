@@ -365,14 +365,6 @@ export class GlobeTileProgram {
                 ]
             })
 
-            const status = this.tinyearth.renderStatus;
-
-            if (status.reverseZ) {
-                pass.setPipeline(this.pipelineReverseZ!);
-            } else {
-                pass.setPipeline(this.pipeline!);
-            }
-
             pass.setBindGroup(0, sceneBindGroup);
             pass.setBindGroup(1, tileBindGroup);
             pass.setVertexBuffer(0, node.positionBuffer);
@@ -394,8 +386,18 @@ export class GlobeTileProgram {
         if (this.gpuinfo) {
 
             const that = this;
-            const encoder = this.gpuinfo.device.createCommandEncoder({ label: this.label });
+            const pass = this.tinyearth.renderStatus.currentPass;
+            if (!pass) {
+                return;
+            }
 
+            const status = this.tinyearth.renderStatus;
+
+            if (status.reverseZ) {
+                pass.setPipeline(this.pipelineReverseZ!);
+            } else {
+                pass.setPipeline(this.pipeline!);
+            }
 
             for (let provider of this.tileProviders) {
                 if (provider.isStop()) {
@@ -414,17 +416,10 @@ export class GlobeTileProgram {
 
                 let i = 0;
                 for (let node of nodes) {
-                    const descriptor = that.tinyearth.getRenderPassDescriptor(false);
-                    const pass = encoder.beginRenderPass(descriptor);
                     that.drawTileNode(pass, node, provider.getOpacity(), provider.night);
-                    pass.end();
                     i++;
                 }
             }
-
-            const commandBuffer = encoder.finish();
-
-            this.gpuinfo.device.queue.submit([commandBuffer]);
         }
     }
 

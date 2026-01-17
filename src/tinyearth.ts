@@ -14,7 +14,7 @@ export interface TinyEarthAdvanceOptions {
     debug?: boolean,
     logdepth?: boolean,
     wireframe?: boolean,
-    reverseZ?: boolean
+    reverseZ?: boolean | 'auto'
 }
 
 export interface TinyEarthOptions {
@@ -36,6 +36,7 @@ interface TinyEarthRenderStatus {
     reverseZ: boolean
     depthFunc: GPUCompareFunction
     clearDepth: number
+    currentPass?: GPURenderPassEncoder
 }
 
 export default class TinyEarth {
@@ -75,7 +76,8 @@ export default class TinyEarth {
     #advance: TinyEarthAdvanceOptions = {
         debug: false,
         logdepth: false,
-        wireframe: false
+        wireframe: false,
+        reverseZ: false
     }
 
     #renderStatus: TinyEarthRenderStatus;
@@ -102,6 +104,9 @@ export default class TinyEarth {
         }
         if (advance.wireframe !== undefined) {
             this.#advance.wireframe = advance.wireframe;
+        }
+        if (advance.reverseZ !== undefined) {
+            this.#advance.reverseZ = advance.reverseZ;
         }
 
         // basic
@@ -292,21 +297,25 @@ export default class TinyEarth {
 
     #refreshReverseZ() {
 
-        const threshold = 10000;
+        if (this.#advance.reverseZ === 'auto') {
+            const threshold = 10000;
+            const h = this.scene!.camera.getHeightToSurface();
+            console.log("height: ", h);
+            const reverseZ = h > threshold;
+            this.#renderStatus.reverseZ = reverseZ;
+        } else {
+            this.#renderStatus.reverseZ = this.#advance.reverseZ!;
+        }
 
-        const h = this.scene!.camera.getHeightToSurface();
-
-        const reverseZ = h > threshold;
-
-        this.#renderStatus.reverseZ = reverseZ;
-
-        if (reverseZ) {
+        if (this.#renderStatus.reverseZ) {
             this.#renderStatus.depthFunc = 'greater-equal';
             this.#renderStatus.clearDepth = 0.0;
         } else {
             this.#renderStatus.depthFunc = 'less-equal';
             this.#renderStatus.clearDepth = 1.0;
         }
+
+        console.log(this.#renderStatus.reverseZ);
 
     }
 
@@ -465,6 +474,10 @@ export default class TinyEarth {
 
             if (this.gpuinfo && this.canvasinfo && this.scene) {
 
+                const encoder = this.gpuinfo.device.createCommandEncoder();
+
+                this.#renderStatus.currentPass = encoder.beginRenderPass(this.getRenderPassDescriptor(true));
+
                 this.scene.refreshSceneUniform();
 
                 if (this.skyboxProgram !== null) {
@@ -476,6 +489,14 @@ export default class TinyEarth {
                 }
 
                 this.scene.drawLayers();
+
+                this.#renderStatus.currentPass.end();
+
+                const commandBuffer = encoder.finish();
+
+                this.gpuinfo.device.queue.submit([commandBuffer]);
+
+
             }
 
             this.eventBus.fire(TinyEarthEvent.TINYEARTH_FRAME, {

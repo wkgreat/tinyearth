@@ -387,10 +387,16 @@ export class SkyBoxProgram {
 
             const { device } = this.#webgpu.gpuinfo;
 
-            const tnRenderStatus = this.tinyearth.renderStatus;
+            const status = this.tinyearth.renderStatus;
+
+            const pass = status.currentPass;
+
+            if (!pass) {
+                return;
+            }
 
             let pipeline;
-            if (tnRenderStatus.reverseZ) {
+            if (status.reverseZ) {
                 pipeline = this.#webgpu.pipelines!.reverseZ!;
             } else {
                 pipeline = this.#webgpu.pipelines!.commonZ!;
@@ -415,17 +421,12 @@ export class SkyBoxProgram {
                 label: "skybox"
             });
 
-            const pass = decoder.beginRenderPass(this.tinyearth.getRenderPassDescriptor(true));
+
             pass.setPipeline(pipeline);
             pass.setBindGroup(0, sceneBindGroup);
             pass.setBindGroup(1, skyboxBindGroup);
             pass.setVertexBuffer(0, this.#webgpu.vertexBuffer);
             pass.draw(6);
-            pass.end();
-
-            const commandBuffer = decoder.finish();
-
-            device.queue.submit([commandBuffer]);
 
         }
     }
