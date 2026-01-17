@@ -32,7 +32,6 @@ function main() {
             canvas: canvas,
             night: false,
             advance: {
-                reverseZ: false,
                 logdepth: false,
             }
         });
@@ -173,7 +172,7 @@ function main() {
                     lineNumSegs: 100
                 }),
                 clampToGround: true,
-                clampToGroundOffset: 10
+                clampToGroundOffset: 1000
             });
 
             tinyearth.scene!.addLayer(lineLayer);

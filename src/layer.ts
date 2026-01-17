@@ -100,23 +100,28 @@ export interface PointLayerOptions extends GeometryLayerOptions {
     style: PointStyle;
 }
 
+interface PointLayerWebGPU {
+    module?: GPUShaderModule;
+    pipelines?: {
+        commonZ?: GPURenderPipeline;
+        reverseZ?: GPURenderPipeline;
+    };
+    shaderDefinition?: ShaderDataDefinitions;
+    vertexBuffers?: {
+        quad?: BuffersAndAttributes,
+        pointpos?: BuffersAndAttributes,
+        pointattr?: BuffersAndAttributes
+    },
+    clampToGroundUniform?: GPUBuffer,
+    bindGroupLayout?: GPUBindGroupLayout
+}
+
 export class PointLayer extends GeometryLayer {
 
     override entities: PointEntity[];
     override style: PointStyle;
 
-    webgpuProxy: {
-        module?: GPUShaderModule;
-        pipeline?: GPURenderPipeline;
-        shaderDefinition?: ShaderDataDefinitions;
-        vertexBuffers?: {
-            quad?: BuffersAndAttributes,
-            pointpos?: BuffersAndAttributes,
-            pointattr?: BuffersAndAttributes
-        },
-        clampToGroundUniform?: GPUBuffer,
-        bindGroupLayout?: GPUBindGroupLayout
-    } = {}
+    #webgpu: PointLayerWebGPU = {}
 
     constructor(options: PointLayerOptions) {
         super(options);
@@ -127,47 +132,60 @@ export class PointLayer extends GeometryLayer {
 
         this.fillVertexBuffer();
 
-        this.createPipeline();
+        this.initWebGPU();
 
         this.setStaticUniform();
 
     }
 
-    createPipeline() {
+    initWebGPU() {
 
         const { device } = this.tinyearth.gpuinfo!;
         const source = new WGSLSource(pointLayerSource);
         const code = source.resovleSource();
-        const module = device.createShaderModule({
+
+        this.#webgpu.module = device.createShaderModule({
             label: "PointLayer",
             code
         });
 
-        const shaderDefinition = makeShaderDataDefinitions(code);
+        this.#webgpu.shaderDefinition = makeShaderDataDefinitions(code);
+
+        this.createPipelines();
+
+    }
+
+    createPipelines() {
+
+        if (!this.#webgpu.pipelines) {
+            this.#webgpu.pipelines = {};
+        }
+
+        const { device } = this.tinyearth.gpuinfo!;
 
         const pipelineLayout = device.createPipelineLayout({
             bindGroupLayouts: [
                 this.tinyearth.scene!.bindGroupLayout,
-                this.webgpuProxy.bindGroupLayout
+                this.#webgpu.bindGroupLayout
             ]
         });
 
-        const pipeline = device.createRenderPipeline({
+        const descriptor: GPURenderPipelineDescriptor = {
             label: "PointLayer",
             layout: pipelineLayout,
             vertex: {
-                module,
+                module: this.#webgpu.module!,
                 buffers: [
-                    ...this.webgpuProxy!.vertexBuffers!.quad!.bufferLayouts!,
-                    ...this.webgpuProxy!.vertexBuffers!.pointpos!.bufferLayouts!,
-                    ...this.webgpuProxy!.vertexBuffers!.pointattr!.bufferLayouts!
+                    ...this.#webgpu!.vertexBuffers!.quad!.bufferLayouts!,
+                    ...this.#webgpu!.vertexBuffers!.pointpos!.bufferLayouts!,
+                    ...this.#webgpu!.vertexBuffers!.pointattr!.bufferLayouts!
                 ],
                 constants: {
                     ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
                 }
             },
             fragment: {
-                module,
+                module: this.#webgpu.module!,
                 targets: [
                     {
                         format: this.tinyearth.canvasinfo!.context.getConfiguration()!.format
@@ -181,12 +199,18 @@ export class PointLayer extends GeometryLayer {
                 topology: 'triangle-strip',
                 cullMode: 'none'
             },
-            depthStencil: this.tinyearth.getDepthStencilState()
-        });
+            depthStencil: {
+                format: this.tinyearth.renderStatus.depthFormat,
+                depthWriteEnabled: this.tinyearth.renderStatus.depthWriteEnabled,
+                depthCompare: 'less-equal'
+            }
+        }
 
-        this.webgpuProxy.module = module;
-        this.webgpuProxy.pipeline = pipeline;
-        this.webgpuProxy.shaderDefinition = shaderDefinition;
+        this.#webgpu.pipelines.commonZ = device.createRenderPipeline(descriptor);
+
+        descriptor.depthStencil!.depthCompare = 'greater-equal';
+
+        this.#webgpu.pipelines.reverseZ = device.createRenderPipeline(descriptor);
     }
 
     createBindGroupLayout() {
@@ -204,23 +228,23 @@ export class PointLayer extends GeometryLayer {
             ]
         });
 
-        this.webgpuProxy.bindGroupLayout = layout;
+        this.#webgpu.bindGroupLayout = layout;
 
     }
 
     fillVertexBuffer() {
-        if (!this.webgpuProxy) {
-            this.webgpuProxy = {};
+        if (!this.#webgpu) {
+            this.#webgpu = {};
         }
 
         const device = this.tinyearth.gpuinfo!.device!;
         const count = this.entities.length;
 
-        if (!this.webgpuProxy.vertexBuffers) {
-            this.webgpuProxy.vertexBuffers = {}
+        if (!this.#webgpu.vertexBuffers) {
+            this.#webgpu.vertexBuffers = {}
         }
 
-        const vertexBuffers = this.webgpuProxy.vertexBuffers;
+        const vertexBuffers = this.#webgpu.vertexBuffers;
 
         if (!vertexBuffers.quad) {
             const quadpos = [-1, -1, 1, -1, -1, 1, 1, 1];
@@ -287,14 +311,14 @@ export class PointLayer extends GeometryLayer {
 
     setStaticUniform() {
 
-        if (!this.webgpuProxy) {
+        if (!this.#webgpu) {
             return;
         }
 
-        if (!this.webgpuProxy.clampToGroundUniform) {
+        if (!this.#webgpu.clampToGroundUniform) {
             const device = this.tinyearth.gpuinfo!.device!;
 
-            const shaderDef = this.webgpuProxy?.shaderDefinition!;
+            const shaderDef = this.#webgpu?.shaderDefinition!;
 
             const clampToGroundUniformView = makeStructuredView(shaderDef.uniforms.clampToGround!);
 
@@ -303,15 +327,13 @@ export class PointLayer extends GeometryLayer {
                 offset: this.clampToGroundOffset
             });
 
-            console.log(this.clampToGroundOffset);
-
-            this.webgpuProxy.clampToGroundUniform = device.createBuffer({
+            this.#webgpu.clampToGroundUniform = device.createBuffer({
                 label: "PointLayer clampToGroundUniform",
                 size: clampToGroundUniformView.arrayBuffer.byteLength,
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
             });
 
-            device.queue.writeBuffer(this.webgpuProxy.clampToGroundUniform, 0, clampToGroundUniformView.arrayBuffer);
+            device.queue.writeBuffer(this.#webgpu.clampToGroundUniform, 0, clampToGroundUniformView.arrayBuffer);
         }
 
     }
@@ -321,11 +343,13 @@ export class PointLayer extends GeometryLayer {
 
         const device = this.tinyearth.gpuinfo!.device;
 
+        const status = this.tinyearth.renderStatus;
+
         const sceneBindGroup = this.tinyearth.scene!.getBindGroup();
         const layerBindGroup = device.createBindGroup({
-            layout: this.webgpuProxy.bindGroupLayout!,
+            layout: this.#webgpu.bindGroupLayout!,
             entries: [
-                { binding: 0, resource: { buffer: this.webgpuProxy.clampToGroundUniform! } }
+                { binding: 0, resource: { buffer: this.#webgpu.clampToGroundUniform! } }
             ]
         });
 
@@ -333,12 +357,17 @@ export class PointLayer extends GeometryLayer {
 
         const pass = encode.beginRenderPass(this.tinyearth.getRenderPassDescriptor(false));
 
-        pass.setPipeline(this.webgpuProxy.pipeline!);
+
+        if (status.reverseZ) {
+            pass.setPipeline(this.#webgpu.pipelines!.reverseZ!);
+        } else {
+            pass.setPipeline(this.#webgpu.pipelines!.commonZ!);
+        }
         pass.setBindGroup(0, sceneBindGroup);
         pass.setBindGroup(1, layerBindGroup);
-        pass.setVertexBuffer(0, this.webgpuProxy.vertexBuffers!.quad!.buffers[0]);
-        pass.setVertexBuffer(1, this.webgpuProxy.vertexBuffers!.pointpos!.buffers[0]);
-        pass.setVertexBuffer(2, this.webgpuProxy.vertexBuffers?.pointattr!.buffers[0]);
+        pass.setVertexBuffer(0, this.#webgpu.vertexBuffers!.quad!.buffers[0]);
+        pass.setVertexBuffer(1, this.#webgpu.vertexBuffers!.pointpos!.buffers[0]);
+        pass.setVertexBuffer(2, this.#webgpu.vertexBuffers?.pointattr!.buffers[0]);
         pass.draw(4, this.entities.length);
         pass.end();
 
@@ -355,6 +384,25 @@ export interface LineStringLayerOptions extends GeometryLayerOptions {
     style: LineStringStyle;
 }
 
+interface LineStringLayerWebGPU {
+    module?: GPUShaderModule;
+    pipelines?: {
+        commonZ?: GPURenderPipeline,
+        reverseZ?: GPURenderPipeline
+    };
+    shaderDefinition?: ShaderDataDefinitions;
+    vertexBuffers: {
+        vertex?: BuffersAndAttributes
+    },
+    bindGroupLayouts: {
+        scene?: GPUBindGroupLayout
+        clampToGound?: GPUBindGroupLayout
+    },
+    uniforms: {
+        clampToGround?: GPUBuffer
+    }
+}
+
 export class LineStringLayer extends GeometryLayer {
 
     override entities: LineStringEntity[];
@@ -362,25 +410,11 @@ export class LineStringLayer extends GeometryLayer {
 
     vertexCount = 0;
 
-    webgpuProxy: {
-        module?: GPUShaderModule;
-        pipeline?: GPURenderPipeline;
-        shaderDefinition?: ShaderDataDefinitions;
-        vertexBuffers: {
-            vertex?: BuffersAndAttributes
-        },
-        bindGroupLayouts: {
-            scene?: GPUBindGroupLayout
-            clampToGound?: GPUBindGroupLayout
-        },
-        uniforms: {
-            clampToGround?: GPUBuffer
-        }
-    } = {
-            vertexBuffers: {},
-            bindGroupLayouts: {},
-            uniforms: {}
-        }
+    #webgpu: LineStringLayerWebGPU = {
+        vertexBuffers: {},
+        bindGroupLayouts: {},
+        uniforms: {}
+    }
 
     constructor(options: LineStringLayerOptions) {
         super(options);
@@ -518,26 +552,26 @@ export class LineStringLayer extends GeometryLayer {
             shaderLocation: 0,
         });
 
-        if (!this.webgpuProxy.vertexBuffers) {
-            this.webgpuProxy.vertexBuffers = {};
+        if (!this.#webgpu.vertexBuffers) {
+            this.#webgpu.vertexBuffers = {};
         }
-        this.webgpuProxy.vertexBuffers.vertex = vertexBuffer;
+        this.#webgpu.vertexBuffers.vertex = vertexBuffer;
 
     }
 
     initAndFillUniform() {
-        if (!this.webgpuProxy) {
+        if (!this.#webgpu) {
             return;
         }
 
-        if (!this.webgpuProxy.uniforms) {
-            this.webgpuProxy.uniforms = {};
+        if (!this.#webgpu.uniforms) {
+            this.#webgpu.uniforms = {};
         }
 
-        if (!this.webgpuProxy.uniforms?.clampToGround) {
+        if (!this.#webgpu.uniforms?.clampToGround) {
             const device = this.tinyearth.gpuinfo!.device!;
 
-            const shaderDef = this.webgpuProxy!.shaderDefinition!;
+            const shaderDef = this.#webgpu!.shaderDefinition!;
 
             const clampToGroundUniformView = makeStructuredView(shaderDef.uniforms.clampToGround!);
 
@@ -546,13 +580,13 @@ export class LineStringLayer extends GeometryLayer {
                 offset: this.clampToGroundOffset
             });
 
-            this.webgpuProxy.uniforms.clampToGround = device.createBuffer({
+            this.#webgpu.uniforms.clampToGround = device.createBuffer({
                 label: "PointLayer clampToGroundUniform",
                 size: clampToGroundUniformView.arrayBuffer.byteLength,
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
             });
 
-            device.queue.writeBuffer(this.webgpuProxy.uniforms.clampToGround, 0, clampToGroundUniformView.arrayBuffer);
+            device.queue.writeBuffer(this.#webgpu.uniforms.clampToGround, 0, clampToGroundUniformView.arrayBuffer);
         }
     }
 
@@ -564,7 +598,7 @@ export class LineStringLayer extends GeometryLayer {
 
         const code = source.resovleSource();
 
-        this.webgpuProxy.shaderDefinition = makeShaderDataDefinitions(code);
+        this.#webgpu.shaderDefinition = makeShaderDataDefinitions(code);
 
         // vertexBuffer
         this.initAndFillVertexBuffer();
@@ -573,8 +607,8 @@ export class LineStringLayer extends GeometryLayer {
         this.initAndFillUniform();
 
         // bindGroup
-        this.webgpuProxy.bindGroupLayouts.scene = this.tinyearth.scene!.bindGroupLayout;
-        this.webgpuProxy.bindGroupLayouts.clampToGound = device.createBindGroupLayout({
+        this.#webgpu.bindGroupLayouts.scene = this.tinyearth.scene!.bindGroupLayout;
+        this.#webgpu.bindGroupLayouts.clampToGound = device.createBindGroupLayout({
             label: "PointLayer",
             entries: [
                 {
@@ -585,32 +619,44 @@ export class LineStringLayer extends GeometryLayer {
             ]
         });
 
-        const pipelineLayout = device.createPipelineLayout({
-            bindGroupLayouts: [
-                this.webgpuProxy.bindGroupLayouts.scene,
-                this.webgpuProxy.bindGroupLayouts.clampToGound
-            ]
-        });
-
-        this.webgpuProxy.module = device.createShaderModule({
+        this.#webgpu.module = device.createShaderModule({
             label: "LineStringLayer",
             code
         });
 
-        this.webgpuProxy.pipeline = device.createRenderPipeline({
+        this.#createPipelines();
+
+    }
+
+    #createPipelines() {
+
+        if (!this.#webgpu.pipelines) {
+            this.#webgpu.pipelines = {};
+        }
+
+        const device = this.tinyearth.gpuinfo!.device;
+
+        const pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [
+                this.#webgpu.bindGroupLayouts.scene,
+                this.#webgpu.bindGroupLayouts.clampToGound
+            ]
+        });
+
+        const descriptor: GPURenderPipelineDescriptor = {
             label: "LineStringLayer",
             layout: pipelineLayout,
             vertex: {
-                module: this.webgpuProxy.module,
+                module: this.#webgpu.module!,
                 buffers: [
-                    ...this.webgpuProxy.vertexBuffers!.vertex!.bufferLayouts
+                    ...this.#webgpu.vertexBuffers!.vertex!.bufferLayouts
                 ],
                 constants: {
                     ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
                 }
             },
             fragment: {
-                module: this.webgpuProxy.module,
+                module: this.#webgpu.module!,
                 targets: [
                     {
                         format: this.tinyearth.canvasinfo!.context.getConfiguration()!.format
@@ -624,21 +670,32 @@ export class LineStringLayer extends GeometryLayer {
                 topology: 'triangle-strip',
                 cullMode: 'none'
             },
-            depthStencil: this.tinyearth.getDepthStencilState()
-        });
+            depthStencil: {
+                format: this.tinyearth.renderStatus.depthFormat,
+                depthWriteEnabled: this.tinyearth.renderStatus.depthWriteEnabled,
+                depthCompare: 'less-equal'
+            }
+        };
 
+        this.#webgpu.pipelines!.commonZ = device.createRenderPipeline(descriptor);
+
+        descriptor.depthStencil!.depthCompare = 'greater-equal';
+
+        this.#webgpu.pipelines!.reverseZ = device.createRenderPipeline(descriptor);
     }
 
     override draw(): void {
 
         const device = this.tinyearth.gpuinfo!.device;
 
+        const status = this.tinyearth.renderStatus;
+
         const sceneBindGroup = this.tinyearth.scene!.getBindGroup();
         const clampBindGroup = device.createBindGroup({
-            layout: this.webgpuProxy.bindGroupLayouts.clampToGound!,
+            layout: this.#webgpu.bindGroupLayouts.clampToGound!,
             entries: [
                 {
-                    binding: 0, resource: { buffer: this.webgpuProxy.uniforms.clampToGround! }
+                    binding: 0, resource: { buffer: this.#webgpu.uniforms.clampToGround! }
                 }
             ]
         });
@@ -647,10 +704,16 @@ export class LineStringLayer extends GeometryLayer {
 
         const pass = encode.beginRenderPass(this.tinyearth.getRenderPassDescriptor(false));
 
-        pass.setPipeline(this.webgpuProxy.pipeline!);
+        if (status.reverseZ) {
+            pass.setPipeline(this.#webgpu.pipelines!.reverseZ!);
+        } else {
+            pass.setPipeline(this.#webgpu.pipelines!.commonZ!);
+        }
+
+
         pass.setBindGroup(0, sceneBindGroup);
         pass.setBindGroup(1, clampBindGroup);
-        pass.setVertexBuffer(0, this.webgpuProxy.vertexBuffers.vertex!.buffers[0]);
+        pass.setVertexBuffer(0, this.#webgpu.vertexBuffers.vertex!.buffers[0]);
         pass.draw(this.vertexCount);
         pass.end();
 

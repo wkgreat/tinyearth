@@ -93,7 +93,7 @@ export class GPUFrameBuffer {
         const depthTexture = gpuinfo.device.createTexture({
             label: "depthTexture",
             size: [width, height],
-            format: 'depth24plus',
+            format: 'depth32float',
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST
         });
 

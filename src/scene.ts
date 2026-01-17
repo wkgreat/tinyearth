@@ -85,7 +85,7 @@ export default class Scene {
         }
 
         this.#camera = new Camera(this, cameraOpts.from, cameraOpts.to, cameraOpts.up);
-        this.#projection = new Projection(this, projOpts.fovy, options.viewport.width / options.viewport.height, projOpts.near, projOpts.far, reverseZ);
+        this.#projection = new Projection(this, projOpts.fovy, options.viewport.width / options.viewport.height, projOpts.near, projOpts.far);
         this.#viewWidth = options.viewport.width;
         this.#viewHeight = options.viewport.height;
         this.#frustum = this.computeFrustum();

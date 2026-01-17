@@ -54,15 +54,17 @@ export interface SkyBoxProgramOptions extends Omit<ProgramOptions, 'vertSource' 
 }
 
 
-interface SkyBoxWebGPUResources {
+interface SkyBoxWebGPU {
     gpuinfo: GPUInfo;
     canvasinfo: CanvasGPUInfo;
-    module: GPUShaderModule;
-    shaderDefinition: ShaderDataDefinitions;
-    pipeline: GPURenderPipeline;
-    depthFunc: GPUCompareFunction;
-    clearDepth: number;
-    sampler: GPUSampler;
+    module?: GPUShaderModule;
+    shaderDefinition?: ShaderDataDefinitions;
+    pipelineLayout?: GPUPipelineLayout;
+    pipelines?: {
+        commonZ?: GPURenderPipeline;
+        reverseZ?: GPURenderPipeline;
+    }
+    sampler?: GPUSampler;
     bindGroupLayout?: GPUBindGroupLayout;
     vertexBuffer?: GPUBuffer;
     skybox?: GPUTexture;
@@ -73,7 +75,7 @@ export class SkyBoxProgram {
 
     label = "skybox";
     tinyearth: TinyEarth;
-    #webgpuResources: SkyBoxWebGPUResources;
+    #webgpu: SkyBoxWebGPU;
     images: (HTMLImageElement | null)[] = [];
     #exposure: number = 1.0;
     #contrast: number = 1.0;
@@ -83,44 +85,57 @@ export class SkyBoxProgram {
         const source = new WGSLSource(skyboxSource);
         const code = source.resovleSource();
 
-        const gpuinfo = options.gpuinfo;
-        const canvasinfo = options.canvasinfo;
-        const { device } = gpuinfo;
+        this.#webgpu = {
+            gpuinfo: options.gpuinfo,
+            canvasinfo: options.canvasinfo
+        }
 
-        const shaderDefinition = makeShaderDataDefinitions(code);
+        const { device } = this.#webgpu.gpuinfo;
 
-        const module = device.createShaderModule({
+        this.#webgpu.shaderDefinition = makeShaderDataDefinitions(code);
+
+        this.#webgpu.module = device.createShaderModule({
             label: this.label,
             code
         });
 
         this.tinyearth = options.tinyearth;
 
-        let depthFunc: GPUCompareFunction = 'less';
-        let clearDepth = 1.0;
+        const skyboxBindGroupLayout = this.createBindGroupLayout(this.#webgpu.gpuinfo);
 
-        if (this.tinyearth.advance.reverseZ) {
-            depthFunc = 'greater-equal';
-            clearDepth = 0.0;
-        } else {
-            depthFunc = 'less-equal';
-            clearDepth = 1.0;
-        }
-
-        const skyboxBindGroupLayout = this.createBindGroupLayout(gpuinfo);
-
-        const pipelineLayout = device.createPipelineLayout({
+        this.#webgpu.pipelineLayout = device.createPipelineLayout({
             bindGroupLayouts: [
                 this.tinyearth.scene!.bindGroupLayout,
                 skyboxBindGroupLayout
             ]
         });
 
-        const pipeline = device.createRenderPipeline({
+        this.#webgpu.sampler = device.createSampler({
             label: this.label,
-            layout: pipelineLayout,
+            minFilter: 'linear',
+            magFilter: 'linear',
+            mipmapFilter: 'nearest',
+            addressModeU: 'clamp-to-edge',
+            addressModeV: 'clamp-to-edge',
+            addressModeW: 'clamp-to-edge',
+        });
+
+        this.#createPipelines();
+
+        this.images = Array(6).fill(null);
+    }
+
+    #createPipelines() {
+
+        const device = this.#webgpu.gpuinfo.device;
+
+        const tnRenderStatus = this.tinyearth.renderStatus;
+
+        const pipelineDescriptor: GPURenderPipelineDescriptor = {
+            label: this.label,
+            layout: this.#webgpu.pipelineLayout!,
             vertex: {
-                module: module,
+                module: this.#webgpu.module!,
                 buffers: [
                     {
                         arrayStride: 6 * 4, attributes: [
@@ -130,9 +145,9 @@ export class SkyBoxProgram {
                 ]
             },
             fragment: {
-                module: module,
+                module: this.#webgpu.module!,
                 targets: [{
-                    format: canvasinfo.context.getConfiguration()!.format,
+                    format: this.#webgpu.canvasinfo.context.getConfiguration()!.format,
                     blend: {
                         color: {
                             srcFactor: "one",
@@ -153,32 +168,23 @@ export class SkyBoxProgram {
                 cullMode: 'back',
                 frontFace: 'ccw'
             },
-            depthStencil: this.tinyearth.getDepthStencilState()
-        });
-
-        const sampler = device.createSampler({
-            label: this.label,
-            minFilter: 'linear',
-            magFilter: 'linear',
-            mipmapFilter: 'nearest',
-            addressModeU: 'clamp-to-edge',
-            addressModeV: 'clamp-to-edge',
-            addressModeW: 'clamp-to-edge',
-        });
-
-        this.#webgpuResources = {
-            gpuinfo,
-            canvasinfo,
-            shaderDefinition,
-            module,
-            pipeline,
-            depthFunc,
-            clearDepth,
-            sampler,
-            bindGroupLayout: skyboxBindGroupLayout
+            depthStencil: {
+                format: tnRenderStatus.depthFormat,
+                depthWriteEnabled: true,
+                depthCompare: 'less-equal'
+            }
         }
 
-        this.images = Array(6).fill(null);
+        if (!this.#webgpu.pipelines) {
+            this.#webgpu.pipelines = {};
+        }
+
+        this.#webgpu.pipelines.commonZ = device.createRenderPipeline(pipelineDescriptor);
+
+        pipelineDescriptor.depthStencil!.depthCompare = 'greater-equal';
+
+        this.#webgpu.pipelines.reverseZ = device.createRenderPipeline(pipelineDescriptor);
+
     }
 
     get exposure(): number {
@@ -291,21 +297,21 @@ export class SkyBoxProgram {
 
     get bindGroupLayout(): GPUBindGroupLayout {
 
-        if (!this.#webgpuResources.bindGroupLayout) {
-            this.#webgpuResources.bindGroupLayout = this.createBindGroupLayout(this.#webgpuResources.gpuinfo)
+        if (!this.#webgpu.bindGroupLayout) {
+            this.#webgpu.bindGroupLayout = this.createBindGroupLayout(this.#webgpu.gpuinfo)
         }
-        return this.#webgpuResources.bindGroupLayout;
+        return this.#webgpu.bindGroupLayout;
     }
 
     setSkyBoxTexture(): GPUTexture | null {
 
-        if (!this.#webgpuResources.skybox) {
+        if (!this.#webgpu.skybox) {
             if (this.images.some(image => image === null)) {
                 return null;
             }
-            const { device } = this.#webgpuResources.gpuinfo;
+            const { device } = this.#webgpu.gpuinfo;
             const aImage = this.images[0]!;
-            const texture = this.#webgpuResources.gpuinfo.device.createTexture({
+            const texture = this.#webgpu.gpuinfo.device.createTexture({
                 label: 'skybox',
                 format: 'rgba8unorm',
                 size: [aImage.width, aImage.height, this.images.length],
@@ -319,9 +325,9 @@ export class SkyBoxProgram {
                     { width: image!.width, height: image!.height }
                 );
             })
-            this.#webgpuResources.skybox = texture;
+            this.#webgpu.skybox = texture;
         }
-        return this.#webgpuResources.skybox!;
+        return this.#webgpu.skybox!;
 
     }
 
@@ -329,31 +335,31 @@ export class SkyBoxProgram {
 
         const vertices = this.createVetexData(this.tinyearth.scene!);
 
-        if (!this.#webgpuResources.vertexBuffer) {
+        if (!this.#webgpu.vertexBuffer) {
 
-            this.#webgpuResources.vertexBuffer = this.#webgpuResources.gpuinfo.device.createBuffer({
+            this.#webgpu.vertexBuffer = this.#webgpu.gpuinfo.device.createBuffer({
                 label: this.label,
                 size: vertices.byteLength,
                 usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
             });
         }
-        this.#webgpuResources.gpuinfo.device.queue.writeBuffer(
-            this.#webgpuResources.vertexBuffer,
+        this.#webgpu.gpuinfo.device.queue.writeBuffer(
+            this.#webgpu.vertexBuffer,
             0,
             vertices.buffer
         );
-        return this.#webgpuResources.vertexBuffer;
+        return this.#webgpu.vertexBuffer;
 
     }
 
     setSkyBoxUniform() {
 
-        const uniformView = makeStructuredView(this.#webgpuResources.shaderDefinition.uniforms.skyboxUniforms!);
+        const uniformView = makeStructuredView(this.#webgpu.shaderDefinition!.uniforms.skyboxUniforms!);
 
-        const { device } = this.#webgpuResources.gpuinfo;
+        const { device } = this.#webgpu.gpuinfo;
 
-        if (!this.#webgpuResources.skyboxUniform) {
-            this.#webgpuResources.skyboxUniform = device.createBuffer({
+        if (!this.#webgpu.skyboxUniform) {
+            this.#webgpu.skyboxUniform = device.createBuffer({
                 label: "skyboxUniform",
                 size: uniformView.arrayBuffer.byteLength,
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -365,9 +371,9 @@ export class SkyBoxProgram {
             contrast: this.contrast
         });
 
-        device.queue.writeBuffer(this.#webgpuResources.skyboxUniform, 0, uniformView.arrayBuffer);
+        device.queue.writeBuffer(this.#webgpu.skyboxUniform, 0, uniformView.arrayBuffer);
 
-        return this.#webgpuResources.skyboxUniform;
+        return this.#webgpu.skyboxUniform;
 
     }
 
@@ -379,20 +385,29 @@ export class SkyBoxProgram {
 
         if (this.setVertexBuffer() && this.setSkyBoxTexture() && this.setSkyBoxUniform()) {
 
-            const { device } = this.#webgpuResources.gpuinfo;
+            const { device } = this.#webgpu.gpuinfo;
+
+            const tnRenderStatus = this.tinyearth.renderStatus;
+
+            let pipeline;
+            if (tnRenderStatus.reverseZ) {
+                pipeline = this.#webgpu.pipelines!.reverseZ!;
+            } else {
+                pipeline = this.#webgpu.pipelines!.commonZ!;
+            }
 
             const sceneBindGroup = this.tinyearth.scene!.getBindGroup();
             const skyboxBindGroup = device.createBindGroup({
                 label: 'skyboxBindGroup',
-                layout: this.#webgpuResources.pipeline.getBindGroupLayout(1),
+                layout: pipeline.getBindGroupLayout(1),
                 entries: [
                     {
-                        binding: 0, resource: this.#webgpuResources.skybox!.createView({
+                        binding: 0, resource: this.#webgpu.skybox!.createView({
                             dimension: 'cube'
                         })
                     },
-                    { binding: 1, resource: this.#webgpuResources.sampler! },
-                    { binding: 2, resource: { buffer: this.#webgpuResources.skyboxUniform! } }
+                    { binding: 1, resource: this.#webgpu.sampler! },
+                    { binding: 2, resource: { buffer: this.#webgpu.skyboxUniform! } }
                 ]
             });
 
@@ -401,10 +416,10 @@ export class SkyBoxProgram {
             });
 
             const pass = decoder.beginRenderPass(this.tinyearth.getRenderPassDescriptor(true));
-            pass.setPipeline(this.#webgpuResources.pipeline);
+            pass.setPipeline(pipeline);
             pass.setBindGroup(0, sceneBindGroup);
             pass.setBindGroup(1, skyboxBindGroup);
-            pass.setVertexBuffer(0, this.#webgpuResources.vertexBuffer);
+            pass.setVertexBuffer(0, this.#webgpu.vertexBuffer);
             pass.draw(6);
             pass.end();
 

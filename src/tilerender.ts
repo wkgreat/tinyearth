@@ -48,6 +48,7 @@ export class GlobeTileProgram {
     label = "tilerender";
     module: GPUShaderModule | null = null;
     pipeline: GPURenderPipeline | null = null;
+    pipelineReverseZ: GPURenderPipeline | null = null;
     sampler: GPUSampler;
     shaderDefinitions: ShaderDataDefinitions;
     tileUniform: GPUBuffer | null = null;
@@ -73,9 +74,47 @@ export class GlobeTileProgram {
             label: this.label,
             code
         });
-        this.pipeline = device.createRenderPipeline({
+
+        const sceneBindGroupLayout = this.tinyearth.scene!.bindGroupLayout;
+        const ctgBindGroupLayout = device.createBindGroupLayout({
+            label: "ctgBindGroupLayout",
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    texture: {
+                        sampleType: 'float',
+                        viewDimension: '2d',
+                        multisampled: false
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    sampler: {
+                        type: 'filtering'
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    buffer: {
+                        type: 'uniform'
+                    }
+                }
+            ]
+        });
+
+        const pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [
+                sceneBindGroupLayout,
+                ctgBindGroupLayout
+            ]
+        });
+
+        const descriptor: GPURenderPipelineDescriptor = {
             label: this.label,
-            layout: 'auto',
+            layout: pipelineLayout,
             vertex: {
                 module: this.module,
                 buffers: [
@@ -118,8 +157,19 @@ export class GlobeTileProgram {
                 cullMode: 'back',
                 frontFace: 'ccw'
             },
-            depthStencil: this.tinyearth.getDepthStencilState()
-        });
+            depthStencil: {
+                format: this.tinyearth.renderStatus.depthFormat,
+                depthWriteEnabled: this.tinyearth.renderStatus.depthWriteEnabled,
+                depthCompare: 'less-equal'
+            }
+        }
+
+        this.pipeline = device.createRenderPipeline(descriptor);
+
+        descriptor.depthStencil!.depthCompare = 'greater-equal';
+
+        this.pipelineReverseZ = device.createRenderPipeline(descriptor);
+
         this.sampler = device.createSampler({
             label: this.label,
             magFilter: 'nearest',
@@ -304,8 +354,6 @@ export class GlobeTileProgram {
                 ]
             });
 
-
-
             const tileBindGroup = this.gpuinfo.device.createBindGroup({
                 label: `${this.label} tileBindGroup`,
                 layout: this.pipeline!.getBindGroupLayout(1),
@@ -317,7 +365,14 @@ export class GlobeTileProgram {
                 ]
             })
 
-            pass.setPipeline(this.pipeline!);
+            const status = this.tinyearth.renderStatus;
+
+            if (status.reverseZ) {
+                pass.setPipeline(this.pipelineReverseZ!);
+            } else {
+                pass.setPipeline(this.pipeline!);
+            }
+
             pass.setBindGroup(0, sceneBindGroup);
             pass.setBindGroup(1, tileBindGroup);
             pass.setVertexBuffer(0, node.positionBuffer);

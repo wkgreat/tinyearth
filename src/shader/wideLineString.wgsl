@@ -120,9 +120,9 @@ fn vs(input:VSInput) -> VSOutput {
 
     let new_ndcpos = dfvec4_normw(dfvec4_mul(dfmat4_inv(sceneDF.viewport.viewportmtx), new_ndspos));
 
-    let new_viewpos = dfvec4_normw(dfvec4_mul(dfmat4_inv(sceneDF.projection.projmtx), new_ndcpos));
+    let new_viewpos = dfvec4_normw(dfvec4_mul(sceneDF.projection.projmtxInv, new_ndcpos));
 
-    let new_worldpos = dfvec4_normw(dfvec4_mul(dfmat4_inv(sceneDF.camera.relviewmtx), new_viewpos));
+    let new_worldpos = dfvec4_normw(dfvec4_mul(sceneDF.camera.relviewmtxInv, new_viewpos));
 
     let new_ndcpos_vec4f = dfvec4_out(new_ndcpos);
 
@@ -155,6 +155,7 @@ fn fs(input: VSOutput) -> FSOutput {
     var output: FSOutput;
 
     if(clampToGround.isEnabled > 0u) {
+        // TODO 未生效
         let relworldpos = dfvec4(input.relworldpos_high, input.relworldpos_low);
         let worldpos = relativeDF(clamp_to_ground_df(absoluteDF(dfv4t3(relworldpos)), SPHERIOD_WGS84_df, df(clampToGround.offset)));
         if(ENABLE_LOG_DEPTH) {

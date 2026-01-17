@@ -30,6 +30,14 @@ interface TinyEarthWebGPUResources {
     framebuffer?: GPUFrameBuffer
 }
 
+interface TinyEarthRenderStatus {
+    depthFormat: GPUTextureFormat
+    depthWriteEnabled: boolean
+    reverseZ: boolean
+    depthFunc: GPUCompareFunction
+    clearDepth: number
+}
+
 export default class TinyEarth {
 
     canvas: HTMLCanvasElement;
@@ -67,9 +75,10 @@ export default class TinyEarth {
     #advance: TinyEarthAdvanceOptions = {
         debug: false,
         logdepth: false,
-        wireframe: false,
-        reverseZ: true
+        wireframe: false
     }
+
+    #renderStatus: TinyEarthRenderStatus;
 
     #webgpuResources: TinyEarthWebGPUResources = {};
 
@@ -93,9 +102,6 @@ export default class TinyEarth {
         }
         if (advance.wireframe !== undefined) {
             this.#advance.wireframe = advance.wireframe;
-        }
-        if (advance.reverseZ !== undefined) {
-            this.#advance.reverseZ = advance.reverseZ;
         }
 
         // basic
@@ -123,6 +129,15 @@ export default class TinyEarth {
         }
 
         this.canvas = _canvas;
+
+        //renderStatus
+        this.#renderStatus = {
+            depthFormat: 'depth32float',
+            depthWriteEnabled: true,
+            reverseZ: true,
+            depthFunc: 'greater-equal',
+            clearDepth: 0.0
+        }
 
         createGPUInfo().then(info => {
             this.gpuinfo = info;
@@ -152,8 +167,6 @@ export default class TinyEarth {
                 }
             }
             this.scene = new Scene({ ...options.scene, ...viewportOpts, tinyearth: this });
-
-            window.addEventListener('resize', this.resizeHandler.bind(this));
 
             // config
             this.night = options.night ?? false;
@@ -205,6 +218,16 @@ export default class TinyEarth {
 
             this.#webgpuResources.framebuffer = new GPUFrameBuffer(this.gpuinfo, this.canvasinfo);
 
+            //event
+            window.addEventListener('resize', this.resizeHandler.bind(this));
+            this.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
+                callback: (info) => {
+                    this.#refreshReverseZ();
+                }
+            });
+
+            this.#refreshReverseZ();
+
             this.#isReady = true;
             this.#readyTaskQueue.forEach(fn => fn());
             this.#readyTaskQueue = [];
@@ -227,12 +250,6 @@ export default class TinyEarth {
         } else {
             loadOp = 'load';
         }
-        let clearDepth: number = 0.0;
-        if (this.advance.reverseZ) {
-            clearDepth = 0.0;
-        } else {
-            clearDepth = 1.0;
-        }
         const passDescriptor: GPURenderPassDescriptor = {
             label: `tinyearth`,
             colorAttachments: [
@@ -245,7 +262,7 @@ export default class TinyEarth {
             ],
             depthStencilAttachment: {
                 view: this.frameBuffer!.depthTexture.createView(),
-                depthClearValue: clearDepth,
+                depthClearValue: this.renderStatus.clearDepth,
                 depthLoadOp: loadOp,  // 清空
                 depthStoreOp: "store",
             }
@@ -258,11 +275,11 @@ export default class TinyEarth {
     }
 
     get nearDepth(): number {
-        return this.#advance.reverseZ ? 1.0 : 0.0;
+        return this.#renderStatus.reverseZ ? 1.0 : 0.0;
     }
 
     get farDepth(): number {
-        return this.#advance.reverseZ ? 0.0 : 1.0;
+        return this.#renderStatus.reverseZ ? 0.0 : 1.0;
     }
 
     get webgpuResources() {
@@ -273,34 +290,32 @@ export default class TinyEarth {
         return this.#webgpuResources.framebuffer;
     }
 
+    #refreshReverseZ() {
+
+        const threshold = 10000;
+
+        const h = this.scene!.camera.getHeightToSurface();
+
+        const reverseZ = h > threshold;
+
+        this.#renderStatus.reverseZ = reverseZ;
+
+        if (reverseZ) {
+            this.#renderStatus.depthFunc = 'greater-equal';
+            this.#renderStatus.clearDepth = 0.0;
+        } else {
+            this.#renderStatus.depthFunc = 'less-equal';
+            this.#renderStatus.clearDepth = 1.0;
+        }
+
+    }
+
+    get renderStatus() {
+        return this.#renderStatus;
+    }
+
     getRenderPassDescriptor(first: boolean): GPURenderPassDescriptor {
         return this.createRenderPassDescriptor(first);
-    }
-
-    getDepthInfo(): { depthFunc: GPUCompareFunction, clearDepth: number } {
-        let depthFunc: GPUCompareFunction = 'less';
-        let clearDepth = 1.0;
-
-        if (this.advance.reverseZ) {
-            depthFunc = 'greater-equal';
-            clearDepth = 0.0;
-        } else {
-            depthFunc = 'less-equal';
-            clearDepth = 1.0;
-        }
-
-        return {
-            depthFunc,
-            clearDepth
-        }
-    }
-
-    getDepthStencilState(): GPUDepthStencilState {
-        return {
-            format: 'depth24plus',
-            depthWriteEnabled: true,
-            depthCompare: this.getDepthInfo().depthFunc
-        };
     }
 
     get debug() {

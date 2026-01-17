@@ -9,25 +9,25 @@ class Projection {
     #near: number = 0.1;
     #far: number = 1E10;
     #matrix: mat4 = MAT4.create();
-    #reverseZ: boolean = false;
     #scene: Scene;
 
-    constructor(scene: Scene, fovy: number, aspect: number, near: number, far: number, reverseZ: boolean) {
+    constructor(scene: Scene, fovy: number, aspect: number, near: number, far: number) {
         this.#scene = scene;
         this.#fovy = fovy;
         this.#aspect = aspect;
         this.#near = near;
         this.#far = far;
-        this.#reverseZ = reverseZ;
     }
 
     //TODO lazy calc
     get perspectiveMatrix(): mat4 {
-        return MAT4.perspective_(this.#matrix, this.#fovy, this.#aspect, this.#near, this.#far, this.#reverseZ);
+        const reverseZ = this.#scene.tinyearth?.renderStatus.reverseZ;
+        return MAT4.perspective_(this.#matrix, this.#fovy, this.#aspect, this.#near, this.#far, reverseZ);
     }
 
     get perspectiveMatrixZO(): mat4 {
-        return MAT4.perspective_(this.#matrix, this.#fovy, this.#aspect, this.#near, this.#far, this.#reverseZ, true);
+        const reverseZ = this.#scene.tinyearth?.renderStatus.reverseZ;
+        return MAT4.perspective_(this.#matrix, this.#fovy, this.#aspect, this.#near, this.#far, reverseZ, true);
     }
 
     get fovy(): number {
