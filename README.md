@@ -1,6 +1,6 @@
 # TinyEarth
 
-A Cesium-like 3D Earth Visulization Based on WebGL
+A 3D Earth Model Based on WebGPU
 
 ## Demo
 https://wkgreat.github.io/tinyearth/
