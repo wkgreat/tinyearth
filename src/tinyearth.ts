@@ -300,7 +300,6 @@ export default class TinyEarth {
         if (this.#advance.reverseZ === 'auto') {
             const threshold = 10000;
             const h = this.scene!.camera.getHeightToSurface();
-            console.log("height: ", h);
             const reverseZ = h > threshold;
             this.#renderStatus.reverseZ = reverseZ;
         } else {
@@ -314,8 +313,6 @@ export default class TinyEarth {
             this.#renderStatus.depthFunc = 'less-equal';
             this.#renderStatus.clearDepth = 1.0;
         }
-
-        console.log(this.#renderStatus.reverseZ);
 
     }
 

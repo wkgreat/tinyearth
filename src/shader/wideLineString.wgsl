@@ -11,6 +11,7 @@
 #include "depth.module.wgsl"
 
 override ENABLE_LOG_DEPTH : bool = true;
+override ENABLE_WIREFRAME : bool = false;
 
 struct ClampToGround {
     isEnabled: u32,
@@ -19,7 +20,10 @@ struct ClampToGround {
 
 @group(1) @binding(0) var<uniform> clampToGround : ClampToGround;
 
+const barybasis: array<vec3<f32>, 3> = array<vec3<f32>, 3>(vec3f(1,0,0),vec3f(0,1,0),vec3f(0,0,1));
+
 struct VSInput {
+    @builtin(vertex_index) vidx: u32,
     @location(0) lastpos: vec4f,
     @location(1) nextpos: vec4f,
     @location(2) position: vec4f,
@@ -44,7 +48,8 @@ struct VSOutput {
     @location(3) relviewpos_high: vec4f,
     @location(4) relviewpos_low: vec4f,
     @location(5) entityid: f32,
-    @location(6) color: vec4f
+    @location(6) color: vec4f,
+    @location(9) barycentric: vec3<f32>
 };
 
 const leftRot90: mat2x2f = mat2x2f(
@@ -134,6 +139,7 @@ fn vs(input:VSInput) -> VSOutput {
     output.relworldpos_low = new_worldpos.low;
     output.entityid = input.entityid;
     output.color = input.color;
+    output.barycentric = barybasis[input.vidx % 3];
 
     return output;
 
@@ -151,6 +157,14 @@ fn fs(input: VSOutput) -> FSOutput {
     if(abs(fract(input.entityid)) > 1E-5) { 
         discard;
     } 
+
+    if(ENABLE_WIREFRAME) {
+        let bc = input.barycentric;
+        let minbc = min(bc.x,min(bc.y,bc.z));
+        if(minbc > 0.05) {
+            discard;
+        }
+    }
 
     var output: FSOutput;
 

@@ -11,6 +11,7 @@
 #include "color.module.wgsl"
 
 override ENABLE_LOG_DEPTH : bool = true;
+override ENABLE_WIREFRAME : bool = false;
 
 struct TileUniform {
     opacity: f32,
@@ -23,6 +24,7 @@ struct TileUniform {
 @group(1) @binding(2) var<uniform> tileUniform: TileUniform;
 
 struct VSInput {
+    @builtin(vertex_index) vidx: u32,
     @location(0) position: vec3f,
     @location(1) position_high: vec3f,
     @location(2) position_low: vec3f,
@@ -40,8 +42,11 @@ struct VSOutput {
     @location(3) relworldpos: vec3f,
     @location(4) relviewz_high: f32,
     @location(5) relviewz_low: f32,
-    @location(6) needskip: f32
+    @location(6) needskip: f32,
+    @location(9) barycentric: vec3<f32>
 };
+
+const barybasis: array<vec3<f32>, 3> = array<vec3<f32>, 3>(vec3f(1,0,0),vec3f(0,1,0),vec3f(0,0,1));
 
 @vertex fn vs(input: VSInput) -> VSOutput {
 
@@ -68,6 +73,8 @@ struct VSOutput {
     let rvz = dfvec4_z(relviewpos);
     output.relviewz_high = rvz.high;
     output.relviewz_low = rvz.low;
+
+    output.barycentric = barybasis[input.vidx % 3];
 
     return output;
 
@@ -108,6 +115,14 @@ struct FSOutput {
 
     if(input.needskip > 0.0) {
         discard;
+    }
+
+    if(ENABLE_WIREFRAME) {
+        let bc = input.barycentric;
+        let minbc = min(bc.x,min(bc.y,bc.z));
+        if(minbc > 0.05) {
+            discard;
+        }
     }
 
     var output: FSOutput;

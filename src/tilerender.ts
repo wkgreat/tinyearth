@@ -127,7 +127,9 @@ export class GlobeTileProgram {
                     { arrayStride: 3 * 4, attributes: [{ shaderLocation: 6, offset: 0, format: 'float32x3' }] },
                 ],
                 constants: {
-                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0,
+                    ENABLE_WIREFRAME: this.tinyearth.advance.wireframe ? 1 : 0
+
                 }
             },
             fragment: {
@@ -149,7 +151,8 @@ export class GlobeTileProgram {
                     writeMask: GPUColorWrite.ALL
                 }],
                 constants: {
-                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0,
+                    ENABLE_WIREFRAME: this.tinyearth.advance.wireframe ? 1 : 0
                 }
             },
             primitive: {

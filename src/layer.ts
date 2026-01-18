@@ -9,6 +9,7 @@ import pointLayerSource from './shader/point.wgsl';
 import { createBuffersAndAttributesFromArrays, makeShaderDataDefinitions, makeStructuredView, type BuffersAndAttributes, type ShaderDataDefinitions, type TypedArray } from "webgpu-utils";
 import { dfloat, dfvec3 } from "./math";
 import lineStringSource from './shader/wideLineString.wgsl';
+import Program from "./program";
 
 export interface LayerOptions {
     tinyearth: TinyEarth;
@@ -102,10 +103,7 @@ export interface PointLayerOptions extends GeometryLayerOptions {
 
 interface PointLayerWebGPU {
     module?: GPUShaderModule;
-    pipelines?: {
-        commonZ?: GPURenderPipeline;
-        reverseZ?: GPURenderPipeline;
-    };
+    pipelines?: { [key: string]: GPURenderPipeline };
     shaderDefinition?: ShaderDataDefinitions;
     vertexBuffers?: {
         quad?: BuffersAndAttributes,
@@ -151,17 +149,11 @@ export class PointLayer extends GeometryLayer {
 
         this.#webgpu.shaderDefinition = makeShaderDataDefinitions(code);
 
-        this.createPipelines();
-
     }
 
-    createPipelines() {
+    getPipelineDesriptor(): GPURenderPipelineDescriptor {
 
-        if (!this.#webgpu.pipelines) {
-            this.#webgpu.pipelines = {};
-        }
-
-        const { device } = this.tinyearth.gpuinfo!;
+        const device = this.tinyearth.gpuinfo!.device;
 
         const pipelineLayout = device.createPipelineLayout({
             bindGroupLayouts: [
@@ -181,7 +173,8 @@ export class PointLayer extends GeometryLayer {
                     ...this.#webgpu!.vertexBuffers!.pointattr!.bufferLayouts!
                 ],
                 constants: {
-                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0,
+                    ENABLE_WIREFRAME: this.tinyearth.advance.wireframe ? 1 : 0
                 }
             },
             fragment: {
@@ -192,7 +185,8 @@ export class PointLayer extends GeometryLayer {
                     }
                 ],
                 constants: {
-                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0,
+                    ENABLE_WIREFRAME: this.tinyearth.advance.wireframe ? 1 : 0
                 }
             },
             primitive: {
@@ -206,11 +200,27 @@ export class PointLayer extends GeometryLayer {
             }
         }
 
-        this.#webgpu.pipelines.commonZ = device.createRenderPipeline(descriptor);
+        return descriptor;
+    }
 
-        descriptor.depthStencil!.depthCompare = 'greater-equal';
+    getPipeline(reverseZ: boolean, wireframe: boolean): GPURenderPipeline {
 
-        this.#webgpu.pipelines.reverseZ = device.createRenderPipeline(descriptor);
+        const key = Program.pipelineChoiceKey(reverseZ, wireframe);
+
+        if (!this.#webgpu.pipelines) {
+            this.#webgpu.pipelines = {}
+        }
+
+        const decriptor = this.getPipelineDesriptor();
+
+        if (!(key in this.#webgpu.pipelines)) {
+            const device = this.tinyearth.gpuinfo!.device;
+            const pipelineInfo = Program.createPipeline(device, reverseZ, wireframe, decriptor);
+            this.#webgpu.pipelines[pipelineInfo.key] = pipelineInfo.pipeline;
+        }
+
+        return this.#webgpu.pipelines[key]!;
+
     }
 
     createBindGroupLayout() {
@@ -360,11 +370,13 @@ export class PointLayer extends GeometryLayer {
         });
 
 
-        if (status.reverseZ) {
-            pass.setPipeline(this.#webgpu.pipelines!.reverseZ!);
-        } else {
-            pass.setPipeline(this.#webgpu.pipelines!.commonZ!);
-        }
+
+        const reverseZ = status.reverseZ;
+        const wireframe = !!this.tinyearth.advance.wireframe;
+
+        const pipeline = this.getPipeline(reverseZ, wireframe);
+
+        pass.setPipeline(pipeline);
         pass.setBindGroup(0, sceneBindGroup);
         pass.setBindGroup(1, layerBindGroup);
         pass.setVertexBuffer(0, this.#webgpu.vertexBuffers!.quad!.buffers[0]);
@@ -383,10 +395,7 @@ export interface LineStringLayerOptions extends GeometryLayerOptions {
 
 interface LineStringLayerWebGPU {
     module?: GPUShaderModule;
-    pipelines?: {
-        commonZ?: GPURenderPipeline,
-        reverseZ?: GPURenderPipeline
-    };
+    pipelines?: { [key: string]: GPURenderPipeline };
     shaderDefinition?: ShaderDataDefinitions;
     vertexBuffers: {
         vertex?: BuffersAndAttributes
@@ -410,7 +419,7 @@ export class LineStringLayer extends GeometryLayer {
     #webgpu: LineStringLayerWebGPU = {
         vertexBuffers: {},
         bindGroupLayouts: {},
-        uniforms: {}
+        uniforms: {},
     }
 
     constructor(options: LineStringLayerOptions) {
@@ -621,15 +630,9 @@ export class LineStringLayer extends GeometryLayer {
             code
         });
 
-        this.#createPipelines();
-
     }
 
-    #createPipelines() {
-
-        if (!this.#webgpu.pipelines) {
-            this.#webgpu.pipelines = {};
-        }
+    getPipelineDesriptor(): GPURenderPipelineDescriptor {
 
         const device = this.tinyearth.gpuinfo!.device;
 
@@ -640,7 +643,7 @@ export class LineStringLayer extends GeometryLayer {
             ]
         });
 
-        const descriptor: GPURenderPipelineDescriptor = {
+        return {
             label: "LineStringLayer",
             layout: pipelineLayout,
             vertex: {
@@ -649,7 +652,8 @@ export class LineStringLayer extends GeometryLayer {
                     ...this.#webgpu.vertexBuffers!.vertex!.bufferLayouts
                 ],
                 constants: {
-                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0,
+                    ENABLE_WIREFRAME: this.tinyearth.advance.wireframe ? 1 : 0
                 }
             },
             fragment: {
@@ -660,7 +664,8 @@ export class LineStringLayer extends GeometryLayer {
                     }
                 ],
                 constants: {
-                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0
+                    ENABLE_LOG_DEPTH: this.tinyearth.advance.logdepth ? 1 : 0,
+                    ENABLE_WIREFRAME: this.tinyearth.advance.wireframe ? 1 : 0
                 }
             },
             primitive: {
@@ -673,12 +678,26 @@ export class LineStringLayer extends GeometryLayer {
                 depthCompare: 'less-equal'
             }
         };
+    }
 
-        this.#webgpu.pipelines!.commonZ = device.createRenderPipeline(descriptor);
+    getPipeline(reverseZ: boolean, wireframe: boolean): GPURenderPipeline {
 
-        descriptor.depthStencil!.depthCompare = 'greater-equal';
+        const key = Program.pipelineChoiceKey(reverseZ, wireframe);
 
-        this.#webgpu.pipelines!.reverseZ = device.createRenderPipeline(descriptor);
+        if (!this.#webgpu.pipelines) {
+            this.#webgpu.pipelines = {}
+        }
+
+        const decriptor = this.getPipelineDesriptor();
+
+        if (!(key in this.#webgpu.pipelines)) {
+            const device = this.tinyearth.gpuinfo!.device;
+            const pipelineInfo = Program.createPipeline(device, reverseZ, wireframe, decriptor);
+            this.#webgpu.pipelines[pipelineInfo.key] = pipelineInfo.pipeline;
+        }
+
+        return this.#webgpu.pipelines[key]!;
+
     }
 
     override draw(): void {
@@ -703,11 +722,12 @@ export class LineStringLayer extends GeometryLayer {
             ]
         });
 
-        if (status.reverseZ) {
-            pass.setPipeline(this.#webgpu.pipelines!.reverseZ!);
-        } else {
-            pass.setPipeline(this.#webgpu.pipelines!.commonZ!);
-        }
+        const reverseZ = status.reverseZ;
+        const wireframe = !!this.tinyearth.advance.wireframe;
+
+        const pipeline = this.getPipeline(reverseZ, wireframe);
+
+        pass.setPipeline(pipeline);
 
         pass.setBindGroup(0, sceneBindGroup);
         pass.setBindGroup(1, clampBindGroup);

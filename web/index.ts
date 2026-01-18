@@ -33,7 +33,8 @@ function main() {
             night: false,
             advance: {
                 logdepth: false,
-                reverseZ: 'auto'
+                reverseZ: 'auto',
+                wireframe: false
             }
         });
 

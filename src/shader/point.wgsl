@@ -5,8 +5,10 @@
 #include "depth.module.wgsl"
 
 override ENABLE_LOG_DEPTH : bool = true;
+override ENABLE_WIREFRAME : bool = false;
 
 struct VSInput {
+    @builtin(vertex_index) vidx: u32,
     @location(0) quadpos: vec2f,
     @location(1) quaduv: vec2f,
     @location(2) pointpos: vec3f,
@@ -29,7 +31,8 @@ struct VSOutput {
     @location(5) strokewidth: f32,
     @location(6) strokecolor: vec4f,
     @location(7) relviewz_high: f32,
-    @location(8) relviewz_low: f32
+    @location(8) relviewz_low: f32,
+    @location(9) barycentric: vec3<f32>
 };
 
 struct ClampToGround {
@@ -38,6 +41,8 @@ struct ClampToGround {
 };
 
 @group(1) @binding(0) var<uniform> clampToGround : ClampToGround;
+
+const barybasis: array<vec3<f32>, 3> = array<vec3<f32>, 3>(vec3f(1,0,0),vec3f(0,1,0),vec3f(0,0,1));
 
 @vertex fn vs(input: VSInput) -> VSOutput {
 
@@ -67,6 +72,7 @@ struct ClampToGround {
     output.strokecolor = input.strokecolor;
     output.relviewz_high = dfvec4_z(relviewpointpos).high;
     output.relviewz_low = dfvec4_z(relviewpointpos).low;
+    output.barycentric = barybasis[input.vidx % 3];
 
     return output;
 
@@ -85,9 +91,18 @@ struct FSOutput {
 @fragment fn fs(input: VSOutput) -> FSOutput {
 
     let radius: f32 = length((input.quadpos.xy - input.center.xy) * scene.viewport.viewport); // in pixel
-    if(radius >= input.size / 2) {
-        discard;
+    if(!ENABLE_WIREFRAME) {
+        if(radius >= input.size / 2) {
+            discard;
+        }
+    } else {
+        let bc = input.barycentric;
+        let minbc = min(bc.x,min(bc.y,bc.z));
+        if(minbc > 0.05) {
+            discard;
+        }
     }
+
     var output: FSOutput;
 
     //color
@@ -118,7 +133,6 @@ struct FSOutput {
     } else {
         depth = input.quadpos.z / input.quadpos.w;
     }
-    
     
     output.color = color;
     output.depth = depth;

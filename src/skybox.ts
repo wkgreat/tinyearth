@@ -260,7 +260,6 @@ export class SkyBoxProgram {
             img.src = face.src;
             img.onload = function () {
                 that.images[idx] = img;
-                console.log(img.width, img.height);
             }
         });
     }
