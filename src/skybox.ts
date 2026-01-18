@@ -1,4 +1,4 @@
-import { glMatrix, mat4, vec3 } from "gl-matrix";
+import { makeShaderDataDefinitions, makeStructuredView, type ShaderDataDefinitions } from "webgpu-utils";
 import starsky_nx from "./assets/starsky/nx.png";
 import starsky_ny from "./assets/starsky/ny.png";
 import starsky_nz from "./assets/starsky/nz.png";
@@ -6,18 +6,17 @@ import starsky_px from "./assets/starsky/px.png";
 import starsky_py from "./assets/starsky/py.png";
 import starsky_pz from "./assets/starsky/pz.png";
 import Camera from "./camera.js";
-import { checkGLError } from "./debug.js";
-import { vec3_add, vec3_cross, vec3_normalize, vec3_scale, vec3_sub, vec4_t3 } from "./glmatrix_utils.js";
-import { GLSLSource } from "./glsl.js";
-import { Program, type ProgramOptions } from "./program.js";
+import { VEC3, VEC4, type mat4, type vec3 } from "./matrix";
+import { type ProgramOptions } from "./program.js";
 import type Projection from "./projection.js";
 import Scene from "./scene.js";
-import fragSource from "./shader/skybox.frag";
-import vertSource from "./shader/skybox.vert";
-glMatrix.setMatrixArrayType(Array);
+import skyboxSource from "./shader/skybox.wgsl";
+import type TinyEarth from "./tinyearth";
+import type { CanvasGPUInfo, GPUInfo } from "./webgpu";
+import { WGSLSource } from "./wgsl";
 
 export interface CubeMapInfo {
-    face: number,
+    face: string,
     src: string
 };
 
@@ -48,40 +47,164 @@ export const defaultSkyBoxSourceInfo = {
     negz: starsky_nz,
 }
 
-export interface SkyBoxProgramOptions extends Omit<ProgramOptions, 'vertSource' | 'fragSource'> {}
+export interface SkyBoxProgramOptions extends Omit<ProgramOptions, 'vertSource' | 'fragSource'> {
+    tinyearth: TinyEarth;
+    gpuinfo: GPUInfo;
+    canvasinfo: CanvasGPUInfo;
+}
 
-export class SkyBoxProgram extends Program {
 
-    #vertices: Float32Array = new Float32Array([
-        -1, 1, 1,
-        -1, -1, 1,
-        1, -1, 1,
-        1, -1, 1,
-        1, 1, 1,
-        -1, 1, 1
-    ]);
+interface SkyBoxWebGPU {
+    gpuinfo: GPUInfo;
+    canvasinfo: CanvasGPUInfo;
+    module?: GPUShaderModule;
+    shaderDefinition?: ShaderDataDefinitions;
+    pipelineLayout?: GPUPipelineLayout;
+    pipelines?: {
+        commonZ?: GPURenderPipeline;
+        reverseZ?: GPURenderPipeline;
+    }
+    sampler?: GPUSampler;
+    bindGroupLayout?: GPUBindGroupLayout;
+    vertexBuffer?: GPUBuffer;
+    skybox?: GPUTexture;
+    skyboxUniform?: GPUBuffer;
+}
 
-    /** @type {WebGLBuffer} */
-    #buffer: WebGLBuffer | null = null;
+export class SkyBoxProgram {
 
-    /** @type {WebGLTexture} */
-    #texutre: WebGLTexture | null = null;
+    label = "skybox";
+    tinyearth: TinyEarth;
+    #webgpu: SkyBoxWebGPU;
+    images: (HTMLImageElement | null)[] = [];
+    #exposure: number = 1.0;
+    #contrast: number = 1.0;
 
     constructor(options: SkyBoxProgramOptions) {
 
-        const vertGLSLSource = new GLSLSource(vertSource);
-        const fragGLSLSource = new GLSLSource(fragSource);
+        const source = new WGSLSource(skyboxSource);
+        const code = source.resovleSource();
 
-        super({
-            ...options,
-            vertSource: vertGLSLSource,
-            fragSource: fragGLSLSource
-        })
+        this.#webgpu = {
+            gpuinfo: options.gpuinfo,
+            canvasinfo: options.canvasinfo
+        }
+
+        const { device } = this.#webgpu.gpuinfo;
+
+        this.#webgpu.shaderDefinition = makeShaderDataDefinitions(code);
+
+        this.#webgpu.module = device.createShaderModule({
+            label: this.label,
+            code
+        });
+
+        this.tinyearth = options.tinyearth;
+
+        const skyboxBindGroupLayout = this.createBindGroupLayout(this.#webgpu.gpuinfo);
+
+        this.#webgpu.pipelineLayout = device.createPipelineLayout({
+            bindGroupLayouts: [
+                this.tinyearth.scene!.bindGroupLayout,
+                skyboxBindGroupLayout
+            ]
+        });
+
+        this.#webgpu.sampler = device.createSampler({
+            label: this.label,
+            minFilter: 'linear',
+            magFilter: 'linear',
+            mipmapFilter: 'nearest',
+            addressModeU: 'clamp-to-edge',
+            addressModeV: 'clamp-to-edge',
+            addressModeW: 'clamp-to-edge',
+        });
+
+        this.#createPipelines();
+
+        this.images = Array(6).fill(null);
+    }
+
+    #createPipelines() {
+
+        const device = this.#webgpu.gpuinfo.device;
+
+        const tnRenderStatus = this.tinyearth.renderStatus;
+
+        const pipelineDescriptor: GPURenderPipelineDescriptor = {
+            label: this.label,
+            layout: this.#webgpu.pipelineLayout!,
+            vertex: {
+                module: this.#webgpu.module!,
+                buffers: [
+                    {
+                        arrayStride: 6 * 4, attributes: [
+                            { shaderLocation: 0, offset: 0, format: 'float32x3' },
+                            { shaderLocation: 1, offset: 3 * 4, format: 'float32x3' }]
+                    },
+                ]
+            },
+            fragment: {
+                module: this.#webgpu.module!,
+                targets: [{
+                    format: this.#webgpu.canvasinfo.context.getConfiguration()!.format,
+                    blend: {
+                        color: {
+                            srcFactor: "one",
+                            dstFactor: "one-minus-src-alpha",
+                            operation: "add",
+                        },
+                        alpha: {
+                            srcFactor: "one",
+                            dstFactor: "one-minus-src-alpha",
+                            operation: "add",
+                        },
+                    },
+                    writeMask: GPUColorWrite.ALL
+                }]
+            },
+            primitive: {
+                topology: 'triangle-list',
+                cullMode: 'back',
+                frontFace: 'ccw'
+            },
+            depthStencil: {
+                format: tnRenderStatus.depthFormat,
+                depthWriteEnabled: true,
+                depthCompare: 'less-equal'
+            }
+        }
+
+        if (!this.#webgpu.pipelines) {
+            this.#webgpu.pipelines = {};
+        }
+
+        this.#webgpu.pipelines.commonZ = device.createRenderPipeline(pipelineDescriptor);
+
+        pipelineDescriptor.depthStencil!.depthCompare = 'greater-equal';
+
+        this.#webgpu.pipelines.reverseZ = device.createRenderPipeline(pipelineDescriptor);
 
     }
 
+    get exposure(): number {
+        return this.#exposure;
+    }
+
+    set exposure(v) {
+        this.#exposure = v;
+    }
+
+    get contrast(): number {
+        return this.#contrast;
+    }
+
+    set contrast(v) {
+        this.#contrast = v;
+    }
+
     /**
-     * @param {Scene} scene 
+     * @param {Scene} scene
     */
     createVetexData(scene: Scene) {
 
@@ -92,23 +215,24 @@ export class SkyBoxProgram extends Program {
         const fovy = scene.projection.fovy;
         const aspect = scene.projection.aspect;
 
-        const forward = vec3_normalize(vec3_sub(vec4_t3(cameraTo), vec4_t3(cameraFrom)));
-        const worldup = vec3_normalize(cameraUp);
-        const right = vec3_normalize(vec3_cross(worldup, forward));
-        const up = vec3_normalize(vec3_cross(forward, right));
+        const forward = VEC3.normalize(VEC3.sub(VEC4.force3(cameraTo), VEC4.force3(cameraFrom)));
+        const worldup = VEC3.normalize(cameraUp);
+        const right = VEC3.normalize(VEC3.cross(worldup, forward));
+        const up = VEC3.normalize(VEC3.cross(forward, right));
         const half_height = near * Math.tan(fovy / 2);
         const half_width = aspect * half_height;
 
-        const leftUp = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
-        const rightUp = vec3_normalize(vec3_add(vec3_add(vec3_scale(right, -half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
-        const rightDown = vec3_normalize(vec3_add(vec3_sub(vec3_scale(right, -half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
-        const leftDown = vec3_normalize(vec3_add(vec3_sub(vec3_scale(right, half_width), vec3_scale(up, half_height)), vec3_scale(forward, near)));
+        const leftUp = VEC3.normalize(VEC3.add(VEC3.add(VEC3.scale(right, half_width), VEC3.scale(up, half_height)), VEC3.scale(forward, near)));
+        const rightUp = VEC3.normalize(VEC3.add(VEC3.add(VEC3.scale(right, -half_width), VEC3.scale(up, half_height)), VEC3.scale(forward, near)));
+        const rightDown = VEC3.normalize(VEC3.add(VEC3.sub(VEC3.scale(right, -half_width), VEC3.scale(up, half_height)), VEC3.scale(forward, near)));
+        const leftDown = VEC3.normalize(VEC3.add(VEC3.sub(VEC3.scale(right, half_width), VEC3.scale(up, half_height)), VEC3.scale(forward, near)));
 
         // vertices in clip space
+        // [x,y,z,dx,dy,dz]
         const vertices = [
 
             -1, 1, 1, ...leftUp, //leftup
-            -1, -1, 1, ...leftDown, //leftdown 
+            -1, -1, 1, ...leftDown, //leftdown
             1, -1, 1, ...rightDown, //rightdown
             1, -1, 1, ...rightDown, //rightdown
             1, 1, 1, ...rightUp, //rightup
@@ -118,88 +242,138 @@ export class SkyBoxProgram extends Program {
 
         return new Float32Array(vertices);
 
-
     }
 
-    use() {
-        if (this.gl !== null) {
-            this.gl.useProgram(this.program);
-        }
-    }
-
-
-    /** 
-     * @typedef CubeMapInfo 
+    /**
+     * @typedef CubeMapInfo
      * @property {number} face
      * @property {string} src
     */
 
     setCubeMap(info: CubeMapInfo[]) {
-        if (this.gl === null) {
-            console.error("gl is null");
-            return;
-        }
-        this.use();
-        // if (this.#texutre) {
-        //     this.gl.deleteTexture(this.#texutre);
-        // }
-        this.#texutre = this.gl.createTexture();
+
+        this.images = Array(6).fill(null);
         const that = this;
 
-        info.forEach((face) => {
-            if (that.gl === null) {
-                return;
-            }
+        info.forEach((face, idx) => {
             const img = new Image();
             img.src = face.src;
-            that.gl.bindTexture(that.gl.TEXTURE_CUBE_MAP, that.#texutre);
-            that.gl.pixelStorei(that.gl.UNPACK_FLIP_Y_WEBGL, false);
-            that.gl.texImage2D(face.face, 0, that.gl.RGBA, 512, 512, 0, that.gl.RGBA, that.gl.UNSIGNED_BYTE, null); //立即渲染纹理
             img.onload = function () {
-                // 图片加载完成将其拷贝到纹理
-                if (that.gl === null) {
-                    return;
-                }
-                that.gl.bindTexture(that.gl.TEXTURE_CUBE_MAP, that.#texutre);
-                that.gl.pixelStorei(that.gl.UNPACK_FLIP_Y_WEBGL, false);
-                that.gl.texImage2D(face.face, 0, that.gl.RGBA, that.gl.RGBA, that.gl.UNSIGNED_BYTE, img);
-                that.gl.generateMipmap(that.gl.TEXTURE_CUBE_MAP);
+                that.images[idx] = img;
             }
         });
     }
 
-    setUniforms(info: SkyboxUniformInfo) {
-        if (this.gl === null || this.program === null) {
-            return;
-        }
-        this.use();
-        this.setCameraUniform();
-        this.setProjectionUniform();
-        this.setSunUniform();
+    createBindGroupLayout(gpuinfo: GPUInfo): GPUBindGroupLayout {
+        const { device } = gpuinfo;
+        return device.createBindGroupLayout({
+            label: "skyboxBindGroupLayout",
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    texture: {
+                        viewDimension: 'cube',
+                        sampleType: 'float',
+                        multisampled: false,
+                    },
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    sampler: {
+                        type: 'filtering',
+                    },
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    buffer: { type: 'uniform' }
+                },
+            ]
+        });
     }
 
-    setData() {
-        if (this.gl === null || this.tinyearth.scene === null || this.program === null) {
-            console.error("some of object is null");
-            return null;
+    get bindGroupLayout(): GPUBindGroupLayout {
+
+        if (!this.#webgpu.bindGroupLayout) {
+            this.#webgpu.bindGroupLayout = this.createBindGroupLayout(this.#webgpu.gpuinfo)
         }
-        if (!this.#buffer) {
-            this.#buffer = this.gl.createBuffer();
+        return this.#webgpu.bindGroupLayout;
+    }
+
+    setSkyBoxTexture(): GPUTexture | null {
+
+        if (!this.#webgpu.skybox) {
+            if (this.images.some(image => image === null)) {
+                return null;
+            }
+            const { device } = this.#webgpu.gpuinfo;
+            const aImage = this.images[0]!;
+            const texture = this.#webgpu.gpuinfo.device.createTexture({
+                label: 'skybox',
+                format: 'rgba8unorm',
+                size: [aImage.width, aImage.height, this.images.length],
+                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+
+            });
+            this.images.forEach((image, layer) => {
+                device.queue.copyExternalImageToTexture(
+                    { source: image!, flipY: false },
+                    { texture, origin: [0, 0, layer] },
+                    { width: image!.width, height: image!.height }
+                );
+            })
+            this.#webgpu.skybox = texture;
+        }
+        return this.#webgpu.skybox!;
+
+    }
+
+    setVertexBuffer(): GPUBuffer | null | undefined {
+
+        const vertices = this.createVetexData(this.tinyearth.scene!);
+
+        if (!this.#webgpu.vertexBuffer) {
+
+            this.#webgpu.vertexBuffer = this.#webgpu.gpuinfo.device.createBuffer({
+                label: this.label,
+                size: vertices.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            });
+        }
+        this.#webgpu.gpuinfo.device.queue.writeBuffer(
+            this.#webgpu.vertexBuffer,
+            0,
+            vertices.buffer
+        );
+        return this.#webgpu.vertexBuffer;
+
+    }
+
+    setSkyBoxUniform() {
+
+        const uniformView = makeStructuredView(this.#webgpu.shaderDefinition!.uniforms.skyboxUniforms!);
+
+        const { device } = this.#webgpu.gpuinfo;
+
+        if (!this.#webgpu.skyboxUniform) {
+            this.#webgpu.skyboxUniform = device.createBuffer({
+                label: "skyboxUniform",
+                size: uniformView.arrayBuffer.byteLength,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            });
         }
 
-        const vertices = this.createVetexData(this.tinyearth.scene);
+        uniformView.set({
+            exposure: this.exposure,
+            contrast: this.contrast
+        });
 
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.#buffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+        device.queue.writeBuffer(this.#webgpu.skyboxUniform, 0, uniformView.arrayBuffer);
 
-        const a_position = this.gl.getAttribLocation(this.program, "a_position");
-        const a_direction = this.gl.getAttribLocation(this.program, "a_direction");
+        return this.#webgpu.skyboxUniform;
 
-        this.gl.vertexAttribPointer(a_position, 3, this.gl.FLOAT, false, 6 * 4, 0); // 设置属性指针
-        this.gl.enableVertexAttribArray(a_position); // 激活属性
-
-        this.gl.vertexAttribPointer(a_direction, 3, this.gl.FLOAT, false, 6 * 4, 3 * 4); // 设置属性指针
-        this.gl.enableVertexAttribArray(a_direction); // 激活属性
     }
 
     draw(): void {
@@ -207,27 +381,53 @@ export class SkyBoxProgram extends Program {
     }
 
     render() {
-        if (this.gl === null || !this.tinyearth.skybox) {
-            return;
+
+        if (this.setVertexBuffer() && this.setSkyBoxTexture() && this.setSkyBoxUniform()) {
+
+            const { device } = this.#webgpu.gpuinfo;
+
+            const status = this.tinyearth.renderStatus;
+
+            const pass = status.currentPass;
+
+            if (!pass) {
+                return;
+            }
+
+            let pipeline;
+            if (status.reverseZ) {
+                pipeline = this.#webgpu.pipelines!.reverseZ!;
+            } else {
+                pipeline = this.#webgpu.pipelines!.commonZ!;
+            }
+
+            const sceneBindGroup = this.tinyearth.scene!.getBindGroup();
+            const skyboxBindGroup = device.createBindGroup({
+                label: 'skyboxBindGroup',
+                layout: pipeline.getBindGroupLayout(1),
+                entries: [
+                    {
+                        binding: 0, resource: this.#webgpu.skybox!.createView({
+                            dimension: 'cube'
+                        })
+                    },
+                    { binding: 1, resource: this.#webgpu.sampler! },
+                    { binding: 2, resource: { buffer: this.#webgpu.skyboxUniform! } }
+                ]
+            });
+
+            const decoder = device.createCommandEncoder({
+                label: "skybox"
+            });
+
+
+            pass.setPipeline(pipeline);
+            pass.setBindGroup(0, sceneBindGroup);
+            pass.setBindGroup(1, skyboxBindGroup);
+            pass.setVertexBuffer(0, this.#webgpu.vertexBuffer);
+            pass.draw(6);
+
         }
-        this.use();
-        checkGLError(this.gl, "use", this.tinyearth.glErrorCheck);
-        // const a_position = this.gl.getAttribLocation(this.program, "a_position");
-        this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.#texutre);
-        checkGLError(this.gl, "bindTexture", this.tinyearth.glErrorCheck);
-
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.#buffer);
-        checkGLError(this.gl, "bindBuffer", this.tinyearth.glErrorCheck);
-
-        this.setCameraUniform();
-
-        this.setProjectionUniform();
-
-        this.setData();
-
-        this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
-
-        checkGLError(this.gl, "drawArrays", this.tinyearth.glErrorCheck);
     }
 
 }

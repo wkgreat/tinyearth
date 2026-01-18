@@ -3,10 +3,9 @@ import { mat4, vec4 } from 'gl-matrix';
 import proj4 from 'proj4';
 import Camera from '../src/camera';
 import Frustum, { buildFrustum } from '../src/frustum';
-import { mat4_inv, mat4_mul } from '../src/glmatrix_utils';
-import { EPSG_4326, EPSG_4978 } from '../src/proj';
 import Projection from '../src/projection';
 import Scene from '../src/scene';
+import SRS from '../src/proj';
 
 function clipToWord(p: vec4, IM: mat4): vec4 {
     let wp = vec4.transformMat4(vec4.create(), p, IM);
@@ -32,7 +31,7 @@ describe("frustum", () => {
         const width = 1000;
         const height = 500;
 
-        cameraFrom = proj4(EPSG_4326, EPSG_4978, [117, 32, 1E7]);
+        cameraFrom = SRS.transform(SRS.EPSG_4326, SRS.EPSG_4978, [117, 32, 1E7]);
         cameraTo = [0, 0, 0];
         cameraUp = [0, 0, 1];
 

@@ -25,7 +25,7 @@ export default class CameraMouseControlTool extends BaseTool {
     constructor(options: CameraMouseControlToolOptions) {
         super({ tinyearth: options.tinyearth });
         this.#canvas = options.tinyearth.canvas;
-        this.#camera = options.camera ?? options.tinyearth.scene.camera;
+        this.#camera = options.camera ?? options.tinyearth.scene!.camera;
     }
 
     handleMouseDown(): MouseEventHandler {

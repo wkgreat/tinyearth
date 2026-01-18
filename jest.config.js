@@ -2,7 +2,7 @@ export default {
 
     preset: "ts-jest",
 
-    testEnvironment: 'node',
+    testEnvironment: 'jsdom',
 
     roots: ['<rootDir>/test'],
 
@@ -19,6 +19,10 @@ export default {
 
     moduleDirectories: [
         'node_modules'
+    ],
+
+    setupFiles: [
+        "<rootDir>/jest.setup.js"
     ],
 
 };

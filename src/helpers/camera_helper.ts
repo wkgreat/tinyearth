@@ -1,6 +1,6 @@
 import type Camera from "../camera";
 import { TinyEarthEvent } from "../event";
-import { vec4_fromtext, vec4_text } from "../glmatrix_utils";
+import { VEC4 } from "../matrix";
 import { BaseHelper, type BaseHelperOptions } from "./helper";
 
 export interface CameraHelperOptions extends BaseHelperOptions {
@@ -14,11 +14,13 @@ export default class CameraHelper extends BaseHelper {
     fromInputId = "camera-helper-from-input"
     toInputId = "camera-helper-to-input"
     upInputId = "camera-helper-up-input"
+    heightInputId = "camera-helper-height-input"
+    resInputId = "camera-helper-res-input";
     title = "Camera";
 
     constructor(options: CameraHelperOptions) {
         super(options);
-        this.#camera = options.camera ?? this.tinyearth.scene.camera;
+        this.#camera = options.camera ?? this.tinyearth.scene!.camera;
     }
 
     createElement(): HTMLDivElement | null {
@@ -38,7 +40,17 @@ export default class CameraHelper extends BaseHelper {
             this.createInput(this.upInputId, "text", { disabled: true })
         );
 
-        this.element = this.createHelperDiv(this.helperId, this.title, [item0, item1, item2]);
+        const item3 = this.createItem(
+            this.createLabel("height"),
+            this.createInput(this.heightInputId, "text", { disabled: true })
+        );
+
+        const item4 = this.createItem(
+            this.createLabel("resolution:"),
+            this.createInput(this.resInputId, "text", { disabled: true })
+        );
+
+        this.element = this.createHelperDiv(this.helperId, this.title, [item0, item1, item2, item3, item4]);
 
         return this.element;
 
@@ -48,51 +60,48 @@ export default class CameraHelper extends BaseHelper {
         const fromInput = document.getElementById(this.fromInputId) as HTMLInputElement | null;
         const toInput = document.getElementById(this.toInputId) as HTMLInputElement | null;
         const upInput = document.getElementById(this.upInputId) as HTMLInputElement | null;
+        const heightInput = document.getElementById(this.heightInputId) as HTMLInputElement | null;
+        const resolutionInput = document.getElementById(this.resInputId) as HTMLInputElement | null;
 
         if (fromInput) {
-            fromInput.value = vec4_text(this.#camera.from);
-            // fromInput.addEventListener("change", (e) => {
-            //     const text = (e as any).target.value;
-            //     const v = vec4_fromtext(text);
-            //     if (v) {
-            //         this.#camera.from = v;
-            //     }
-            // });
+            fromInput.value = VEC4.text(this.#camera.from);
         }
 
         if (toInput) {
-            toInput.value = vec4_text(this.#camera.to);
-            // toInput.addEventListener("change", (e) => {
-            //     const text = (e as any).target.value;
-            //     const v = vec4_fromtext(text);
-            //     if (v) {
-            //         this.#camera.to = v;
-            //     }
-            // });
+            toInput.value = VEC4.text(this.#camera.to);
         }
 
         if (upInput) {
-            upInput.value = vec4_text(this.#camera.up);
-            // upInput.addEventListener("change", (e) => {
-            //     const text = (e as any).target.value;
-            //     const v = vec4_fromtext(text);
-            //     if (v) {
-            //         this.#camera.up = v;
-            //     }
-            // });
+            upInput.value = VEC4.text(this.#camera.up);
         }
+
+        if (heightInput) {
+            heightInput.value = this.#camera.getHeightToSurface().toString();
+        }
+
+        if (resolutionInput) {
+            resolutionInput.value = this.#camera.getResolution().join(",");
+        }
+
+
 
         this.tinyearth.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
             callback: (info) => {
                 if (info.camera === this.#camera) {
                     if (fromInput) {
-                        fromInput.value = vec4_text(this.#camera.from);
+                        fromInput.value = VEC4.text(this.#camera.from);
                     }
                     if (toInput) {
-                        toInput.value = vec4_text(this.#camera.to);
+                        toInput.value = VEC4.text(this.#camera.to);
                     }
                     if (upInput) {
-                        upInput.value = vec4_text(this.#camera.up);
+                        upInput.value = VEC4.text(this.#camera.up);
+                    }
+                    if (heightInput) {
+                        heightInput.value = this.#camera.getHeightToSurface().toString();
+                    }
+                    if (resolutionInput) {
+                        resolutionInput.value = this.#camera.getResolution().join(",");
                     }
 
                 }

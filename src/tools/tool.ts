@@ -1,9 +1,8 @@
-import { vec4, type mat4 } from "gl-matrix";
 import { Ray, rayCrossSpheriod, Spheriod, type Point3D } from "../math";
-import { mat4_inv, mat4_mul, vec3_normalize, vec3_sub, vec4_affine, vec4_t3 } from "../glmatrix_utils";
 import type Scene from "../scene";
 import type TinyEarth from "../tinyearth";
 import SRS from "../proj";
+import { MAT4, VEC3, VEC4, type mat4 } from "../matrix";
 
 export interface BaseToolOptions {
     tinyearth: TinyEarth
@@ -36,19 +35,19 @@ export function positionAtPixel(scene: Scene, x: number, y: number): Point3D | n
     const m_sreen = scene.viewportMatrix;
     const m_proj = scene.projection.perspectiveMatrix;
     const m_view = scene.camera.viewMatrix;
-    const m_projview = mat4_mul(m_proj, m_view);
-    const im_proj = mat4_inv(m_proj);
-    const im_view = mat4_inv(m_view);
-    const im_projview: mat4 = mat4_inv(m_projview) as mat4;
-    const im_sceen: mat4 = mat4_inv(m_sreen) as mat4;
+    const m_projview = MAT4.mul(m_proj, m_view);
+    const im_proj = MAT4.invert(m_proj);
+    const im_view = MAT4.invert(m_view);
+    const im_projview: mat4 = MAT4.invert(m_projview) as mat4;
+    const im_sceen: mat4 = MAT4.invert(m_sreen) as mat4;
 
-    const sp = vec4.fromValues(x, y, 0, 1);
-    const cp = vec4_affine(sp, im_sceen);
+    const sp = VEC4.fromValues(x, y, 0, 1);
+    const cp = VEC4.affine(sp, im_sceen);
 
-    const wp = vec4_t3(vec4_affine(cp, im_projview));
+    const wp = VEC4.force3(VEC4.affine(cp, im_projview));
     // const wp = vec4_t3(vec4_affine(vec4_affine(cp, im_proj), im_view));
-    const vf = vec4_t3(scene.camera.from);
-    const d = vec3_normalize(vec3_sub(wp, vf));
+    const vf = VEC4.force3(scene.camera.from);
+    const d = VEC3.normalize(VEC3.sub(wp, vf));
 
     const ray = new Ray(vf, d);
     const spheriod = new Spheriod(SRS.SPHERIOD_WGS84.a, SRS.SPHERIOD_WGS84.a, SRS.SPHERIOD_WGS84.c);

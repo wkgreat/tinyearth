@@ -1,8 +1,6 @@
-import { glMatrix, mat4, vec3, vec4 } from 'gl-matrix';
 import Camera from './camera.js';
-import { vec4_t3 } from './glmatrix_utils.js';
+import { MAT4, VEC3, VEC4, type mat4, type vec3, type vec4 } from './matrix.js';
 import Projection from './projection.js';
-glMatrix.setMatrixArrayType(Array);
 
 interface FrustumDistanceOfPointInfo {
     left: number | null
@@ -68,18 +66,18 @@ export default class Frustum {
 
     getDistanceOfPoint(p: vec4): FrustumDistanceOfPointInfo {
         return {
-            left: this.left && vec4.dot(p, this.left),
-            right: this.right && vec4.dot(p, this.right),
-            bottom: this.bottom && vec4.dot(p, this.bottom),
-            top: this.top && vec4.dot(p, this.top),
-            near: this.near && vec4.dot(p, this.near),
-            far: this.far && vec4.dot(p, this.far)
+            left: this.left && VEC4.dot(p, this.left),
+            right: this.right && VEC4.dot(p, this.right),
+            bottom: this.bottom && VEC4.dot(p, this.bottom),
+            top: this.top && VEC4.dot(p, this.top),
+            near: this.near && VEC4.dot(p, this.near),
+            far: this.far && VEC4.dot(p, this.far)
         }
     }
 }
 
 function row(m: mat4, i: number) {
-    return vec4.fromValues(
+    return VEC4.fromValues(
         m[i * 4] as number,
         m[i * 4 + 1] as number,
         m[i * 4 + 2] as number,
@@ -87,19 +85,19 @@ function row(m: mat4, i: number) {
 }
 
 export function buildFrustum(projection: Projection, camera: Camera) {
-    const m = mat4.multiply(mat4.create(), projection.perspectiveMatrix, camera.viewMatrix);
-    const im = mat4.invert(mat4.create(), m) as mat4;
-    const tm = mat4.transpose(mat4.create(), m);
+    const m = MAT4.mul(projection.perspectiveMatrix, camera.viewMatrix);
+    const im = MAT4.invert(m) as mat4;
+    const tm = MAT4.transpose(m);
 
     // FAST EXTRACTION
     // 六个视锥体平面（左、右、下、上、近、远）
     const planes = {
-        left: vec4.add(vec4.create(), row(tm, 3), row(tm, 0)),
-        right: vec4.subtract(vec4.create(), row(tm, 3), row(tm, 0)),
-        bottom: vec4.add(vec4.create(), row(tm, 3), row(tm, 1)),
-        top: vec4.subtract(vec4.create(), row(tm, 3), row(tm, 1)),
-        near: vec4.add(vec4.create(), row(tm, 3), row(tm, 2)),
-        far: vec4.subtract(vec4.create(), row(tm, 3), row(tm, 2))
+        left: VEC4.add(row(tm, 3), row(tm, 0)),
+        right: VEC4.sub(row(tm, 3), row(tm, 0)),
+        bottom: VEC4.add(row(tm, 3), row(tm, 1)),
+        top: VEC4.sub(row(tm, 3), row(tm, 1)),
+        near: VEC4.add(row(tm, 3), row(tm, 2)),
+        far: VEC4.sub(row(tm, 3), row(tm, 2))
     };
 
     const f = new Frustum(
@@ -111,10 +109,10 @@ export function buildFrustum(projection: Projection, camera: Camera) {
         planes["far"] || null,
     );
 
-    f.setViewpoint(vec4_t3(camera.from));
-    f.setTargetpoint(vec4_t3(camera.to));
-    const cp = vec4.transformMat4(vec4.create(), vec4.fromValues(0, 0, 0, 1), im);
-    f.setCenterpoint(vec3.fromValues(cp[0], cp[1], cp[2]));
+    f.setViewpoint(VEC4.force3(camera.from));
+    f.setTargetpoint(VEC4.force3(camera.to));
+    const cp = VEC4.transform(VEC4.fromValues(0, 0, 0, 1), im);
+    f.setCenterpoint(VEC3.fromValues(cp[0], cp[1], cp[2]));
 
     return f;
 }

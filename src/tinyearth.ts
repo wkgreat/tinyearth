@@ -1,20 +1,21 @@
-import { glMatrix } from "gl-matrix";
 import type { ColorLike } from "./color.js";
 import Color from "./color.js";
-import type { NumArr4 } from "./defines.js";
 import EventBus, { TinyEarthEvent } from "./event.js";
-import type { Program } from "./program.js";
-import SRS from "./proj.js";
 import Scene, { type SceneOptions } from "./scene.js";
 import { defaultSkyBoxSourceInfo, SkyBoxProgram, type SkyBoxSourceInfo } from "./skybox.js";
-import { GlobeTileProgram, RenderMethod, TileProvider } from "./tilerender.js";
+import { GlobeTileProgram, TileProvider } from "./tilerender.js";
 import { TileResources, type TileSourceInfo } from "./tilesource.js";
 import Timer from "./timer.js";
 import CameraMouseControlTool from "./tools/camera_mouse_control.js";
 import type BaseTool from "./tools/tool.js";
-import { GLFrameBuffer } from "./webgl.js";
-import { ScreenQuad, ScreenQuadProgram } from "./screenQuad.js";
-glMatrix.setMatrixArrayType(Array);
+import { createCanvasGPUInfo, createGPUInfo, GPUFrameBuffer, type CanvasGPUInfo, type GPUInfo } from "./webgpu.js";
+
+export interface TinyEarthAdvanceOptions {
+    debug?: boolean,
+    logdepth?: boolean,
+    wireframe?: boolean,
+    reverseZ?: boolean | 'auto'
+}
 
 export interface TinyEarthOptions {
     canvas: HTMLCanvasElement | string;
@@ -22,35 +23,31 @@ export interface TinyEarthOptions {
     night?: boolean
     skybox?: boolean
     bgcolor?: ColorLike,
-    advance?: {
-        glErrorCheck?: boolean
-    }
+    advance?: TinyEarthAdvanceOptions
 }
 
-const cameraFrom = SRS.transform(SRS.WGS84, SRS.ECEF, [118.778869, 32.043823, 1E7]);
-const cameraTo = [0, 0, 0];
-const cameraUp = [0, 0, 1];
+interface TinyEarthWebGPUResources {
+    framebuffer?: GPUFrameBuffer
+}
 
-const defaultSceneOptions: Omit<SceneOptions, "viewport" | "tinyearth"> = {
-    camera: {
-        from: cameraFrom,
-        to: cameraTo,
-        up: cameraUp
-    },
-    projection: {
-        fovy: Math.PI / 3,
-        near: 10,
-        far: 1E8
-    },
+interface TinyEarthRenderStatus {
+    depthFormat: GPUTextureFormat
+    depthWriteEnabled: boolean
+    reverseZ: boolean
+    depthFunc: GPUCompareFunction
+    clearDepth: number
+    currentPass?: GPURenderPassEncoder
 }
 
 export default class TinyEarth {
 
     canvas: HTMLCanvasElement;
 
-    gl: WebGL2RenderingContext;
+    gpuinfo: GPUInfo | null = null;
 
-    scene: Scene;
+    canvasinfo: CanvasGPUInfo | null = null;
+
+    scene: Scene | null = null;
 
     timer: Timer;
 
@@ -66,7 +63,7 @@ export default class TinyEarth {
 
     #startDrawFrame: boolean = true;
 
-    #defaultTileProvider: TileProvider;
+    #defaultTileProvider: TileProvider | null = null;
 
     night: boolean = false
 
@@ -76,29 +73,48 @@ export default class TinyEarth {
 
     #tools: BaseTool[] = [];
 
-    #advance = {
-        glErrorCheck: false
+    #advance: TinyEarthAdvanceOptions = {
+        debug: false,
+        logdepth: false,
+        wireframe: false,
+        reverseZ: false
     }
 
-    //framebuffer
+    #renderStatus: TinyEarthRenderStatus;
 
-    #frameBuffer: GLFrameBuffer | null = null;
-
-    #groundFrameBuffer: GLFrameBuffer | null = null;
+    #webgpuResources: TinyEarthWebGPUResources = {};
 
     // screen quad
-    #fullScreenQuad: ScreenQuad;
+    // #fullScreenQuad: ScreenQuad;
 
-    #screenQuadProgram: ScreenQuadProgram;
+    // #screenQuadProgram: ScreenQuadProgram;
+
+    #isReady: boolean = false;
+    #readyTaskQueue: (() => void)[] = [];
 
     constructor(options: TinyEarthOptions) {
 
+        //advance options
+        const advance = options.advance ?? {};
+        if (advance.debug !== undefined) {
+            this.#advance.debug = advance.debug;
+        }
+        if (advance.logdepth !== undefined) {
+            this.#advance.logdepth = advance.logdepth;
+        }
+        if (advance.wireframe !== undefined) {
+            this.#advance.wireframe = advance.wireframe;
+        }
+        if (advance.reverseZ !== undefined) {
+            this.#advance.reverseZ = advance.reverseZ;
+        }
+
+        // basic
         this.eventBus = new EventBus();
         this.timer = new Timer(Date.now());
         this.timer.setEventBus(this.eventBus);
 
         let _canvas: HTMLCanvasElement | null = null;
-        let _gl: WebGLRenderingContext | null = null;
 
         if (options.canvas instanceof HTMLCanvasElement) {
             _canvas = options.canvas;
@@ -119,116 +135,197 @@ export default class TinyEarth {
 
         this.canvas = _canvas;
 
-        _gl = this.canvas.getContext("webgl2", {
-            alpha: true,
-            depth: true,
-            stencil: false,
-            antialias: false
-        });
-
-        if (_gl === null) {
-            throw new Error("webgl context is null");
+        //renderStatus
+        this.#renderStatus = {
+            depthFormat: 'depth32float',
+            depthWriteEnabled: true,
+            reverseZ: true,
+            depthFunc: 'greater-equal',
+            clearDepth: 0.0
         }
 
-        this.gl = _gl as WebGL2RenderingContext;
-
-        console.log("WebGL Version:", this.gl.getParameter(this.gl.VERSION));
-        console.log("GLSL Version:", this.gl.getParameter(this.gl.SHADING_LANGUAGE_VERSION));
-        console.log("Renderer:", this.gl.getParameter(this.gl.RENDERER));
-        console.log("Vendor:", this.gl.getParameter(this.gl.VENDOR));
-
-        this.canvas.height = this.canvas.clientHeight;
-        this.canvas.width = this.canvas.clientWidth;
-        this.viewHeight = this.canvas.height;
-        this.viewWidth = this.canvas.width;
-
-        this.refreshFrameBuffer();
-
-        const _sceneOpts: Omit<SceneOptions, "viewport" | "tinyearth"> = options.scene ?? defaultSceneOptions;
-        const viewportOpts = {
-            viewport: {
-                width: this.viewWidth,
-                height: this.viewHeight
+        createGPUInfo().then(info => {
+            this.gpuinfo = info;
+            if (this.gpuinfo === null) {
+                throw new Error("gpuinfo is null");
             }
-        }
-        this.scene = new Scene({ ..._sceneOpts, ...viewportOpts, tinyearth: this });
-
-        const that = this;
-
-        window.addEventListener('resize', this.resizeHandler.bind(this));
-
-        // config
-        this.night = options.night ?? false;
-
-        this.skybox = options.skybox ?? true;
-
-        // tile program
-        this.globeTilePorgram = new GlobeTileProgram({
-            tinyearth: this,
-            advance: {
-                renderMethod: RenderMethod.STATIC
+            this.canvasinfo = createCanvasGPUInfo({
+                canvas: this.canvas,
+                config: {
+                    device: this.gpuinfo.device,
+                    format: this.gpuinfo.gpu.getPreferredCanvasFormat()
+                }
+            });
+            if (this.canvasinfo === null) {
+                throw new Error("canvasinfo is null");
             }
+
+            this.canvas.height = this.canvas.clientHeight;
+            this.canvas.width = this.canvas.clientWidth;
+            this.viewHeight = this.canvas.height;
+            this.viewWidth = this.canvas.width;
+
+            const viewportOpts = {
+                viewport: {
+                    width: this.viewWidth,
+                    height: this.viewHeight
+                }
+            }
+            this.scene = new Scene({ ...options.scene, ...viewportOpts, tinyearth: this });
+
+            // config
+            this.night = options.night ?? false;
+
+            this.skybox = options.skybox ?? true;
+
+            // tile program
+            this.globeTilePorgram = new GlobeTileProgram({
+                tinyearth: this,
+                gpuinfo: this.gpuinfo,
+                canvasinfo: this.canvasinfo,
+                advance: {
+                    wireframe: this.#advance.wireframe ?? false,
+                    logDepth: this.#advance.logdepth ?? false
+                }
+            });
+
+            this.#defaultTileProvider = this.getDefaultTileProvider();
+
+            this.addTileProvider(this.#defaultTileProvider);
+
+            // skybox program
+            this.skyboxProgram = new SkyBoxProgram({
+                tinyearth: this,
+                gpuinfo: this.gpuinfo,
+                canvasinfo: this.canvasinfo,
+                advance: {
+                    logDepth: this.#advance.logdepth ?? false
+                }
+            });
+
+            this.setSkyboxSource(defaultSkyBoxSourceInfo);
+
+            // default Tools
+            const cameraMouseControlTool = new CameraMouseControlTool({
+                tinyearth: this
+            });
+            cameraMouseControlTool.enable();
+
+            // screen quad
+            // this.#fullScreenQuad = new ScreenQuad({
+            //     tinyearth: this
+            // })
+
+            // this.#screenQuadProgram = new ScreenQuadProgram({
+            //     tinyearth: this
+            // })
+
+
+            this.#webgpuResources.framebuffer = new GPUFrameBuffer(this.gpuinfo, this.canvasinfo);
+
+            //event
+            window.addEventListener('resize', this.resizeHandler.bind(this));
+            this.eventBus.addEventListener(TinyEarthEvent.CAMERA_CHANGE, {
+                callback: (info) => {
+                    this.#refreshReverseZ();
+                }
+            });
+
+            this.#refreshReverseZ();
+
+            this.#isReady = true;
+            this.#readyTaskQueue.forEach(fn => fn());
+            this.#readyTaskQueue = [];
         });
 
-        this.#defaultTileProvider = this.getDefaultTileProvider();
-
-        this.addTileProvider(this.#defaultTileProvider);
-
-        // skybox program
-        this.skyboxProgram = new SkyBoxProgram({ tinyearth: this });
-
-        this.setSkyboxSource(defaultSkyBoxSourceInfo);
-
-        // default Tools
-        const cameraMouseControlTool = new CameraMouseControlTool({
-            tinyearth: this
-        });
-        cameraMouseControlTool.enable();
-
-        //advance
-        const advance = options.advance ?? {};
-        this.#advance.glErrorCheck = advance.glErrorCheck ?? false;
-
-        // screen quad
-
-        this.#fullScreenQuad = new ScreenQuad({
-            tinyearth: this
-        })
-
-        this.#screenQuadProgram = new ScreenQuadProgram({
-            tinyearth: this
-        })
     }
 
-    clearColor() {
-        this.gl.clearColor(this.bgcolor.r, this.bgcolor.g, this.bgcolor.b, this.bgcolor.a);
+    onReady(fn: () => void) {
+        if (this.#isReady) {
+            fn();
+        } else {
+            this.#readyTaskQueue.push(fn);
+        }
+    }
+
+    createRenderPassDescriptor(firstpass: boolean = true): GPURenderPassDescriptor {
+        let loadOp: GPULoadOp = 'clear';
+        if (firstpass) {
+            loadOp = 'clear';
+        } else {
+            loadOp = 'load';
+        }
+        const passDescriptor: GPURenderPassDescriptor = {
+            label: `tinyearth`,
+            colorAttachments: [
+                {
+                    clearValue: this.bgcolor,
+                    loadOp: loadOp,
+                    storeOp: 'store',
+                    view: this.canvasinfo!.context.getCurrentTexture().createView()
+                }
+            ],
+            depthStencilAttachment: {
+                view: this.frameBuffer!.depthTexture.createView(),
+                depthClearValue: this.renderStatus.clearDepth,
+                depthLoadOp: loadOp,  // 清空
+                depthStoreOp: "store",
+            }
+        }
+        return passDescriptor;
+    }
+
+    get advance(): TinyEarthAdvanceOptions {
+        return this.#advance;
+    }
+
+    get nearDepth(): number {
+        return this.#renderStatus.reverseZ ? 1.0 : 0.0;
+    }
+
+    get farDepth(): number {
+        return this.#renderStatus.reverseZ ? 0.0 : 1.0;
+    }
+
+    get webgpuResources() {
+        return this.#webgpuResources;
     }
 
     get frameBuffer() {
-        return this.#frameBuffer;
+        return this.#webgpuResources.framebuffer;
     }
 
-    get glErrorCheck() {
-        return this.#advance.glErrorCheck;
-    }
+    #refreshReverseZ() {
 
-    // webgl clear and setup
-    glInit() {
-        if (this.gl !== null) {
-            this.clearColor();
-
-            this.gl.clearDepth(1.0);
-            this.gl.enable(this.gl.DEPTH_TEST);
-            this.gl.enable(this.gl.CULL_FACE);
-            this.gl.depthFunc(this.gl.LEQUAL);
-            this.gl.viewport(0, 0, this.viewWidth, this.viewHeight);
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
-
-            // default blend mode
-            this.gl.enable(this.gl.BLEND);
-            this.gl.pixelStorei(this.gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-            this.gl.blendFunc(this.gl.ONE, this.gl.ONE_MINUS_SRC_ALPHA);
+        if (this.#advance.reverseZ === 'auto') {
+            const threshold = 10000;
+            const h = this.scene!.camera.getHeightToSurface();
+            const reverseZ = h > threshold;
+            this.#renderStatus.reverseZ = reverseZ;
+        } else {
+            this.#renderStatus.reverseZ = this.#advance.reverseZ!;
         }
+
+        if (this.#renderStatus.reverseZ) {
+            this.#renderStatus.depthFunc = 'greater-equal';
+            this.#renderStatus.clearDepth = 0.0;
+        } else {
+            this.#renderStatus.depthFunc = 'less-equal';
+            this.#renderStatus.clearDepth = 1.0;
+        }
+
+    }
+
+    get renderStatus() {
+        return this.#renderStatus;
+    }
+
+    getRenderPassDescriptor(first: boolean): GPURenderPassDescriptor {
+        return this.createRenderPassDescriptor(first);
+    }
+
+    get debug() {
+        return this.#advance.debug ?? false;
     }
 
     resizeHandler() {
@@ -237,9 +334,6 @@ export default class TinyEarth {
             this.canvas.width = this.canvas.clientWidth;
             this.viewHeight = this.canvas.height;
             this.viewWidth = this.canvas.width;
-            if (this.gl !== null) {
-                this.gl.viewport(0, 0, this.viewWidth, this.viewHeight);
-            }
             if (this.scene !== null) {
                 this.scene.viewHeight = this.viewHeight;
                 this.scene.viewWidth = this.viewWidth;
@@ -250,35 +344,9 @@ export default class TinyEarth {
 
     refreshFrameBuffer() {
 
-        if (this.#frameBuffer) {
-            this.#frameBuffer.destroy();
+        if (this.#webgpuResources.framebuffer) {
+            this.#webgpuResources.framebuffer.refresh();
         }
-
-        this.#frameBuffer = new GLFrameBuffer({
-            tinyearth: this,
-            width: this.viewWidth,
-            height: this.viewHeight,
-            enableColor: true,
-            enableDepth: true,
-            enableStencil: true
-        });
-
-        if (this.#groundFrameBuffer) {
-            this.#groundFrameBuffer.destroy();
-        }
-
-        this.#groundFrameBuffer = new GLFrameBuffer({
-            tinyearth: this,
-            width: this.viewWidth,
-            height: this.viewHeight,
-            enableColor: true,
-            enableDepth: true,
-            enableStencil: true
-        });
-    }
-
-    getGroundFrameBuffer() {
-        return this.#groundFrameBuffer;
     }
 
     addTileSource(tileInfo: TileSourceInfo): TileProvider {
@@ -291,7 +359,7 @@ export default class TinyEarth {
     addTileProvider(provider: TileProvider) {
         if (this.globeTilePorgram !== null) {
             const isNight = provider.source.night ?? false;
-            if (!isNight) {
+            if (!isNight && this.#defaultTileProvider) {
                 this.globeTilePorgram.removeTileProvider(this.#defaultTileProvider);
             }
             this.globeTilePorgram.addTileProvider(provider);
@@ -313,7 +381,7 @@ export default class TinyEarth {
 
     addDefaultTileProvider() {
         if (this.globeTilePorgram !== null) {
-            this.globeTilePorgram.addTileProvider(this.#defaultTileProvider);
+            this.globeTilePorgram.addTileProvider(this.#defaultTileProvider!);
         }
     }
 
@@ -324,17 +392,17 @@ export default class TinyEarth {
     }
 
     get defaultTilePorvider(): TileProvider {
-        return this.#defaultTileProvider;
+        return this.#defaultTileProvider!;
     }
 
     setSkyboxSource(skyboxInfo: SkyBoxSourceInfo) {
         const cubemapInfo = [
-            { face: this.gl.TEXTURE_CUBE_MAP_POSITIVE_X, src: skyboxInfo.posx },
-            { face: this.gl.TEXTURE_CUBE_MAP_POSITIVE_Y, src: skyboxInfo.posy },
-            { face: this.gl.TEXTURE_CUBE_MAP_POSITIVE_Z, src: skyboxInfo.posz },
-            { face: this.gl.TEXTURE_CUBE_MAP_NEGATIVE_X, src: skyboxInfo.negx },
-            { face: this.gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, src: skyboxInfo.negy },
-            { face: this.gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, src: skyboxInfo.negz }
+            { face: "posx", src: skyboxInfo.posx },
+            { face: "negx", src: skyboxInfo.negx },
+            { face: "posy", src: skyboxInfo.posy },
+            { face: "negy", src: skyboxInfo.negy },
+            { face: "posz", src: skyboxInfo.posz },
+            { face: "negz", src: skyboxInfo.negz }
         ]
         this.skyboxProgram?.setCubeMap(cubemapInfo);
     }
@@ -396,82 +464,35 @@ export default class TinyEarth {
         return this.eventBus.addEventListener(TinyEarthEvent.TIMER_TICK, { callback });
     }
 
-    clearFrameBuffer(fb: GLFrameBuffer | null, options?: {
-        color?: NumArr4,
-        depth?: number,
-        stencil?: number
-    }) {
-        const opts = options ?? {};
-        const color = opts.color ?? [0.0, 0.0, 0.0, 1.0];
-        const depth = opts.depth ?? 1.0;
-        const stencil = opts.stencil ?? 0.0;
-        if (fb) {
-            fb.clear({
-                color: color,
-                depth: depth,
-                stencil: stencil
-            })
-        } else {
-            this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, fb);
-            this.gl.viewport(0, 0, this.viewWidth, this.viewHeight);
-            this.gl.clearColor(...color);
-            this.gl.clearDepth(depth);
-            this.gl.clearStencil(stencil);
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT | this.gl.STENCIL_BUFFER_BIT);
-        }
-
-        GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#frameBuffer);
-
-    }
-
     drawFrame(t: number) {
         if (this.isStartDraw()) {
 
             this.timer.tick(t);
 
-            if (this.gl && this.scene) {
-                GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#frameBuffer);
-                this.clearFrameBuffer(
-                    this.#frameBuffer,
-                    {
-                        color: this.bgcolor.toArray(),
-                        depth: 1.0,
-                        stencil: 0.0
-                    }
-                )
-                GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#groundFrameBuffer);
-                if (this.#groundFrameBuffer) {
-                    this.#groundFrameBuffer.clear({
-                        color: this.bgcolor.toArray(),
-                        depth: 1.0,
-                        stencil: 0.0
-                    });
-                }
+            if (this.gpuinfo && this.canvasinfo && this.scene) {
 
-                GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#frameBuffer);
+                const encoder = this.gpuinfo.device.createCommandEncoder();
+
+                this.#renderStatus.currentPass = encoder.beginRenderPass(this.getRenderPassDescriptor(true));
+
+                this.scene.refreshSceneUniform();
+
                 if (this.skyboxProgram !== null) {
                     this.skyboxProgram.render();
                 }
 
                 if (this.globeTilePorgram !== null) {
-                    this.globeTilePorgram.setMaterial();
                     this.globeTilePorgram.render();
                 }
 
-
-                if (this.#groundFrameBuffer) {
-                    GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#groundFrameBuffer);
-                    this.#groundFrameBuffer.tap();
-                }
-
-                GLFrameBuffer.bindGLFrameBuffer(this.gl, this.#frameBuffer);
                 this.scene.drawLayers();
 
-                GLFrameBuffer.bindGLFrameBuffer(this.gl, null);
+                this.#renderStatus.currentPass.end();
 
-                this.#screenQuadProgram.quad = this.#fullScreenQuad;
-                this.#screenQuadProgram.texture = this.#frameBuffer?.colorTexture ?? null;
-                this.#screenQuadProgram.draw();
+                const commandBuffer = encoder.finish();
+
+                this.gpuinfo.device.queue.submit([commandBuffer]);
+
 
             }
 
@@ -489,8 +510,6 @@ export default class TinyEarth {
         if (this.globeTilePorgram === null || this.scene === null) {
             return;
         }
-
-        this.glInit();
 
         requestAnimationFrame(this.drawFrame.bind(this));
     }

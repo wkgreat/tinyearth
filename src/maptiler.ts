@@ -1,14 +1,11 @@
-import { glMatrix, vec3, vec4 } from "gl-matrix";
 import type { Extent, Interval, NumArr3 } from "./defines.js";
 import Frustum from "./frustum.js";
-import { vec3_add, vec3_dot, vec3_fromarray, vec3_normalize, vec3_scale, vec3_sub, vec3_t4 } from "./glmatrix_utils.js";
 import { Plane, pointOutSidePlane } from "./math.js";
+import { VEC3, VEC4, type vec3, type vec4 } from "./matrix.js";
 import SRS, { type projcode_t } from "./proj.js";
 import type { TileProvider } from "./tilerender.js";
 import type { TileURL } from "./tilesource.js";
 import { loadTileImage } from "./tileutils.js";
-
-glMatrix.setMatrixArrayType(Array);
 
 const XLIMIT: Interval = [-20037508.3427892, 20037508.3427892];
 const YLIMIT: Interval = [-20037508.3427892, 20037508.3427892];
@@ -46,13 +43,13 @@ export class Tile {
 
     #status: TileStatus = TileStatus.NEW;
 
-    mesh: Float32Array | null = null;
+    mesh: number[] | null = null;
 
     normals: [vec3, vec3, vec3, vec3] | null = null;
 
     corners: [vec3, vec3, vec3, vec3] | null = null;
 
-    subdivisionLevel: number = 3;
+    subdivisionLevel: number = 2;
 
     constructor(url: TileURL, x: number = 0, y: number = 0, z: number = 0) {
         this.setUrl(url, x, y, z);
@@ -104,7 +101,7 @@ export class Tile {
         if (!plane) {
             return true;
         }
-        const v = vec4.dot(p, plane);
+        const v = VEC4.dot(p, plane);
         return Math.abs(v) > 0;
     }
 
@@ -134,11 +131,11 @@ export class Tile {
         const ext = this.extent();
         let p: NumArr3 = [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2, 0];
         p = SRS.transform(SRS.WEB, SRS.ECEF, p);
-        return vec3_fromarray(p);
+        return VEC3.fromArray(p);
     }
 
     centerNormal() {
-        return vec3_normalize(this.center());
+        return VEC3.normalize(this.center());
     }
 
     getNormals(): [vec3, vec3, vec3, vec3] {
@@ -154,10 +151,10 @@ export class Tile {
             p2 = SRS.transform(SRS.WEB, SRS.ECEF, p2);
             p3 = SRS.transform(SRS.WEB, SRS.ECEF, p3);
 
-            const v0 = vec3_normalize(vec3_fromarray(p0));
-            const v1 = vec3_normalize(vec3_fromarray(p1));
-            const v2 = vec3_normalize(vec3_fromarray(p2));
-            const v3 = vec3_normalize(vec3_fromarray(p3));
+            const v0 = VEC3.normalize(VEC3.fromArray(p0));
+            const v1 = VEC3.normalize(VEC3.fromArray(p1));
+            const v2 = VEC3.normalize(VEC3.fromArray(p2));
+            const v3 = VEC3.normalize(VEC3.fromArray(p3));
 
             this.normals = [v0, v1, v2, v3];
         }
@@ -179,10 +176,10 @@ export class Tile {
             p3 = SRS.transform(SRS.WEB, SRS.ECEF, p3);
 
             this.corners = [
-                vec3.fromValues(p0[0], p0[1], p0[2]), // lowerleft
-                vec3.fromValues(p1[0], p1[1], p1[2]), // upperleft
-                vec3.fromValues(p2[0], p2[1], p2[2]), // upperright
-                vec3.fromValues(p3[0], p3[1], p3[2])  // lowerright
+                VEC3.fromValues(p0[0], p0[1], p0[2]), // lowerleft
+                VEC3.fromValues(p1[0], p1[1], p1[2]), // upperleft
+                VEC3.fromValues(p2[0], p2[1], p2[2]), // upperright
+                VEC3.fromValues(p3[0], p3[1], p3[2])  // lowerright
             ]
         }
         return this.corners as [vec3, vec3, vec3, vec3];
@@ -206,13 +203,13 @@ export class Tile {
             const p4 = this.center();
             const targetpoint = frustum.getTargetpoint() as vec3;
             const viewpoint = frustum.getViewpoint() as vec3;
-            const viewline = vec3_normalize(vec3_sub(targetpoint, viewpoint));
+            const viewline = VEC3.normalize(VEC3.sub(targetpoint, viewpoint));
 
-            const d0 = vec3_dot(n0, viewline);
-            const d1 = vec3_dot(n1, viewline);
-            const d2 = vec3_dot(n2, viewline);
-            const d3 = vec3_dot(n3, viewline);
-            const d4 = vec3_dot(n4, viewline);
+            const d0 = VEC3.dot(n0, viewline);
+            const d1 = VEC3.dot(n1, viewline);
+            const d2 = VEC3.dot(n2, viewline);
+            const d3 = VEC3.dot(n3, viewline);
+            const d4 = VEC3.dot(n4, viewline);
 
             const tileNotBack = d0 <= 0 || d1 <= 0 || d2 <= 0 || d3 <= 0 || d4 <= 0;
 
@@ -225,19 +222,19 @@ export class Tile {
             const targetpoint = frustum.getTargetpoint() as vec3;
             const viewpoint = frustum.getViewpoint() as vec3;
 
-            const viewNormalInv = vec3_normalize(vec3_sub(viewpoint, targetpoint));
-            const viewScale = vec3_scale(viewNormalInv, 1E5);
+            const viewNormalInv = VEC3.normalize(VEC3.sub(viewpoint, targetpoint));
+            const viewScale = VEC3.scale(viewNormalInv, 1E5);
 
-            const remoteFrom = vec3_add(viewpoint, viewScale);
-            const v0 = vec3_normalize(vec3_sub(p0, remoteFrom));
-            const v1 = vec3_normalize(vec3_sub(p1, remoteFrom));
-            const v2 = vec3_normalize(vec3_sub(p2, remoteFrom));
-            const v3 = vec3_normalize(vec3_sub(p3, remoteFrom));
+            const remoteFrom = VEC3.add(viewpoint, viewScale);
+            const v0 = VEC3.normalize(VEC3.sub(p0, remoteFrom));
+            const v1 = VEC3.normalize(VEC3.sub(p1, remoteFrom));
+            const v2 = VEC3.normalize(VEC3.sub(p2, remoteFrom));
+            const v3 = VEC3.normalize(VEC3.sub(p3, remoteFrom));
 
-            const d0 = vec3_dot(v0, n0);
-            const d1 = vec3_dot(v1, n1);
-            const d2 = vec3_dot(v2, n2);
-            const d3 = vec3_dot(v3, n3);
+            const d0 = VEC3.dot(v0, n0);
+            const d1 = VEC3.dot(v1, n1);
+            const d2 = VEC3.dot(v2, n2);
+            const d3 = VEC3.dot(v3, n3);
 
             const tileNotBack = d0 <= 0 || d1 <= 0 || d2 <= 0 || d3 <= 0;
 
@@ -262,16 +259,17 @@ export class Tile {
         p2 = SRS.transform(SRS.WGS84, SRS.ECEF, p2);
         p3 = SRS.transform(SRS.WGS84, SRS.ECEF, p3);
 
-        const vp0 = vec4.fromValues(p0[0]!, p0[1]!, p0[2]!, 1);
-        const vp1 = vec4.fromValues(p1[0]!, p1[1]!, p1[2]!, 1);
-        const vp2 = vec4.fromValues(p2[0]!, p2[1]!, p2[2]!, 1);
-        const vp3 = vec4.fromValues(p3[0]!, p3[1]!, p3[2]!, 1);
+        const vp0 = VEC4.fromValues(p0[0]!, p0[1]!, p0[2]!, 1);
+        const vp1 = VEC4.fromValues(p1[0]!, p1[1]!, p1[2]!, 1);
+        const vp2 = VEC4.fromValues(p2[0]!, p2[1]!, p2[2]!, 1);
+        const vp3 = VEC4.fromValues(p3[0]!, p3[1]!, p3[2]!, 1);
 
         return this.pointInFrustum(vp0, frustum) || this.pointInFrustum(vp1, frustum)
             || this.pointInFrustum(vp2, frustum) || this.pointInFrustum(vp3, frustum);
 
     }
 
+    //TODO optimize
     intersectFrustum(frustum: Frustum | null): boolean {
         if (frustum === null) {
             return true;
@@ -294,7 +292,7 @@ export class Tile {
         for (let plane of planeList) {
             let f = true;
             for (let p of points) {
-                if (!pointOutSidePlane(vec3_t4(p), plane)) {
+                if (!pointOutSidePlane(VEC3.force4(p), plane)) {
                     f = false;
                     break;
                 }
@@ -308,7 +306,7 @@ export class Tile {
         for (let p of points) {
             let f = true;
             for (let plane of planeList) {
-                if (pointOutSidePlane(vec3_t4(p), plane)) {
+                if (pointOutSidePlane(VEC3.force4(p), plane)) {
                     f = false;
                     break;
                 }
@@ -354,13 +352,13 @@ export class Tile {
 
 export class TileMesher {
 
-    static toRootMeshVertex(): Float32Array {
+    static toRootMeshVertex(): number[] {
 
         const vertices: number[] = [];
         const posExt: Extent = [XLIMIT[0], YLIMIT[1], XLIMIT[1], YLIMIT[1]];
         const texExt: Extent = [0, 0, 1, 1];
         this.toRootMeshVertexRec(posExt, texExt, 0, 4, vertices);
-        return new Float32Array(vertices);
+        return vertices;
     }
 
     static toRootMeshVertexRec(posExt: Extent, texExt: Extent, curlevel: number, level: number, vertices: number[]) {
@@ -435,14 +433,14 @@ export class TileMesher {
         const texExt: Extent = [0, 0, 1, 1];
         this.toMeshRec(posExt, texExt, 0, level, targetProj, vertices);
         return {
-            vertices: new Float32Array(vertices),
+            vertices: vertices,
             texImage: tile.image
         };
     }
 
     static normalize(x: number, y: number, z: number): NumArr3 {
-        let p = vec3.fromValues(x, y, z);
-        vec3.normalize(p, p);
+        let p = VEC3.fromValues(x, y, z);
+        VEC3.normalize_(p, p);
         return [p[0], p[1], p[2]];
     }
 
