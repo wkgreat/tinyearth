@@ -45,19 +45,9 @@ export default [{
                 use: ['style-loader', 'css-loader']
             },
             {
-                test: /\.(png|gif|jpg|jpeg|svg|xml)$/,
-                include: [
-                    path.resolve(__dirname, 'src/assets')
-                ],
-                type: 'asset/inline'
-            },
-            {
-                test: /\.(png|gif|jpg|jpeg|svg|xml)$/,
-                exclude: /node_modules/,
-                use: ['url-loader'],
-                exclude: [
-                    path.resolve(__dirname, 'src/assets')
-                ],
+                test: /\.(png|gif|jpg|jpeg|svg)$/,
+                type: 'asset',
+                generator: { filename: 'images/[hash][ext][query]' }
             }, {
                 test: /\.(glsl|vs|fs|vert|frag|wgsl)$/,
                 exclude: /node_modules/,
